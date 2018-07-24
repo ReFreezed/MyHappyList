@@ -17,8 +17,10 @@
 -- bit   - The bit library from Reuben Thomas for manipulating integer bits.
 
 require"wx" -- Adds globals: wx, wxlua, wxaui, wxstc.
+
 wxPrint   = print
 print     = print_lua
+
 bit       = nil
 print_lua = nil
 

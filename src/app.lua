@@ -14,8 +14,6 @@ local anidb
 local frame
 
 --==============================================================
---==============================================================
---==============================================================
 
 local anidbEventHandlers = {
 	["loginsuccess"] = function()
@@ -66,7 +64,7 @@ local anidbEventHandlers = {
 }
 
 --==============================================================
---==============================================================
+--= Prepare Stuff ==============================================
 --==============================================================
 
 log("~~~ MyHappyList ~~~")
@@ -88,17 +86,14 @@ end
 assert(createDirectory("logs"))
 logFile = assert(io.open("logs/output.log", "a"))
 
+anidb = require"Anidb"()
+
 -- Main window.
 ----------------------------------------------------------------
 frame = wx.wxFrame(WX_NULL, WX_ID_ANY, "MyHappyList", WX_DEFAULT_POSITION, WxSize(450, 450), WX_DEFAULT_FRAME_STYLE)
 
 frame:CreateStatusBar()
 -- frame:SetStatusText("...")
-
-on(frame, "CLOSE_WINDOW", function(e)
-	-- @@ Maybe save stuff.
-	e:Skip()
-end)
 
 --[[
 local accelerators = {}
@@ -129,9 +124,7 @@ frame:SetMenuBar(menuBar)
 -- AniDB update timer.
 ----------------------------------------------------------------
 
-local anidbUpdateTimer = wx.wxTimer(frame)
-
-on(frame, "TIMER", function(e)
+local anidbUpdateTimer = newTimer(frame, function(e)
 	anidb:update()
 
 	for eName, _1, _2, _3, _4, _5 in anidb:events() do
@@ -164,6 +157,23 @@ addButton("sendLogin", function(e)
 	anidb:sendLogin()
 end)
 
+addButton("sendMylist", function(e)
+	local path = getFileContents"local/exampleFilePathGb.txt"
+
+	scriptCaptureAsync(frame, "ed2k", function(output)
+		local ed2kHash = output:match"^ed2k: ([%da-f]+)"
+		if not ed2kHash then
+			logprinterror(nil, "ed2k: "..output)
+			return
+		end
+
+		print(ed2kHash)
+		printf("ed2k://|file|%s|%d|%s|/", path:match"[^/\\]+$", lfs.attributes(path, "size"), ed2kHash)
+
+		-- anidb:sendMylist(ed2kHash) -- @@
+	end, path)
+end)
+
 addButton("clearMessageQueue", function(e)
 	anidb:clearMessageQueue()
 end)
@@ -171,18 +181,35 @@ end)
 local textEl = newText(panel, "Text?", WxPoint(0, y))
 
 --==============================================================
+--= Show GUI ===================================================
 --==============================================================
---==============================================================
-
-anidb = require"Anidb"()
 anidbUpdateTimer:Start(1000/10)
 
 frame:Center()
 frame:Show(true)
 wx.wxGetApp():MainLoop()
 
+--==============================================================
+--= Exit =======================================================
+--==============================================================
+
+-- AniDB wants us to log out.
 if anidb:isLoggedIn() then
 	anidb:clearMessageQueue()
 	anidb:sendLogout()
 	anidb:update(true)
 end
+
+-- Cleanup.
+if isDirectory"temp" then
+	traverseFiles("temp", function(path)
+		local ok, err = os.remove(path)
+		if not ok then
+			logprinterror(nil, "Could not delete file '%s': %s", path, err)
+		end
+	end)
+end
+
+logprint(nil, "Exiting normally.")
+logFile:close()
+logFile = nil

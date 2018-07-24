@@ -31,16 +31,7 @@ exec lua "$0" "$@"
 --=
 --============================================================]]
 
-local folder = debug.getinfo(1, "S").source :gsub("^@", "") :gsub("[^/\\]+$", "")
-package.path = folder.."src/?.lua;"..folder.."lib/?.lua;"..package.path
-
-math.randomseed(os.time())
-math.random() -- Gotta kickstart the randomness.
-
-io.stdout:setvbuf("no")
-
-require"globals"
-require"functions"
+assert(loadfile("src/load.lua"))()
 
 _G.args = {...}
 
