@@ -27,6 +27,21 @@ local anidbEventHandlers = {
 		-- void
 	end,
 
+	["mylistsuccess"] = function(what, mylistThing)
+		if what == "entry" then
+			-- @@
+		elseif what == "selection" then
+			-- @@
+		elseif what == "none" then
+			-- void
+		else
+			logprinterror(nil, "mylistsuccess: Unknown what value '%s'.", what)
+		end
+	end,
+	["mylistfail"] = function(userMessage)
+		-- void
+	end,
+
 	["blackoutstart"] = function()
 		-- void
 	end,
@@ -149,16 +164,19 @@ local function addButton(caption, cb)
 	y = y+button:GetSize():GetHeight()
 end
 
-addButton("sendPing", function(e)
-	anidb:sendPing()
+addButton("ping", function(e)
+	anidb:ping()
 end)
 
-addButton("sendLogin", function(e)
-	anidb:sendLogin()
+addButton("login", function(e)
+	anidb:login()
 end)
 
-addButton("sendMylist", function(e)
-	local path = getFileContents"local/exampleFilePathGb.txt"
+addButton("fetchMylistByEd2k", function(e)
+	local path     = getFileContents"local/exampleFilePathGb.txt"
+	local fileSize = lfs.attributes(path, "size")
+
+	-- @Robustness: Make sure we don't call scriptCaptureAsync() too frequently.
 
 	scriptCaptureAsync(frame, "ed2k", function(output)
 		local ed2kHash = output:match"^ed2k: ([%da-f]+)"
@@ -167,10 +185,10 @@ addButton("sendMylist", function(e)
 			return
 		end
 
-		print(ed2kHash)
-		printf("ed2k://|file|%s|%d|%s|/", path:match"[^/\\]+$", lfs.attributes(path, "size"), ed2kHash)
+		-- print(ed2kHash)
+		-- printf("ed2k://|file|%s|%d|%s|/", path:match"[^/\\]+$", fileSize, ed2kHash)
 
-		-- anidb:sendMylist(ed2kHash) -- @@
+		anidb:fetchMylistByEd2k(ed2kHash, fileSize)
 	end, path)
 end)
 
@@ -196,7 +214,7 @@ wx.wxGetApp():MainLoop()
 -- AniDB wants us to log out.
 if anidb:isLoggedIn() then
 	anidb:clearMessageQueue()
-	anidb:sendLogout()
+	anidb:logout()
 	anidb:update(true)
 end
 

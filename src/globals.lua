@@ -13,29 +13,34 @@
 
 
 -- Settings.
-DEBUG                        = true
-DEBUG_LOCAL                  = true and DEBUG
-DEBUG_FORCE_NAT_ON           = true and DEBUG_LOCAL
-DEBUG_FORCE_NAT_OFF          = false and DEBUG_LOCAL
+DEBUG                               = true
+DEBUG_LOCAL                         = true and DEBUG
+DEBUG_FORCE_NAT_OFF                 = false and DEBUG_LOCAL
+DEBUG_EXPIRATION_TIME_PORT          = 60
+DEBUG_EXPIRATION_TIME_SESSION       = 30*60 -- (Mostly useless, as the port will expire before the session.)
 
-SERVER_ADDRESS               = DEBUG_LOCAL and "localhost" or "api.anidb.net"
-SERVER_PORT                  = 9000
-LOCAL_PORT                   = DEBUG_LOCAL and 9000 or 24040
+SERVER_ADDRESS                      = DEBUG_LOCAL and "localhost" or "api.anidb.net"
+SERVER_PORT                         = 9000
+LOCAL_PORT                          = DEBUG_LOCAL and 9000 or 24040
 
-PROTOCOL_VERSION             = 3
-CLIENT_NAME                  = "myhappylist"
-CLIENT_VERSION               = 1
+PROTOCOL_VERSION                    = 3
+CLIENT_NAME                         = "myhappylist"
+CLIENT_VERSION                      = 1
 
-DEFAULT_PING_DELAY           = DEBUG_LOCAL and 20 or 2*60
-DELAY_BETWEEN_REQUESTS_LONG  = 4
-DELAY_BETWEEN_REQUESTS_SHORT = 2
-SERVER_RESPONSE_TIMEOUT      = 90   -- Firefox's default HTTP connection timeout is 90 seconds.
-DELAY_BEFORE_RESENDING       = {30, 2*60, 5*60, 10*60, 30*60, 1*60*60, 2*60*60, last=3*60*60}
+DEFAULT_PING_DELAY                  = DEBUG_LOCAL and 20 or 60
+DELAY_BETWEEN_REQUESTS_LONG         = 4
+DELAY_BETWEEN_REQUESTS_SHORT        = 2
+SERVER_RESPONSE_TIMEOUT             = 90   -- Firefox's default HTTP connection timeout is 90 seconds.
+DELAY_BEFORE_RESENDING              = {30, 2*60, 5*60, 10*60, 30*60, 1*60*60, 2*60*60, last=3*60*60}
 
-MAX_DATA_LENGTH              = 1400 -- Must be between 400 and 1400. (MTU, PPPoE etc.)
+NAT_LIMIT_MIN                       = 10
+NAT_LIMIT_MAX                       = 15*60
+NAT_LIMIT_TOLERANCE_BEFORE_SETTLING = 10
 
-FLOOD_PROTECTION_SHORT_TERM  = 20
-FLOOD_PROTECTION_WINDOW      = 10   -- Saved amount of lastResponseTimes.
+MAX_DATA_LENGTH                     = 1400 -- Must be between 400 and 1400. (MTU, PPPoE etc.)
+
+FLOOD_PROTECTION_SHORT_TERM         = 20
+FLOOD_PROTECTION_WINDOW             = 10   -- Saved amount of lastResponseTimes.
 
 
 

@@ -10,6 +10,7 @@
 --=
 --==============================================================
 
+	arrayIterator
 	assertf, assertarg, check
 	clamp
 	cleanupPath
@@ -135,6 +136,10 @@ end
 
 -- success, errorMessage = writeFile( path, [ isText=false, ] contents )
 function writeFile(path, isText, contents)
+	if type(isText) == "string" then
+		isText, contents = false, isText
+	end
+
 	local file, err = io.open(path, (isText and "w" or "wb"))
 	if not file then  return nil, err  end
 
@@ -1185,6 +1190,19 @@ function getTempFilePath(asWindowsPath)
 	end
 
 	return path
+end
+
+
+
+function arrayIterator(t)
+	local i = 0
+
+	return function()
+		i = i+1
+		local v = t[i]
+
+		if v ~= n then  return v  end
+	end
 end
 
 

@@ -19,8 +19,12 @@
 	getLogin
 	isLoggedIn
 	isSendingAnyMessage, getQueuedMessageCount
-	sendPing, sendLogin, sendLogout
 	update
+
+	-- Server communication.
+	fetchMylistByEd2k
+	login, logout
+	ping
 
 
 	Status Codes
@@ -40,23 +44,43 @@
 	506 INVALID SESSION
 	// These are handled in handleServerResponse().
 
-	See the send* methods for the rest.
+	See the server communication methods for the rest.
 
 
 --============================================================]]
 
-local NAT_MODE_UNKNOWN               = 0
-local NAT_MODE_ON                    = 1
-local NAT_MODE_OFF                   = 2
+local NAT_MODE_UNKNOWN                = 0
+local NAT_MODE_ON                     = 1
+local NAT_MODE_OFF                    = 2
 
-local MESSAGE_STAGE_QUEUE            = 1
-local MESSAGE_STAGE_SENT             = 2
-local MESSAGE_STAGE_RESPONDED        = 3
-local MESSAGE_STAGE_RESPONSE_TIMEOUT = 4
-local MESSAGE_STAGE_ABORTED          = 5
+local MESSAGE_STAGE_QUEUE             = 1
+local MESSAGE_STAGE_SENT              = 2
+local MESSAGE_STAGE_RESPONDED         = 3
+local MESSAGE_STAGE_RESPONSE_TIMEOUT  = 4
+local MESSAGE_STAGE_ABORTED           = 5
 
-local BOOL_FALSE                     = "0"
-local BOOL_TRUE                      = "1"
+local BOOL_FALSE                      = "0"
+local BOOL_TRUE                       = "1"
+
+local MYLIST_STATE_UNKNOWN            = 0
+local MYLIST_STATE_INTERNAL_STORAGE   = 1
+local MYLIST_STATE_EXTERNAL_STORAGE   = 2
+local MYLIST_STATE_DELETED            = 3
+local MYLIST_STATE_REMOTE_STORAGE     = 4
+
+local FILE_STATE_NORMAL_ORIGINAL      = 0   -- normal
+local FILE_STATE_CORRUPTED_OR_BAD_CRC = 1   -- normal
+local FILE_STATE_SELF_EDITED          = 2   -- normal
+local FILE_STATE_SELF_RIPPED          = 10  -- generic
+local FILE_STATE_ON_DVD               = 11  -- generic
+local FILE_STATE_ON_VHS               = 12  -- generic
+local FILE_STATE_ON_TV                = 13  -- generic
+local FILE_STATE_IN_THEATERS          = 14  -- generic
+local FILE_STATE_STREAMED             = 15  -- normal
+local FILE_STATE_ON_BLURAY            = 16  -- generic
+local FILE_STATE_OTHER                = 100 -- normal
+
+local CACHE_DIR                       = DEBUG_LOCAL and "cacheDebug" or "cache"
 
 
 
@@ -118,6 +142,8 @@ local Anidb = {
 
 	messages              = nil,
 	theEvents             = nil,
+	cache                 = nil,
+
 	sessionKey            = "", -- This indicates whether we're logged in or not.
 
 	blackoutUntil         = -1, -- No fraction!
@@ -150,7 +176,9 @@ local addEvent
 local addParamPair
 local addToSendQueue, receive
 local blackout, loadBlackout
+local cacheSave, cacheLoad
 local compress, decompress
+local createParamsAndData
 local dropSession
 local generateTag
 local getMessage, addMessage, removeMessage
@@ -158,7 +186,7 @@ local getNextMessageToSend
 local handleServerResponse
 local isAnyMessageInTransit, isMessageInQueue
 local onInternal
-local paramStringEncode, paramStringDecode, paramNumberEncode, paramNumberDecode, paramBooleanEncode, paramBooleanDecode
+local paramStringEncode, paramStringDecode, paramNumberEncode, paramNumberDecode, paramBooleanEncode, paramBooleanDecode, parseEpisodes
 local updateNatInfo
 
 
@@ -206,6 +234,35 @@ function paramBooleanDecode(v)
 	return nil
 end
 
+function parseEpisodes(s)
+	local eps = {}
+
+	for epSeq in s:gmatch"[^,]+" do
+		local epFrom, epTo = epSeq:match"^([^-]+)%-([^-]+)$"
+
+		-- Single episode.
+		if not epFrom then
+			table.insert(eps, epSeq)
+
+		-- Episode sequence.
+		else
+			local prefix, from = epFrom :match"^(%D*)(%d+)$"
+			local prefixTo, to = epTo   :match"^(%D*)(%d+)$"
+
+			if not prefix or prefixTo ~= prefix then
+				_logprinterror("Canot parse episode list: "..epSeq)
+
+			else
+				for ep = tonumber(from), tonumber(to) do
+					table.insert(eps, prefix..ep)
+				end
+			end
+		end
+	end
+
+	return eps
+end
+
 
 
 function addToSendQueue(self, command, paramPairs, cb)
@@ -217,9 +274,49 @@ function addToSendQueue(self, command, paramPairs, cb)
 	_logprint("Queuing "..command..".")
 
 	local tag = generateTag()
-
 	addParamPair(paramPairs, "tag", tag)
 
+	local params, data = createParamsAndData(command, paramPairs)
+
+	if #data > MAX_DATA_LENGTH then
+		_logprinterror("Data for %s command is too long. (length: %d, max: %d)", command, #data, MAX_DATA_LENGTH)
+		cb(false)
+		return
+	end
+
+	local msg = {
+		tag            = tag,
+		stage          = MESSAGE_STAGE_QUEUE,
+		tries          = 0,
+		dontSendBefore = -1,
+
+		command        = command,
+		params         = params,
+		paramPairs     = paramPairs,
+		callback       = cb,
+
+		data           = data,
+
+		timeSent       = -1,
+		timeResponded  = -1,
+	}
+	addMessage(self, msg)
+end
+
+-- for data in receive( anidb ) do
+function receive(self)
+	return function()
+		local data, err = self.udp:receive()
+		if err == "timeout" then  return nil  end
+
+		check(data, err)
+		if data then  return data  end
+	end
+end
+
+
+
+function createParamsAndData(command, paramPairs)
 	local queryParts = {}
 	local params     = {}
 
@@ -244,39 +341,8 @@ function addToSendQueue(self, command, paramPairs, cb)
 	end
 
 	local data = F("%s %s", command, table.concat(queryParts, "&"))
-	if #data > MAX_DATA_LENGTH then
-		_logprinterror("Data for %s command is too long. (length: %d, max: %d)", command, #data, MAX_DATA_LENGTH)
-		cb(false)
-		return
-	end
 
-	local msg = {
-		tag            = tag,
-		stage          = MESSAGE_STAGE_QUEUE,
-		tries          = 0,
-		dontSendBefore = -1,
-
-		command        = command,
-		params         = params,
-		callback       = cb,
-
-		data           = data,
-
-		timeSent       = -1,
-		timeResponded  = -1,
-	}
-	addMessage(self, msg)
-end
-
--- for data in receive( anidb ) do
-function receive(self)
-	return function()
-		local data, err = self.udp:receive()
-		if err == "timeout" then  return nil  end
-
-		check(data, err)
-		if data then  return data  end
-	end
+	return params, data
 end
 
 
@@ -313,13 +379,42 @@ do
 		return (field:gsub("<br />", "\n"):gsub("`", "'"):gsub("/", "|"))
 	end
 
-	local function resendMessage(self, msg)
+	local function resendMessage(self, msg, doDelay)
 		assert(msg.stage == MESSAGE_STAGE_RESPONDED)
 
-		msg.stage          = MESSAGE_STAGE_QUEUE
-		msg.dontSendBefore = getTime()+(DELAY_BEFORE_RESENDING[msg.tries] or DELAY_BEFORE_RESENDING.last)
+		_logprint("Requeuing "..msg.command..".")
 
-		addMessage(msg)
+		local tag = generateTag()
+
+		for i = 1, #msg.paramPairs, 2 do
+			if msg.paramPairs[i] == "tag" then
+				msg.paramPairs[i+1] = tag
+			elseif msg.paramPairs[i] == "s" then
+				msg.paramPairs[i+1] = self.sessionKey
+			end
+		end
+
+		local params, data = createParamsAndData(msg.command, msg.paramPairs)
+
+		if #data > MAX_DATA_LENGTH then
+			_logprinterror("Data for %s command is too long. (length: %d, max: %d)", msg.command, #data, MAX_DATA_LENGTH)
+			msg.callback(false)
+			return
+		end
+
+		msg.tag    = tag
+		msg.stage  = MESSAGE_STAGE_QUEUE
+
+		msg.params = params
+		msg.data   = data
+
+		if doDelay then
+			msg.dontSendBefore = getTime()+(DELAY_BEFORE_RESENDING[msg.tries] or DELAY_BEFORE_RESENDING.last)
+		end
+
+		-- Should 'first' be true? Maybe we should try to preserve the original position? Maybe it doesn't matter.
+		addMessage(self, msg, true)
+
 		addEvent(self, "resend", msg.command)
 	end
 
@@ -332,7 +427,7 @@ do
 			end
 		end)
 
-		self:sendLogin()
+		self:login()
 	end
 
 	function handleServerResponse(self, data)
@@ -498,7 +593,7 @@ do
 			-- TIMEOUT - DELAY AND RESUBMIT
 			elseif statusCode == 604 then
 				if msg.tries < 5 then
-					resendMessage(self, msg)
+					resendMessage(self, msg, true)
 					return true
 				end
 				errorEvent("errortimeout", "Connection timed out."..pleaseReport())
@@ -525,18 +620,30 @@ end
 
 
 function getMessage(self, tag)
+	assertarg(1, self, "table")
+	assertarg(2, tag,  "string")
+
 	return self.messages[tag]
 end
 
-function addMessage(self, msg)
+-- addMessage( anidb, message [, first=false ] )
+function addMessage(self, msg, first)
+	assertarg(1, self, "table")
+	assertarg(2, msg,  "table")
+
 	assert(not self.messages[msg.tag])
 
+	local i = first and 1 or #self.messages+1
+
 	self.messages[msg.tag] = msg
-	table.insert(self.messages, msg)
+	table.insert(self.messages, i, msg)
 end
 
+-- Note: We allow removeMessage() to be called more than once, unlike addMessage().
 function removeMessage(self, msg)
-	-- Note: We allow removeMessage() to be called more than once, unlike addMessage().
+	assertarg(1, self, "table")
+	assertarg(2, msg,  "table")
+
 	self.messages[msg.tag] = nil
 	removeItem(self.messages, msg)
 end
@@ -544,6 +651,9 @@ end
 
 
 function addEvent(self, eName, ...)
+	assertarg(1, self,  "table")
+	assertarg(2, eName, "string")
+
 	table.insert(self.theEvents, {eName, ...})
 end
 
@@ -604,24 +714,21 @@ function blackout(self, duration)
 	self.blackoutUntil = math.floor(getTime()+duration)
 	self.isInBlackout  = true
 
-	local ok, err = writeFile("cache/blackout", true, F("%d", self.blackoutUntil))
+	local ok, err = writeFile(CACHE_DIR.."/blackout", F("%d", self.blackoutUntil))
 	if not ok then
-		_logprinterror("Could not write to file 'cache/blackout': %s", err)
+		_logprinterror("Could not write to file '%s/blackout': %s", CACHE_DIR, err)
 	end
 end
 
 function loadBlackout(self)
-	self.blackoutUntil = tonumber(getFileContents"cache/blackout" or 0)
+	self.blackoutUntil = tonumber(getFileContents(CACHE_DIR.."/blackout") or 0)
 	self.isInBlackout  = getTime() < self.blackoutUntil
 end
 
 
 
 function updateNatInfo(self, port)
-	port
-		=  DEBUG_FORCE_NAT_ON  and -1
-		or DEBUG_FORCE_NAT_OFF and LOCAL_PORT
-		or port
+	port = DEBUG_FORCE_NAT_OFF and LOCAL_PORT or port
 
 	if self.natMode == NAT_MODE_UNKNOWN then
 		if port == LOCAL_PORT then
@@ -634,30 +741,45 @@ function updateNatInfo(self, port)
 		end
 
 	elseif self.natMode == NAT_MODE_ON and self.responseTimeLast-self.responseTimePrevious >= self.pingDelay then
-		if port ~= self.lastPublicPort then
-			-- The port got deallocated - we must decrease pingDelay.
-			-- @Robustness: Make sure we don't end up here too many times (within ~1 hour (or ever, really :| )).
-			if self.natLimitLower > self.pingDelay then
-				self.natLimitLower = -1
-			end
-			self.natLimitUpper = self.pingDelay
-			self.pingDelay     = self.natLimitLower > 0 and (self.natLimitLower+self.natLimitUpper)/2 or self.pingDelay/2
+		local pingDelay = self.pingDelay
+		local natLimitLo = self.natLimitLower
+		local natLimitUp = self.natLimitUpper
 
-		elseif self.natLimitLower <= 0 or self.natLimitUpper <= 0 or self.natLimitUpper-self.natLimitLower > 30 then
-			-- We're inside the port allocation time - we can increase pingDelay.
-			if self.natLimitUpper < self.pingDelay then
-				self.natLimitUpper = -1
+		if port ~= self.lastPublicPort then
+			-- @Robustness: Make sure we don't end up here too many times within ~1 hour. [LOW]
+			_logprint("Port got deallocated. Decreasing ping delay.")
+
+			if natLimitLo > pingDelay then
+				natLimitLo = -1
 			end
-			self.natLimitLower = self.pingDelay
-			self.pingDelay     = self.natLimitUpper > 0 and (self.natLimitLower+self.natLimitUpper)/2 or self.pingDelay*1.5
+
+			natLimitUp = pingDelay
+			pingDelay  = natLimitLo > 0 and (natLimitLo+natLimitUp)/2 or pingDelay/2
+
+		elseif natLimitLo <= 0 or natLimitUp <= 0 or natLimitUp-natLimitLo >= NAT_LIMIT_TOLERANCE_BEFORE_SETTLING then
+			-- Note: After settling, the ping delay will never increase again, even if the actual port expiration
+			-- time happen to increase for some reason (i.e. maybe after switching to different router). But it's
+			-- not the end of the world...
+			_logprint("Port still allocated. Increasing ping delay.")
+
+			if natLimitUp < pingDelay then
+				natLimitUp = -1
+			end
+
+			natLimitLo = pingDelay
+			pingDelay  = natLimitUp > 0 and (natLimitLo+natLimitUp)/2 or pingDelay*1.5
 		end
 
-		self.pingDelay = clamp(self.pingDelay, 20, 15*60)
-		_logprint("Ping delay: %d seconds", self.pingDelay)
+		if not (pingDelay == self.pingDelay and natLimitLo == self.natLimitLower and natLimitUp == self.natLimitUpper) then
+			self.pingDelay     = clamp(pingDelay, NAT_LIMIT_MIN, NAT_LIMIT_MAX)
+			self.natLimitLower = natLimitLo
+			self.natLimitUpper = natLimitUp
+			_logprint("Ping delay: %d seconds", self.pingDelay)
 
-		local ok, err = writeFile("cache/nat", true, F("%d %d %d", self.pingDelay, self.natLimitLower, self.natLimitUpper))
-		if not ok then
-			_logprinterror("Could not write to file 'cache/nat': %s", err)
+			local ok, err = writeFile(CACHE_DIR.."/nat", F("%d %d %d", pingDelay, natLimitLo, natLimitUp))
+			if not ok then
+				_logprinterror("Could not write to file '%s/nat': %s", CACHE_DIR, err)
+			end
 		end
 	end
 
@@ -665,12 +787,12 @@ function updateNatInfo(self, port)
 end
 
 function loadNatInfo(self)
-	local contents = getFileContents"cache/nat"
+	local contents = getFileContents(CACHE_DIR.."/nat")
 	if not contents then return end
 
 	local pingDelay, natLimitLower, natLimitUpper = contents:match"^(%d+) (%-?%d+) (%-?%d+)$"
 	if not pingDelay then
-		_logprinterror("Bad format of file 'cache/nat'.")
+		_logprinterror("Bad format of file '%s/nat'.", CACHE_DIR)
 		return
 	end
 
@@ -721,7 +843,157 @@ end
 
 function dropSession(self)
 	self.sessionKey = ""
-	self.isActive   = false
+	self.isActive   = false -- Should we stop pinging here?
+end
+
+
+
+-- Note: The entry will overwrite any previous one with the same ID.
+function cacheSave(self, pageName, entry)
+	local id   = entry.id
+	local path = F("%s/%s%d", CACHE_DIR, pageName, id)
+
+	-- Backup old entry.
+	if isFile(path) then
+		writeFile(path..".bak", getFileContents(path))
+	end
+
+	local keys      = sortNatural(getKeys(entry))
+	local maxKeyLen = 0
+
+	for _, k in ipairs(keys) do
+		maxKeyLen = math.max(maxKeyLen, #k)
+	end
+
+	local file = assert(io.open(path, "w"))
+
+	for _, k in ipairs(keys) do
+		local v = entry[k]
+
+		if type(v) == "number" then
+			if not isInt(v) then
+				_logprinterror("%s: Cannot write non-integer numbers. Skipping. (%s, entry.%s)", path, tostring(v), k)
+			else
+				file:write(k, (" "):rep(maxKeyLen - #k + 1))
+				file:write(F("%d\n", v))
+			end
+
+		elseif type(v) == "string" then
+			local s = F("%q", v) :gsub("\\\n", "\\n")
+			file:write(k, (" "):rep(maxKeyLen - #k + 1))
+			file:write(s, "\n")
+
+		elseif type(v) == "boolean" then
+			file:write(k, (" "):rep(maxKeyLen - #k + 1))
+			file:write(tostring(v), "\n")
+
+		else
+			_logprinterror("%s: Cannot write type '%s'. Skipping. (entry.%s)", path, type(v), k)
+		end
+	end
+
+	file:close()
+
+	local page = self.cache[pageName]
+
+	if page.byId[id] then
+		local i = indexWith(page, "id", entry.id)
+
+		if not i then
+			errorf("Cache page '%s' is out of sync regarding entry %d.", pageName, id)
+		else
+			page.byId[id] = entry
+			page[i]       = entry
+		end
+
+	else
+		page.byId[id] = entry
+		table.insert(page, entry)
+	end
+end
+
+do
+	local function parseValue(path, ln, v)
+		local c = v:sub(1, 1)
+
+		-- Number.
+		if ("0123456789"):find(c, 1, true) then
+			local n = tonumber(v)
+			if not n then
+				_logprinterror("%s:%d: Malformed number: %s", path, ln, v)
+				return nil
+			end
+			return n
+
+		-- String.
+		elseif c == '"' then
+			local chunk, err = loadstring("return"..v)
+			if not chunk then
+				_logprinterror("%s:%d: Malformed string: %s: %s", path, ln, err, v)
+				return nil
+			end
+
+			local s = chunk()
+			if type(s) ~= "string" then
+				_logprinterror("%s:%d: Malformed string: %s", path, ln, v)
+				return nil
+			end
+			return s
+
+		-- Boolean.
+		elseif v == "true" then
+			return true
+		elseif v == "false" then
+			return false
+
+		else
+			_logprinterror("%s:%d: Unknown value type: %s", path, ln, v)
+			return nil
+		end
+	end
+
+	function cacheLoad(self, pageName, id)
+		local page  = self.cache[pageName]
+		local entry = page.byId[id]
+
+		if entry then
+			_logprinterror("Tried to load already loaded '%s' entry %d.", pageName, id)
+			return entry
+		end
+
+		local path = F("%s/%s%d", CACHE_DIR, pageName, id)
+
+		local file, err = io.open(path, "r")
+		if not file then  return nil, err  end
+
+		entry    = {}
+		local ln = 0
+
+		for line in file:lines() do
+			ln = ln+1
+
+			if line ~= "" then
+				local k, v = line:match"^(%S+) +(%S.*)$"
+
+				if not k then
+					_logprinterror("%s:%d: Bad line format: %s", path, ln, line)
+
+				else
+					if entry[k] ~= nil then
+						_logprinterror("%s:%d: Duplicate key '%s'. Overwriting.", path, ln, k)
+					end
+					entry[k] = parseValue(path, ln, v)
+				end
+			end
+		end
+
+		file:close()
+
+		page.byId[id] = entry
+		table.insert(page, entry)
+
+		return entry
+	end
 end
 
 
@@ -733,8 +1005,17 @@ end
 
 
 function Anidb:init()
-	self.messages          = {}
-	self.theEvents         = {}
+	self.messages  = {}
+	self.theEvents = {}
+
+	self.cache = {
+		l = {byId={}}, -- 'lid' MyList entries.
+		f = {byId={}}, -- 'fid' Files.
+		e = {byId={}}, -- 'eid' Episodes.
+		a = {byId={}}, -- 'aid' Animes.
+		g = {byId={}}, -- 'gid' Groups.
+	}
+
 	self.previousResponseTimes = {}
 
 	self.udp = assert(socket.udp())
@@ -745,10 +1026,17 @@ function Anidb:init()
 	self.udp:settimeout(0)
 
 	assert(createDirectory("local"))
-	assert(createDirectory("cache"))
+	assert(createDirectory(CACHE_DIR))
 
 	loadBlackout(self)
 	loadNatInfo(self)
+
+	for name in lfs.dir(CACHE_DIR) do
+		local pageName, id = name:match"^(%l)(%d+)$"
+		if pageName then
+			cacheLoad(self, pageName, tonumber(id))
+		end
+	end
 end
 
 
@@ -778,7 +1066,7 @@ end
 
 
 -- Should only be called internally!
-function Anidb:sendPing()
+function Anidb:ping()
 	if self.messages[1] then  return  end
 
 	-- PING [nat=1]
@@ -812,7 +1100,8 @@ function Anidb:sendPing()
 	end)
 end
 
-function Anidb:sendLogin()
+-- Should only be called internally!
+function Anidb:login()
 	if self.sessionKey ~= "" then
 		-- Already logged in.
 		self.onLogin(true)
@@ -857,6 +1146,7 @@ function Anidb:sendLogin()
 			assert(session, "Bad AUTH status text format.")
 
 			self.sessionKey = session
+			_logprint("Started session. (%s)", session)
 
 			if self.natMode ~= NAT_MODE_OFF then
 				local ip, port = natInfo:match"^(%d+)%.(%d+)%.(%d+)%.(%d+):(%d+)$"
@@ -897,8 +1187,8 @@ function Anidb:sendLogin()
 	end)
 end
 
-function Anidb:sendLogout()
-	if self.sessionKey == "" or isMessageInQueue(self, "LOGOUT") then  return  end
+function Anidb:logout()
+	if not self:isLoggedIn() or isMessageInQueue(self, "LOGOUT") then  return  end
 
 	-- LOGOUT s={str session_key}
 	local paramPairs = {
@@ -924,6 +1214,100 @@ function Anidb:sendLogout()
 
 		else
 			addEvent(self, "logoutfail", "AniDB error "..statusCode..": "..statusText)
+		end
+	end)
+end
+
+function Anidb:fetchMylistByEd2k(ed2kHash, fileSize)
+	for _, msg in ipairs(self.messages) do
+		if msg.command == "MYLIST" and msg.params.size == fileSize and msg.params.ed2khash == ed2kHash then
+			return
+		end
+	end
+
+	local mylistEntry = itemWith2(self.cache.l, "ed2k",ed2kHash, "size",fileSize)
+	if mylistEntry then
+		addEvent(self, "mylistsuccess", "entry", mylistEntry)
+		return
+	end
+
+	-- MYLIST size={int4 size}&ed2k={str ed2khash}&s={str session_key}
+	local paramPairs = {
+		"size",     fileSize,
+		"ed2khash", ed2kHash,
+		"s",        self.sessionKey,
+	}
+
+	addToSendQueue(self, "MYLIST", paramPairs, function(ok, statusCode, statusText, entries)
+		-- 221 MYLIST\n{int4 lid}|{int4 fid}|{int4 eid}|{int4 aid}|{int4 gid}|{int4 date}|{int2 state}|{int4 viewdate}|{str storage}|{str source}|{str other}|{int2 filestate}
+		-- 312 MULTIPLE MYLIST ENTRIES\n{str anime title}|{int episodes}|{str eps with state unknown}|{str eps with state on hhd}|{str eps with state on cd}|{str eps with state deleted}|{str watched eps}|{str group 1 short name}|{str eps for group 1}|...
+		-- 321 NO SUCH ENTRY
+		-- Also 505 555 598 600 601 602 604 [501 502 506].
+
+		if not ok then
+			addEvent(self, "mylistfail", "Something went wrong while retrieving mylist entries. Check the log.")
+
+		elseif statusCode == 221 then
+			local nextField = arrayIterator(entries[1])
+
+			local mylistEntry = {
+				id        = paramNumberDecode(nextField()), -- 'lid'       MyList entry ID.
+				fileId    = paramNumberDecode(nextField()), -- 'fid'
+				episodeId = paramNumberDecode(nextField()), -- 'eid'
+				animeId   = paramNumberDecode(nextField()), -- 'aid'
+				groupId   = paramNumberDecode(nextField()), -- 'gid'
+				addedDate = paramNumberDecode(nextField()), -- 'date'      Unix time.
+				state     = paramNumberDecode(nextField()), -- 'state'     State of entry (NOT file state).
+				viewDate  = paramNumberDecode(nextField()), -- 'viewdate'
+				storage   = paramStringDecode(nextField()), -- 'storage'   Text, i.e. label of cd with this file.
+				source    = paramStringDecode(nextField()), -- 'source'    Text, i.e. ed2k, dc, ftp, irc...
+				other     = paramStringDecode(nextField()), -- 'other'     Note.
+				fileState = paramNumberDecode(nextField()), -- 'filestate'
+				-- Extra:
+				ed2k      = ed2kHash,
+				size      = fileSize,
+			}
+			printobj("mylistEntry", mylistEntry)
+			cacheSave(self, "l", mylistEntry)
+
+			addEvent(self, "mylistsuccess", "entry", mylistEntry)
+
+		elseif statusCode == 312 then
+			local mylistSelection = {
+				animeTitle               = paramStringDecode(nextField()),
+				episodeCount             = paramNumberDecode(nextField()),
+				episodesWithStateUnknown = parseEpisodes(nextField()),
+				episodesWithStateOnHhd   = parseEpisodes(nextField()),
+				episodesWithStateOnCd    = parseEpisodes(nextField()),
+				episodesWithStateDeleted = parseEpisodes(nextField()),
+				watchedEpisodes          = parseEpisodes(nextField()),
+				groups                   = {},
+			}
+
+			for _ = 1, 10000 do
+				local shortName = nextField()
+				if not shortName then  break  end
+
+				if shortName == "" then
+					_logprinterror("MYLIST 312 can return additional empty fields, apparently.")
+					break
+				end
+
+				table.insert(mylistSelection.groups, {
+					shortName = paramStringDecode(shortName),
+					episodes  = parseEpisodes(nextField()),
+				})
+			end
+
+			printobj("mylistSelection", mylistSelection)
+
+			addEvent(self, "mylistsuccess", "selection", mylistSelection)
+
+		elseif statusCode == 321 then
+			addEvent(self, "mylistsuccess", "none", nil)
+
+		else
+			addEvent(self, "mylistfail", "AniDB error "..statusCode..": "..statusText)
 		end
 	end)
 end
@@ -982,7 +1366,7 @@ function Anidb:update(force)
 
 	-- Send ping.
 	if self.isActive and time > self.responseTimeLast+self.pingDelay and not isAnyMessageInTransit(self) then
-		self:sendPing()
+		self:ping()
 	end
 end
 
