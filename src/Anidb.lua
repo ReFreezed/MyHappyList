@@ -22,7 +22,7 @@
 	update
 
 	-- Server communication.
-	fetchMylistByEd2k
+	fetchMylistByFile, fetchMylistByEd2k
 	login, logout
 	ping
 
@@ -1177,7 +1177,7 @@ function Anidb:login()
 			local reason = trim(statusText:match"%- (.+)" or "")
 			reason       = reason == "" and "No reason given." or "Reason: "..reason
 
-			addEvent(self, "loginfail", "MyHappyList has been banned from AniDB.\n"..reason)
+			addEvent(self, "loginfail", "The client has been banned from AniDB.\n"..reason)
 			self.onLogin(false)
 
 		else
@@ -1218,7 +1218,78 @@ function Anidb:logout()
 	end)
 end
 
+-- fetchMylistByFile( path )
+-- fetchMylistByFile( fileId )
+local pathEd2ks = {}
+local pathSizes = {}
+function Anidb:fetchMylistByFile(pathOrFileId)
+	assertarg(1, pathOrFileId, "string","number")
+
+	if type(pathOrFileId) == "string" then
+		local path     = pathOrFileId
+		local fileSize = lfs.attributes(path, "size")
+
+		if not fileSize then
+			_logprinterror("No file at path '%s' (or could not get the file size).", path)
+			return
+		end
+
+		local ed2kHash = pathEd2ks[path]
+
+		if ed2kHash then
+			if ed2kHash == "" then
+				-- The ed2k is already being calculated.
+				return
+
+			elseif pathSizes[path] ~= fileSize then
+				_logprinterror(
+					"%s: Somehow we have the ed2k but the size is wrong. Recalculating. (expected %d, got %d)",
+					path, pathSizes[path], fileSize
+				)
+				pathEd2ks[path] = nil
+				pathSizes[path] = nil
+
+			else
+				-- Both ed2ks and size match previous values.
+				self:fetchMylistByEd2k(ed2kHash, fileSize)
+				return
+			end
+		end
+
+		pathEd2ks[path] = "" -- An empty string means "currently calculating".
+		_logprint("Calculating ed2k for '%s'...", path:match"[^/\\]+$")
+
+		scriptCaptureAsync("ed2k", function(output)
+			ed2kHash = output:match"^ed2k: ([%da-f]+)"
+
+			if not ed2kHash then
+				_logprinterror("Calculating ed2k for '%s' failed: %s", path:match"[^/\\]+$", output)
+
+				pathEd2ks[path] = nil
+				pathSizes[path] = nil
+
+				return
+			end
+
+			_logprint("Calculating ed2k for '%s'... %s", path:match"[^/\\]+$", ed2kHash)
+			-- printf("ed2k://|file|%s|%d|%s|/", path:match"[^/\\]+$", fileSize, ed2kHash)
+
+			pathEd2ks[path] = ed2kHash
+			pathSizes[path] = fileSize
+
+			self:fetchMylistByEd2k(ed2kHash, fileSize)
+		end, path)
+
+	else--if type(pathOrFileId) == "number" then
+		local fileId = pathOrFileId
+		_logprinterror("@Incomplete: fetchMylistByFile(fileId)")
+	end
+end
+
 function Anidb:fetchMylistByEd2k(ed2kHash, fileSize)
+	assertarg(1, ed2kHash, "string")
+	assertarg(2, fileSize, "number")
+
 	for _, msg in ipairs(self.messages) do
 		if msg.command == "MYLIST" and msg.params.size == fileSize and msg.params.ed2khash == ed2kHash then
 			return

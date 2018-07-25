@@ -19,7 +19,7 @@ package.path
 	.."./lib/?.lua;"
 	.."./lib/?/init.lua;"
 
-math.randomseed(os.time())
+math.randomseed(require"socket".gettime()*1000)
 math.random() -- Gotta kickstart the randomness.
 
 io.stdout:setvbuf("no")

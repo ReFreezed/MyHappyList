@@ -52,7 +52,7 @@
 	trim, trimNewlines
 
 	WX:
-	newMenuItem, newButton, newText, newTimer
+	newMenuItem, newButton, newText, newTimer, setTimerDummyOwner
 	on, onAccelerator
 
 --============================================================]]
@@ -331,21 +331,23 @@ end
 function logprint(agent, s, ...)
 	if select("#", ...) > 0 then  s = s:format(...)  end
 
+	local time = getTime()
 	if agent then
-		printf("%s|%s| %s", os.date"%H:%M:%S", agent, s)
+		printf("%s.%03d|%s| %s", os.date("%H:%M:%S", time), 1000*(time%1), agent, s)
 	else
-		printf("%s| %s", os.date"%H:%M:%S", s)
+		printf("%s.%03d| %s", os.date("%H:%M:%S", time), 1000*(time%1), s)
 	end
 end
 
 function logprinterror(agent, s, ...)
 	if select("#", ...) > 0 then  s = s:format(...)  end
 
+	local time = getTime()
 	-- io.stdout:write("\27[91m") -- Bright red. (No support in Sublime. :/ )
 	if agent then
-		printf("%s|%s| Error: %s", os.date"%H:%M:%S", agent, s)
+		printf("%s.%03d|%s| Error: %s", os.date("%H:%M:%S", time), 1000*(time%1), agent, s)
 	else
-		printf("%s| Error: %s", os.date"%H:%M:%S", s)
+		printf("%s.%03d| Error: %s", os.date("%H:%M:%S", time), 1000*(time%1), s)
 	end
 	-- io.stdout:write("\27[0m")  -- Clean.
 end
@@ -353,10 +355,11 @@ end
 function logprintOnce(agent, s, ...)
 	if select("#", ...) > 0 then  s = s:format(...)  end
 
+	local time = getTime()
 	if agent then
-		printfOnce("%s|%s| %s", os.date"%H:%M:%S", agent, s)
+		printfOnce("%s.%03d|%s| %s", os.date("%H:%M:%S", time), 1000*(time%1), agent, s)
 	else
-		printfOnce("%s| %s", os.date"%H:%M:%S", s)
+		printfOnce("%s.%03d| %s", os.date("%H:%M:%S", time), 1000*(time%1), s)
 	end
 end
 
@@ -881,25 +884,33 @@ function newText(parent, id, label, pos, size)
 	return textObj
 end
 
--- timer = newTimer( dummyEventHandler, [ milliseconds, oneShot=false, ] callback )
-function newTimer(dummyObj, milliseconds, oneShot, cb)
-	if type(milliseconds) ~= "number" then
-		milliseconds, oneShot, cb = nil, milliseconds, oneShot
-	end
-	if type(oneShot) ~= "boolean" then
-		oneShot, cb = false, oneShot
+do
+	local dummyOwner = nil
+
+	function setTimerDummyOwner(obj)
+		dummyOwner = obj
 	end
 
-	local timer = wx.wxTimer(dummyObj)
-	timer:SetOwner(timer)
+	-- timer = newTimer( [ milliseconds, oneShot=false, ] callback )
+	function newTimer(milliseconds, oneShot, cb)
+		if type(milliseconds) ~= "number" then
+			milliseconds, oneShot, cb = nil, milliseconds, oneShot
+		end
+		if type(oneShot) ~= "boolean" then
+			oneShot, cb = false, oneShot
+		end
 
-	on(timer, "TIMER", cb)
+		local timer = wx.wxTimer(dummyOwner)
+		timer:SetOwner(timer)
 
-	if milliseconds then
-		timer:Start(milliseconds, oneShot)
+		on(timer, "TIMER", cb)
+
+		if milliseconds then
+			timer:Start(milliseconds, oneShot)
+		end
+
+		return timer
 	end
-
-	return timer
 end
 
 
@@ -1115,8 +1126,8 @@ function cmdCapture(cmd, timeout)
 	return output
 end
 
--- scriptCaptureAsync( dummyEventHandler, scriptName, callback, arg1, ... )
-function scriptCaptureAsync(dummyObj, scriptName, cb, ...)
+-- scriptCaptureAsync( scriptName, callback, arg1, ... )
+function scriptCaptureAsync(scriptName, cb, ...)
 	local scriptPath = "src/scripts/"..scriptName..".lua"
 	local outputPath = getTempFilePath(true)
 	local cmd        = cmdEscapeArgs("bin\\wlua5.1.exe", scriptPath, ...)
@@ -1125,7 +1136,7 @@ function scriptCaptureAsync(dummyObj, scriptName, cb, ...)
 		return nil, "Could not execute command: "..cmd
 	end
 
-	local timer; timer = newTimer(dummyObj, 1000/10, function(e)
+	local timer; timer = newTimer(1000/10, function(e)
 		if not lfs.attributes(outputPath, "mode") then return end
 
 		local file = io.open(outputPath, "a+")

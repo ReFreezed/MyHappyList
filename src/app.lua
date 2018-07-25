@@ -16,46 +16,30 @@ local frame
 --==============================================================
 
 local anidbEventHandlers = {
-	["loginsuccess"] = function()
-		-- We probably want to perform a callback here from a previous action that required a login.
-	end,
+	["loginsuccess"] = function() end,
 	["loginbadlogin"] = function()
 		showError(frame, "Bad Login", "The username or password is incorrect.")
 		frame:Close(true)
 	end,
-	["loginfail"] = function(userMessage)
-		-- void
-	end,
+	["loginfail"] = function(userMessage) end,
 
 	["mylistsuccess"] = function(what, mylistThing)
 		if what == "entry" then
 			-- @@
 		elseif what == "selection" then
 			-- @@
-		elseif what == "none" then
-			-- void
-		else
+		elseif what ~= "none" then
 			logprinterror(nil, "mylistsuccess: Unknown what value '%s'.", what)
 		end
 	end,
-	["mylistfail"] = function(userMessage)
-		-- void
-	end,
+	["mylistfail"] = function(userMessage) end,
 
-	["blackoutstart"] = function()
-		-- void
-	end,
-	["blackoutstop"] = function()
-		-- void
-	end,
+	["blackoutstart"] = function() end,
+	["blackoutstop"] = function() end,
 
-	["pingfail"] = function(userMessage)
-		-- void
-	end,
+	["pingfail"] = function(userMessage) end,
 
-	["resend"] = function(command)
-		-- void
-	end,
+	["resend"] = function(command) end,
 
 	["newversionavailable"] = function(userMessage)
 		-- @UX: A less intrusive "Update Available" notification.
@@ -107,6 +91,8 @@ anidb = require"Anidb"()
 ----------------------------------------------------------------
 frame = wx.wxFrame(WX_NULL, WX_ID_ANY, "MyHappyList", WX_DEFAULT_POSITION, WxSize(450, 450), WX_DEFAULT_FRAME_STYLE)
 
+setTimerDummyOwner(frame)
+
 frame:CreateStatusBar()
 -- frame:SetStatusText("...")
 
@@ -139,7 +125,7 @@ frame:SetMenuBar(menuBar)
 -- AniDB update timer.
 ----------------------------------------------------------------
 
-local anidbUpdateTimer = newTimer(frame, function(e)
+local anidbUpdateTimer = newTimer(function(e)
 	anidb:update()
 
 	for eName, _1, _2, _3, _4, _5 in anidb:events() do
@@ -172,24 +158,8 @@ addButton("login", function(e)
 	anidb:login()
 end)
 
-addButton("fetchMylistByEd2k", function(e)
-	local path     = getFileContents"local/exampleFilePathGb.txt"
-	local fileSize = lfs.attributes(path, "size")
-
-	-- @Robustness: Make sure we don't call scriptCaptureAsync() too frequently.
-
-	scriptCaptureAsync(frame, "ed2k", function(output)
-		local ed2kHash = output:match"^ed2k: ([%da-f]+)"
-		if not ed2kHash then
-			logprinterror(nil, "ed2k: "..output)
-			return
-		end
-
-		-- print(ed2kHash)
-		-- printf("ed2k://|file|%s|%d|%s|/", path:match"[^/\\]+$", fileSize, ed2kHash)
-
-		anidb:fetchMylistByEd2k(ed2kHash, fileSize)
-	end, path)
+addButton("fetchMylistByFile", function(e)
+	anidb:fetchMylistByFile(getFileContents"local/exampleFilePathGb.txt", frame)
 end)
 
 addButton("clearMessageQueue", function(e)
