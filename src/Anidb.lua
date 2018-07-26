@@ -360,7 +360,7 @@ do
 	function generateTag()
 		local tag
 		repeat
-			tag = F("#%07x", math.random(0xFFFFFFF))
+			tag = F("#%x", math.random(0xFFFFFFF))
 		until not tags[tag]
 
 		tags[tag] = true
@@ -772,11 +772,15 @@ end
 
 function loadNatInfo(self)
 	local contents = getFileContents(CACHE_DIR.."/nat")
-	if not contents then return end
+	if not contents then
+		_logprint("Ping delay: %d seconds", self.pingDelay)
+		return
+	end
 
 	local pingDelay, natLimitLower, natLimitUpper = contents:match"^(%d+) (%-?%d+) (%-?%d+)$"
 	if not pingDelay then
 		_logprinterror("Bad format of file '%s/nat'.", CACHE_DIR)
+		_logprint("Ping delay: %d seconds", self.pingDelay)
 		return
 	end
 
@@ -1069,11 +1073,52 @@ do
 	local pathSizes = {}
 	local ed2kPaths = {}
 
+	local isLoaded  = false
+
+	local function saveEd2ks()
+		local file = assert(io.open(CACHE_DIR.."/ed2ks", "w"))
+
+		for path, ed2kHash in pairsSorted(pathEd2ks) do
+			local fileSize = pathSizes[path]
+			file:write(F("%s %d %s\n", ed2kHash, fileSize, path))
+		end
+
+		file:close()
+	end
+
+	local function loadEd2ks()
+		isLoaded = true
+
+		local file = io.open(CACHE_DIR.."/ed2ks", "r")
+		if not file then  return  end
+
+		local ln = 0
+
+		for line in file:lines() do
+			ln = ln+1
+
+			local ed2kHash, size, path = line:match"^(%S+) (%d+) (%S.*)$"
+			size = tonumber(size)
+
+			if not ed2kHash then
+				_logprinterror("%s:%d: Bad line format: %s", CACHE_DIR.."/ed2ks", ln, line)
+			else
+				pathEd2ks[path]     = ed2kHash
+				pathSizes[path]     = size
+				ed2kPaths[ed2kHash] = path
+			end
+		end
+
+		file:close()
+	end
+
 	function getEd2k(path, cb)
-		local fileSize = lfs.attributes(path, "size")
+		if not isLoaded then  loadEd2ks()  end
+
+		local fileSize, err = lfs.attributes(path, "size")
 
 		if not fileSize then
-			_logprinterror("No file at path '%s' (or could not get the file size).", path)
+			_logprinterror("Could not get info about file '%s': %s", path, err)
 			cb(ED2K_STATE_ERROR)
 			return
 		end
@@ -1121,6 +1166,7 @@ do
 					end
 				end
 
+				saveEd2ks()
 				cb(ED2K_STATE_ERROR)
 				return
 			end
@@ -1128,15 +1174,22 @@ do
 			_logprint("Calculating ed2k for '%s'... %s", path:match"[^/\\]+$", ed2kHash)
 			-- printf("ed2k://|file|%s|%d|%s|/", path:match"[^/\\]+$", fileSize, ed2kHash)
 
-			pathEd2ks[path] = ed2kHash
-			pathSizes[path] = fileSize
+			if ed2kPaths[ed2kHash] then
+				_logprint("Duplicate hash detected:\n\t%s\n\t%s  (replacement)", ed2kPaths[ed2kHash], path)
+			end
+
+			pathEd2ks[path]     = ed2kHash
+			pathSizes[path]     = fileSize
 			ed2kPaths[ed2kHash] = path
 
+			saveEd2ks()
 			cb(ED2K_STATE_SUCCESS, ed2kHash, fileSize)
 		end, path)
 	end
 
 	function getPathByEd2k(ed2kHash)
+		if not isLoaded then  loadEd2ks()  end
+
 		return ed2kPaths[ed2kHash]
 	end
 end
@@ -1839,8 +1892,7 @@ function Anidb:update(force)
 			require"fakeServer"(self.udp, data)
 
 		else
-			if DEBUG then  print("<-- "..makePrintable(data))  end
-
+			logprint("IO", "<-- "..makePrintable(data))
 			handleServerResponse(self, data)
 		end
 	end
@@ -1872,13 +1924,11 @@ function Anidb:update(force)
 			msg:callback(self, false)
 
 		else
-			_logprint("Sending "..msg.command..".")
-			if DEBUG then  print("--> "..makePrintable(data))  end
-
 			msg.stage    = MESSAGE_STAGE_SENT
 			msg.tries    = msg.tries+1
 			msg.timeSent = time
 
+			logprint("IO", "--> "..makePrintable(data))
 			check(self.udp:send(data))
 		end
 	end

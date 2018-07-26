@@ -941,6 +941,7 @@ function makePrintable(v)
 		:gsub("[%z\1-\31]", function(c)
 			return "\\"..c:byte()
 		end)
+		:gsub("(pass=).*(&[^a])", "%1***%2") -- Simple password hiding. Note: "&" should be encoded as "&amp;".
 	)
 end
 
