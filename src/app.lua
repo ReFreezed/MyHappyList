@@ -23,16 +23,36 @@ local anidbEventHandlers = {
 	end,
 	["loginfail"] = function(userMessage) end,
 
-	["mylistsuccess"] = function(what, mylistThing)
+	["mylistgetsuccess"] = function(what, ...)
 		if what == "entry" then
+			local mylistEntry = ...
 			-- @@
+
 		elseif what == "selection" then
+			local mylistSelection = ...
 			-- @@
+
 		elseif what ~= "none" then
-			logprinterror(nil, "mylistsuccess: Unknown what value '%s'.", what)
+			logprinterror(nil, "mylistgetsuccess: Unknown what value '%s'.", what)
 		end
 	end,
-	["mylistfail"] = function(userMessage) end,
+	["mylistgetfail"] = function(userMessage) end,
+
+	["mylistaddsuccess"] = function(mylistEntryPartial)
+		-- anidb:getMylist(mylistEntryPartial.lid) -- @@
+	end,
+	["mylistaddsuccessmultiple"] = function(count)
+		-- @@
+	end,
+	["mylistaddfoundmultiplefiles"] = function(fids)
+		-- @@
+	end,
+	["mylistaddfail"] = function(userMessage) end,
+
+	["mylistdeletesuccess"] = function(count)
+		-- @@
+	end,
+	["mylistdeletefail"] = function(userMessage) end,
 
 	["blackoutstart"] = function() end,
 	["blackoutstop"] = function() end,
@@ -129,8 +149,9 @@ local anidbUpdateTimer = newTimer(function(e)
 	anidb:update()
 
 	for eName, _1, _2, _3, _4, _5 in anidb:events() do
-		local handler = anidbEventHandlers[eName]
+		logprint(nil, "Event: %s", eName)
 
+		local handler = anidbEventHandlers[eName]
 		if handler then
 			handler(_1, _2, _3, _4, _5)
 
@@ -153,13 +174,19 @@ end
 addButton("ping", function(e)
 	anidb:ping()
 end)
-
 addButton("login", function(e)
 	anidb:login()
 end)
 
-addButton("fetchMylistByFile", function(e)
-	anidb:fetchMylistByFile(getFileContents"local/exampleFilePathGb.txt", frame)
+addButton("getMylistByFile", function(e)
+	anidb:getMylistByFile(getFileContents"local/exampleFilePathGb.txt")
+end)
+addButton("addMylistByFile", function(e)
+	anidb:addMylistByFile(getFileContents"local/exampleFilePathGb.txt")
+end)
+addButton("deleteMylist x2", function(e)
+	anidb:deleteMylist(115)
+	anidb:deleteMylist(2468)
 end)
 
 addButton("clearMessageQueue", function(e)
@@ -171,10 +198,11 @@ local textEl = newText(panel, "Text?", WxPoint(0, y))
 --==============================================================
 --= Show GUI ===================================================
 --==============================================================
-anidbUpdateTimer:Start(1000/10)
 
 frame:Center()
 frame:Show(true)
+
+anidbUpdateTimer:Start(1000/10)
 wx.wxGetApp():MainLoop()
 
 --==============================================================

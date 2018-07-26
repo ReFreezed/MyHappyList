@@ -15,9 +15,9 @@
 -- Settings.
 DEBUG                               = true
 DEBUG_LOCAL                         = true and DEBUG
-DEBUG_FORCE_NAT_OFF                 = false and DEBUG_LOCAL
+DEBUG_FORCE_NAT_OFF                 = true and DEBUG_LOCAL
 DEBUG_EXPIRATION_TIME_PORT          = 60
-DEBUG_EXPIRATION_TIME_SESSION       = 30*60 -- (Mostly useless, as the port will expire before the session.)
+DEBUG_EXPIRATION_TIME_SESSION       = 3*60 -- Only useful is NAT is off.
 
 SERVER_ADDRESS                      = DEBUG_LOCAL and "localhost" or "api.anidb.net"
 SERVER_PORT                         = 9000

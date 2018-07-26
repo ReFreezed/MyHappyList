@@ -37,6 +37,7 @@
 	isStringMatchingAnyPattern
 	makePrintable
 	newStringBuilder
+	newTimer, setTimerDummyOwner
 	pack
 	pairsSorted
 	print, printOnce, printf, printfOnce, log, logprint, logprinterror, logprintOnce, printobj
@@ -52,7 +53,7 @@
 	trim, trimNewlines
 
 	WX:
-	newMenuItem, newButton, newText, newTimer, setTimerDummyOwner
+	newMenuItem, newButton, newText
 	on, onAccelerator
 
 --============================================================]]
@@ -701,13 +702,20 @@ end
 
 
 
--- removeItem( array, value1, ... )
+-- anyItemGotRemoved = removeItem( array, value1, ... )
 function removeItem(t, ...)
-	for i = 1, select("#", ...) do
-		local iToRemove = indexOf(t, select(i, ...))
+	local anyItemGotRemoved = false
 
-		if iToRemove then  table.remove(t, iToRemove)  end
+	for argIndex = 1, select("#", ...) do
+		local i = indexOf(t, select(argIndex, ...))
+
+		if i then
+			table.remove(t, i)
+			anyItemGotRemoved = true
+		end
 	end
+
+	return anyItemGotRemoved
 end
 
 
@@ -884,12 +892,10 @@ function newText(parent, id, label, pos, size)
 	return textObj
 end
 
+
+
 do
 	local dummyOwner = nil
-
-	function setTimerDummyOwner(obj)
-		dummyOwner = obj
-	end
 
 	-- timer = newTimer( [ milliseconds, oneShot=false, ] callback )
 	function newTimer(milliseconds, oneShot, cb)
@@ -910,6 +916,10 @@ do
 		end
 
 		return timer
+	end
+
+	function setTimerDummyOwner(obj)
+		dummyOwner = obj
 	end
 end
 

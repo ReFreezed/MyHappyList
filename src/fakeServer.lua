@@ -101,9 +101,8 @@ local function parseDataFromClient(data)
 			else
 				local v = query:sub(ptrValStart, ptrDivider-1)
 				ptr = ptrDivider+1
-				if v == "" then
-					_logprint("Warning: Param '%s' has no value.", param)
-				end
+
+				-- if v == "" then  _logprint("Warning: Param '%s' has no value.", param)  end
 
 				params[param] = v
 				break
@@ -167,7 +166,7 @@ local function simulateServerResponse(udp, data)
 		end
 		check(udp:send(b()))
 
-	-- AUTH user={str}&pass={str}&protover={int4}&client={str}&clientver={int4}[&nat=1&comp=1&enc={str}&mtu={int4}&imgserver=1]
+	-- AUTH user=str&pass=str&protover=int&client=str&clientver=int[&nat=1&comp=1&enc=str&mtu=int&imgserver=1]
 	elseif command == "AUTH" then
 		startNewSession()
 
@@ -184,25 +183,82 @@ local function simulateServerResponse(udp, data)
 
 		check(udp:send(b()))
 
-	-- MYLIST lid={int4 lid}
-	-- MYLIST fid={int4 fid}
-	-- MYLIST size={int4 size}&ed2k={str ed2khash}
-	-- MYLIST aname={str anime name}[&gname={str group name}&epno={int4 episode number}]
-	-- MYLIST aname={str anime name}[&gid={int4 group id}&epno={int4 episode number}]
-	-- MYLIST aid={int4 anime id}[&gname={str group name}&epno={int4 episode number}]
-	-- MYLIST aid={int4 anime id}[&gid={int4 group id}&epno={int4 episode number}]
-	-- Must have s={str session_key}.
+	-- MYLIST lid=int
+	-- MYLIST fid=int
+	-- MYLIST size=int&ed2k=str
+	-- MYLIST aname=str anime name[&gname=str group name&epno=int episode number]
+	-- MYLIST aname=str anime name[&gid=int group id&epno=int episode number]
+	-- MYLIST aid=int anime id[&gname=str group name&epno=int episode number]
+	-- MYLIST aid=int anime id[&gid=int group id&epno=int episode number]
+	-- Must have s=str session key.
 	elseif command == "MYLIST" then
 		local b = newServerResponseBuilder(params)
 
 		if checkSession(params, b) then
-			if params.lid or params.fid or (params.ed2khash and params.size) then
-				b("221 MYLIST\n115|417417|33333|410|810|1234000|4|1234567|Somewhere|Outer Space|Nothing to say...|2")
+			if params.lid or params.fid or (params.ed2k and params.size) then
+				b("221 MYLIST\n%d|417417|33333|410|810|1234000|4|1234567|Somewhere|Outer Space|Hmm...<br />Nothing to say.|2", tonumber(params.lid or 115))
 			elseif params.aname or params.aid then
 				b("322 MULTIPLE FILES FOUND\nKoukaku Kidoutai STAND ALONE COMPLEX|26||1-26|1-26,S2-S27|||V-A|S2-S27|LMF|20-26|KAA|1-26|AonE|1-19|Anime-MX|1-3,9-20")
 			else
 				b("321 NO SUCH ENTRY\n")
 			end
+		end
+
+		check(udp:send(b()))
+
+	-- MYLISTADD fid=int
+	-- MYLISTADD size=int&ed2k=str
+	-- MYLISTADD lid=int&edit=1
+    -- MYLISTADD aid=int&gid=int&epno=int episode number
+    -- MYLISTADD aid=int&gname=str group_name&epno=int episode number
+    -- MYLISTADD aid=int&generic=1&epno=int episode number
+    -- MYLISTADD aname=str anime name&gid=int&epno=int episode number
+    -- MYLISTADD aname=str anime name&gname=str group name&epno=int episode number
+    -- MYLISTADD aname=str anime name&generic=1&epno=int episode number
+	-- Can have state=int state.
+	-- Can have viewed=bool viewed.
+	-- Can have viewdate=int viewdate.
+	-- Can have source=str source.
+	-- Can have storage=str storage.
+	-- Can have other=str other.
+	-- Can have edit=1.
+	-- Must have s=str session key.
+	elseif command == "MYLISTADD" then
+		local b = newServerResponseBuilder(params)
+
+		if checkSession(params, b) then
+			if params.edit ~= BOOL_TRUE then
+				if params.aname or params.aid then
+					b("210 MYLIST ENTRY ADDED\n22")
+					-- b("310 FILE ALREADY IN MYLIST\n115|417417|33333|410|810|1234000|4|1234567|Somewhere|Outer Space|Hmm...<br />Nothing to say.|2")
+					-- b("322 MULTIPLE FILES FOUND\n{int4 fid 1}|{int4 fid 2}|...|{int4 fid n}")
+				else
+					b("210 MYLIST ENTRY ADDED\n%d", tonumber(params.lid or 2468))
+				end
+			else
+				b("311 MYLIST ENTRY EDITED\n%s", ((params.aname or params.aid) and "5" or ""))
+			end
+			-- b("320 NO SUCH FILE\n")
+			-- b("330 NO SUCH ANIME\n")
+			-- b("330 NO SUCH GROUP\n")
+		end
+
+		check(udp:send(b()))
+
+	-- MYLISTDEL lid=int
+	-- MYLISTDEL fid=int
+	-- MYLISTDEL size=int&ed2k=str
+	-- MYLISTDEL aname=str anime name[&gname=str group name&epno=int episode number]
+	-- MYLISTDEL aname=str anime name[&gid=int group id&epno=int episode number]
+	-- MYLISTDEL aid=int anime id[&gname=str group name&epno=int episode number]
+	-- MYLISTDEL aid=int anime id[&gid=int group id&epno=int episode number]
+	-- Must have s=str session key.
+	elseif command == "MYLISTDEL" then
+		local b = newServerResponseBuilder(params)
+
+		if checkSession(params, b) then
+			b("211 MYLIST ENTRY DELETED\n%d", ((params.aname or params.aid) and 5 or 1))
+			-- b("411 NO SUCH MYLIST ENTRY\n")
 		end
 
 		check(udp:send(b()))

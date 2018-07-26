@@ -22,7 +22,9 @@
 	update
 
 	-- Server communication.
-	fetchMylistByFile, fetchMylistByEd2k
+	addMylistByFile, addMylistByEd2k
+	deleteMylist
+	getMylistByFile, getMylistByEd2k
 	login, logout
 	ping
 
@@ -45,6 +47,17 @@
 	// These are handled in handleServerResponse().
 
 	See the server communication methods for the rest.
+
+
+	File Structure
+	--------------------------------
+
+	Constants
+	Local Variables
+	Local Functions
+	Response Handlers
+	Methods
+	Constructor
 
 
 --============================================================]]
@@ -81,6 +94,10 @@ local FILE_STATE_ON_BLURAY            = 16  -- generic
 local FILE_STATE_OTHER                = 100 -- normal
 
 local CACHE_DIR                       = DEBUG_LOCAL and "cacheDebug" or "cache"
+
+local ED2K_STATE_ERROR                = 1
+local ED2K_STATE_IN_PROGRESS          = 2
+local ED2K_STATE_SUCCESS              = 3
 
 
 
@@ -143,6 +160,7 @@ local Anidb = {
 	messages              = nil,
 	theEvents             = nil,
 	cache                 = nil,
+	cachePartial          = nil,
 
 	sessionKey            = "", -- This indicates whether we're logged in or not.
 
@@ -160,10 +178,14 @@ local Anidb = {
 	responseTimePrevious  = 0.00,
 	previousResponseTimes = nil,
 
+	mylistDefaults        = nil,
+
 	-- Internal events:
 	onLogin           = NOOP,
 }
 Anidb.__index = Anidb
+
+local responseHandlers
 
 
 
@@ -173,20 +195,20 @@ Anidb.__index = Anidb
 
 local _logprint, _logprinterror
 local addEvent
-local addParamPair
-local addToSendQueue, receive
 local blackout, loadBlackout
-local cacheSave, cacheLoad
+local cacheSave, cacheLoad, cacheDelete
 local compress, decompress
-local createParamsAndData
+local createData
 local dropSession
 local generateTag
+local getEd2k, getPathByEd2k
 local getMessage, addMessage, removeMessage
 local getNextMessageToSend
 local handleServerResponse
 local isAnyMessageInTransit, isMessageInQueue
 local onInternal
 local paramStringEncode, paramStringDecode, paramNumberEncode, paramNumberDecode, paramBooleanEncode, paramBooleanDecode, parseEpisodes
+local send, receive
 local updateNatInfo
 
 
@@ -220,8 +242,8 @@ function paramNumberEncode(n)
 	return F("%d", n)
 end
 function paramNumberDecode(v)
-	if v:find"%D" then  return nil  end
-	return tonumber(v) -- Returns nil if the value is "".
+	if v == "" or v:find"%D" then  return nil  end
+	return tonumber(v)
 end
 
 function paramBooleanEncode(bool)
@@ -234,10 +256,10 @@ function paramBooleanDecode(v)
 	return nil
 end
 
-function parseEpisodes(s)
+function parseEpisodes(epList)
 	local eps = {}
 
-	for epSeq in s:gmatch"[^,]+" do
+	for epSeq in epList:gmatch"[^,]+" do
 		local epFrom, epTo = epSeq:match"^([^-]+)%-([^-]+)$"
 
 		-- Single episode.
@@ -265,24 +287,19 @@ end
 
 
 
-function addToSendQueue(self, command, paramPairs, cb)
-	assertarg(1, self,       "table")
-	assertarg(2, command,    "string")
-	assertarg(3, paramPairs, "table")
-	assertarg(4, cb,         "function")
+-- Add a message to the send queue.
+-- send( anidb, command, params [, first=false ] )
+function send(self, command, params, first)
+	assertarg(1, self,    "table")
+	assertarg(2, command, "string")
+	assertarg(3, params,  "table")
 
 	_logprint("Queuing "..command..".")
 
+	local cb = responseHandlers[command] or errorf("No response handler for command '%s'.", command)
+
 	local tag = generateTag()
-	addParamPair(paramPairs, "tag", tag)
-
-	local params, data = createParamsAndData(command, paramPairs)
-
-	if #data > MAX_DATA_LENGTH then
-		_logprinterror("Data for %s command is too long. (length: %d, max: %d)", command, #data, MAX_DATA_LENGTH)
-		cb(false)
-		return
-	end
+	params["tag"] = tag
 
 	local msg = {
 		tag            = tag,
@@ -292,15 +309,12 @@ function addToSendQueue(self, command, paramPairs, cb)
 
 		command        = command,
 		params         = params,
-		paramPairs     = paramPairs,
 		callback       = cb,
-
-		data           = data,
 
 		timeSent       = -1,
 		timeResponded  = -1,
 	}
-	addMessage(self, msg)
+	addMessage(self, msg, first)
 end
 
 -- for data in receive( anidb ) do
@@ -316,14 +330,10 @@ end
 
 
 
-function createParamsAndData(command, paramPairs)
+function createData(command, params)
 	local queryParts = {}
-	local params     = {}
 
-	for i = 1, #paramPairs, 2 do
-		local param = paramPairs[i]
-		local v     = paramPairs[i+1]
-
+	for param, v in pairsSorted(params) do
 		if type(v) == "string" then
 			table.insert(queryParts, F("%s=%s", param, paramStringEncode(v)))
 
@@ -336,13 +346,10 @@ function createParamsAndData(command, paramPairs)
 		else
 			errorf("[AniDB.internal] Cannot encode values of type '%s'.", type(v))
 		end
-
-		params[param] = v
 	end
 
 	local data = F("%s %s", command, table.concat(queryParts, "&"))
-
-	return params, data
+	return data
 end
 
 
@@ -363,12 +370,12 @@ end
 
 
 
-function compress(s)
-	error("[AniDB.internal] Cannot handle compression yet.")
+function compress(data)
+	error("[AniDB.internal] Cannot compress data yet.")
 end
 
-function decompress(s)
-	error("[AniDB.internal] Cannot handle compression yet.")
+function decompress(data)
+	error("[AniDB.internal] Cannot handle compressed data yet.")
 end
 
 
@@ -385,40 +392,25 @@ do
 		_logprint("Requeuing "..msg.command..".")
 
 		local tag = generateTag()
+		msg.params.tag = tag
 
-		for i = 1, #msg.paramPairs, 2 do
-			if msg.paramPairs[i] == "tag" then
-				msg.paramPairs[i+1] = tag
-			elseif msg.paramPairs[i] == "s" then
-				msg.paramPairs[i+1] = self.sessionKey
-			end
-		end
-
-		local params, data = createParamsAndData(msg.command, msg.paramPairs)
-
-		if #data > MAX_DATA_LENGTH then
-			_logprinterror("Data for %s command is too long. (length: %d, max: %d)", msg.command, #data, MAX_DATA_LENGTH)
-			msg.callback(false)
-			return
-		end
-
-		msg.tag    = tag
-		msg.stage  = MESSAGE_STAGE_QUEUE
-
-		msg.params = params
-		msg.data   = data
+		msg.tag   = tag
+		msg.stage = MESSAGE_STAGE_QUEUE
 
 		if doDelay then
 			msg.dontSendBefore = getTime()+(DELAY_BEFORE_RESENDING[msg.tries] or DELAY_BEFORE_RESENDING.last)
 		end
 
 		-- Should 'first' be true? Maybe we should try to preserve the original position? Maybe it doesn't matter.
+		-- Actually, since we only send one message at a time, we should indeed insert the message first!
 		addMessage(self, msg, true)
 
 		addEvent(self, "resend", msg.command)
 	end
 
 	local function loginAndResendMessage(self, msg)
+		dropSession(self)
+
 		onInternal(self, "onLogin", function(ok)
 			if ok then
 				resendMessage(self, msg)
@@ -477,7 +469,7 @@ do
 			_logprinterror("Server response misses a code: %s", makePrintable(data))
 
 			addEvent(self, "error", "Bad format of response from the server for "..msg.command.." command.")
-			msg.callback(false)
+			msg:callback(self, false)
 			return false
 		end
 
@@ -527,7 +519,6 @@ do
 
 		-- INVALID SESSION
 		elseif statusCode == 506 then
-			dropSession(self)
 			loginAndResendMessage(self, msg)
 
 		-- BANNED\n{str reason}  // For developers.
@@ -544,16 +535,16 @@ do
 		-- Fatal error.
 		-- Note: 6XX messages do not always return the tag given with the command which caused the error!
 		elseif statusCode >= 600 and statusCode <= 699 then
-			local err
+			local errServer
 				=  statusText:match"%- (.+)"
 				or (entries[1][1] or ""):match"^ERROR: (.+)"
 				or ""
 
-			local function errorEvent(eName, s)
-				if err ~= "" then
-					s = F("%s\nError message: ", s)
+			local function errorEvent(eName, err)
+				if errServer ~= "" then
+					err = F("%s\nError message: %s", err, errServer)
 				end
-				addEvent(self, eName, s)
+				addEvent(self, eName, err)
 			end
 
 			local function pleaseReport()
@@ -605,16 +596,9 @@ do
 
 		--------------------------------
 
-		msg.callback(true, statusCode, statusText, entries)
+		msg:callback(self, true, statusCode, statusText, entries)
 		return true
 	end
-end
-
-
-
-function addParamPair(paramPairs, param, v)
-	table.insert(paramPairs, param)
-	table.insert(paramPairs, v)
 end
 
 
@@ -631,7 +615,7 @@ function addMessage(self, msg, first)
 	assertarg(1, self, "table")
 	assertarg(2, msg,  "table")
 
-	assert(not self.messages[msg.tag])
+	assert(not self.messages[msg.tag], msg.tag)
 
 	local i = first and 1 or #self.messages+1
 
@@ -741,7 +725,7 @@ function updateNatInfo(self, port)
 		end
 
 	elseif self.natMode == NAT_MODE_ON and self.responseTimeLast-self.responseTimePrevious >= self.pingDelay then
-		local pingDelay = self.pingDelay
+		local pingDelay  = self.pingDelay
 		local natLimitLo = self.natLimitLower
 		local natLimitUp = self.natLimitUpper
 
@@ -848,70 +832,6 @@ end
 
 
 
--- Note: The entry will overwrite any previous one with the same ID.
-function cacheSave(self, pageName, entry)
-	local id   = entry.id
-	local path = F("%s/%s%d", CACHE_DIR, pageName, id)
-
-	-- Backup old entry.
-	if isFile(path) then
-		writeFile(path..".bak", getFileContents(path))
-	end
-
-	local keys      = sortNatural(getKeys(entry))
-	local maxKeyLen = 0
-
-	for _, k in ipairs(keys) do
-		maxKeyLen = math.max(maxKeyLen, #k)
-	end
-
-	local file = assert(io.open(path, "w"))
-
-	for _, k in ipairs(keys) do
-		local v = entry[k]
-
-		if type(v) == "number" then
-			if not isInt(v) then
-				_logprinterror("%s: Cannot write non-integer numbers. Skipping. (%s, entry.%s)", path, tostring(v), k)
-			else
-				file:write(k, (" "):rep(maxKeyLen - #k + 1))
-				file:write(F("%d\n", v))
-			end
-
-		elseif type(v) == "string" then
-			local s = F("%q", v) :gsub("\\\n", "\\n")
-			file:write(k, (" "):rep(maxKeyLen - #k + 1))
-			file:write(s, "\n")
-
-		elseif type(v) == "boolean" then
-			file:write(k, (" "):rep(maxKeyLen - #k + 1))
-			file:write(tostring(v), "\n")
-
-		else
-			_logprinterror("%s: Cannot write type '%s'. Skipping. (entry.%s)", path, type(v), k)
-		end
-	end
-
-	file:close()
-
-	local page = self.cache[pageName]
-
-	if page.byId[id] then
-		local i = indexWith(page, "id", entry.id)
-
-		if not i then
-			errorf("Cache page '%s' is out of sync regarding entry %d.", pageName, id)
-		else
-			page.byId[id] = entry
-			page[i]       = entry
-		end
-
-	else
-		page.byId[id] = entry
-		table.insert(page, entry)
-	end
-end
-
 do
 	local function parseValue(path, ln, v)
 		local c = v:sub(1, 1)
@@ -952,8 +872,143 @@ do
 		end
 	end
 
-	function cacheLoad(self, pageName, id)
-		local page  = self.cache[pageName]
+	local function deleteEntry(self, pageName, entry, isPartial)
+		assertarg(1, self,      "table")
+		assertarg(2, pageName,  "string")
+		assertarg(3, entry,     "table")
+		assertarg(4, isPartial, "boolean")
+
+		local id = assert(entry.id)
+
+		for _, path in ipairs{
+			F("%s/%s%d%s",     CACHE_DIR, pageName, id, (isPartial and ".part" or "")),
+			F("%s/%s%d%s.bak", CACHE_DIR, pageName, id, (isPartial and ".part" or "")),
+		} do
+			if isFile(path) then
+				local ok, err = os.remove(path)
+				if not ok then
+					_logprinterror("Could not delete '%s': %s", path, err)
+				end
+			end
+		end
+
+		local page  = (isPartial and self.cachePartial or self.cache)[pageName]
+		local entry = page.byId[id]
+
+		if entry then
+			if not removeItem(page, entry) then
+				errorf("Cache page '%s' is out of sync regarding entry %d.", pageName, id)
+			end
+			page.byId[id] = nil
+			_logprint("Deleted %s '%s' entry %d.", (isPartial and "partial" or "full"), pageName, id)
+		end
+	end
+
+	-- entry = cacheSave( anidb, pageName, entry, isPartial )
+	-- Note: The entry will overwrite any previous one with the same ID.
+	function cacheSave(self, pageName, entry, isPartial)
+		assertarg(1, self,      "table")
+		assertarg(2, pageName,  "string")
+		assertarg(3, entry,     "table")
+		assertarg(4, isPartial, "boolean")
+
+		local id = assert(entry.id)
+
+		-- Make sure there's no collision between a full and a partial entry.
+		----------------------------------------------------------------
+
+		if not isPartial then
+			local entryPartial = self.cachePartial[pageName].byId[id]
+
+			if entryPartial then
+				deleteEntry(self, pageName, entryPartial, true)
+			end
+
+		else
+			local entryFull = self.cache[pageName].byId[id]
+
+			if entryFull then
+				-- Replace partial with full entry.
+
+				local entryPartial = entry
+
+				for k, v in pairs(entryPartial) do
+					entryFull[k] = v
+				end
+
+				deleteEntry(self, pageName, entryPartial, true)
+
+				entry     = entryFull
+				isPartial = false
+			end
+		end
+
+		-- Add or edit entry.
+		----------------------------------------------------------------
+
+		local page = (isPartial and self.cachePartial or self.cache)[pageName]
+
+		if page.byId[id] then
+			local _, i = itemWith(page, "id", entry.id)
+			if not i then
+				errorf("Cache page '%s' is out of sync regarding entry %d.", pageName, id)
+			end
+
+			page.byId[id] = entry
+			page[i]       = entry
+			_logprint("Updated %s '%s' entry %d.", (isPartial and "partial" or "full"), pageName, id)
+
+		else
+			page.byId[id] = entry
+			table.insert(page, entry)
+			_logprint("Added %s '%s' entry %d.", (isPartial and "partial" or "full"), pageName, id)
+		end
+
+		-- Write entry to file.
+		----------------------------------------------------------------
+
+		local path = F("%s/%s%d%s", CACHE_DIR, pageName, id, (isPartial and ".part" or ""))
+
+		-- Backup old entry.
+		if isFile(path) then
+			writeFile(path..".bak", getFileContents(path))
+		end
+
+		local file = assert(io.open(path, "w"))
+
+		for k, v in pairsSorted(entry) do
+			if type(v) == "number" then
+				if not isInt(v) then
+					_logprinterror("%s: Non-integer number disabled. Skipping. (%s, entry.%s)", path, tostring(v), k)
+				else
+					file:write(F("%s %d\n", k, v))
+				end
+
+			elseif type(v) == "string" then
+				local s = F("%q", v) :gsub("\\\n", "\\n")
+				file:write(k, " ", s, "\n")
+
+			elseif type(v) == "boolean" then
+				file:write(k, " ", tostring(v), "\n")
+
+			else
+				_logprinterror("%s: Cannot write type '%s'. Skipping. (entry.%s)", path, type(v), k)
+			end
+		end
+
+		file:close()
+
+		----------------------------------------------------------------
+		return entry
+	end
+
+	function cacheLoad(self, pageName, id, isPartial)
+		assertarg(1, self,      "table")
+		assertarg(2, pageName,  "string")
+		assertarg(3, id,        "number")
+		assertarg(4, isPartial, "boolean")
+
+		local page  = (isPartial and self.cachePartial or self.cache)[pageName]
 		local entry = page.byId[id]
 
 		if entry then
@@ -961,7 +1016,7 @@ do
 			return entry
 		end
 
-		local path = F("%s/%s%d", CACHE_DIR, pageName, id)
+		local path = F("%s/%s%d%s", CACHE_DIR, pageName, id, (isPartial and ".part" or ""))
 
 		local file, err = io.open(path, "r")
 		if not file then  return nil, err  end
@@ -991,13 +1046,495 @@ do
 
 		page.byId[id] = entry
 		table.insert(page, entry)
+		_logprint("Loaded %s '%s' entry %d.", (isPartial and "partial" or "full"), pageName, id)
 
 		return entry
+	end
+
+	function cacheDelete(self, pageName, entry)
+		assertarg(1, self,     "table")
+		assertarg(2, pageName, "string")
+		assertarg(3, entry,    "table")
+
+		deleteEntry(self, pageName, entry, true)
+		deleteEntry(self, pageName, entry, false)
+	end
+
+end
+
+
+
+do
+	local pathEd2ks = {}
+	local pathSizes = {}
+	local ed2kPaths = {}
+
+	function getEd2k(path, cb)
+		local fileSize = lfs.attributes(path, "size")
+
+		if not fileSize then
+			_logprinterror("No file at path '%s' (or could not get the file size).", path)
+			cb(ED2K_STATE_ERROR)
+			return
+		end
+
+		local ed2kHash = pathEd2ks[path]
+
+		if ed2kHash then
+			if ed2kHash == "" then
+				cb(ED2K_STATE_IN_PROGRESS)
+				return
+
+			elseif pathSizes[path] ~= fileSize then
+				_logprinterror(
+					"%s: Somehow we have the ed2k but the size is wrong. Recalculating. (expected %d, got %d)",
+					path, pathSizes[path], fileSize
+				)
+
+				pathEd2ks[path]     = nil
+				pathSizes[path]     = nil
+				ed2kPaths[ed2kHash] = nil
+
+			else
+				-- Both ed2ks and size match previous values.
+				cb(ED2K_STATE_SUCCESS, ed2kHash, fileSize)
+				return
+			end
+		end
+
+		pathEd2ks[path] = "" -- An empty string means "currently calculating".
+		_logprint("Calculating ed2k for '%s'...", path:match"[^/\\]+$")
+
+		scriptCaptureAsync("ed2k", function(output)
+			ed2kHash = output:match"^ed2k: ([%da-f]+)"
+
+			if not ed2kHash then
+				_logprinterror("Calculating ed2k for '%s' failed: %s", path:match"[^/\\]+$", output)
+
+				pathEd2ks[path] = nil
+				pathSizes[path] = nil
+
+				for ed2kHashOther, pathOther in pairs(ed2kPaths) do
+					if pathOther == path then
+						ed2kPaths[ed2kHashOther] = nil
+						break
+					end
+				end
+
+				cb(ED2K_STATE_ERROR)
+				return
+			end
+
+			_logprint("Calculating ed2k for '%s'... %s", path:match"[^/\\]+$", ed2kHash)
+			-- printf("ed2k://|file|%s|%d|%s|/", path:match"[^/\\]+$", fileSize, ed2kHash)
+
+			pathEd2ks[path] = ed2kHash
+			pathSizes[path] = fileSize
+			ed2kPaths[ed2kHash] = path
+
+			cb(ED2K_STATE_SUCCESS, ed2kHash, fileSize)
+		end, path)
+	end
+
+	function getPathByEd2k(ed2kHash)
+		return ed2kPaths[ed2kHash]
 	end
 end
 
 
 
+--==============================================================
+--= Response Handlers ==========================================
+--==============================================================
+responseHandlers = {
+
+
+
+	["PING"] = function(msg, self, ok, statusCode, statusText, entries)
+		if not ok then
+			addEvent(self, "pingfail", "Something went wrong while sending ping. Check the log.")
+
+		-- 300 PONG
+		elseif statusCode == 300 then
+			if self.natMode ~= NAT_MODE_OFF then
+				local port = tonumber(entries[1][1])
+
+				if not port then
+					_logprinterror("Expected NAT information from PING request.")
+				else
+					updateNatInfo(self, port)
+				end
+			end
+
+		-- 505 555 598 600 601 602 604 [501 502 506]
+		else
+			addEvent(self, "pingfail", "AniDB error "..statusCode..": "..statusText)
+		end
+	end,
+
+
+
+	["AUTH"] = function(msg, self, ok, statusCode, statusText, entries)
+		if not ok then
+			addEvent(self, "loginfail", "Something went wrong while logging in. Check the log.")
+			self.onLogin(false)
+
+		-- 200 session_key LOGIN ACCEPTED
+		-- 201 session_key LOGIN ACCEPTED - NEW VERSION AVAILABLE
+		-- If nat=1:
+		-- 200 session_key ip:port LOGIN ACCEPTED
+		-- 201 session_key ip:port LOGIN ACCEPTED - NEW VERSION AVAILABLE
+		elseif statusCode == 200 or statusCode == 201 then
+			local session, natInfo = statusText:match"^(%S+) (%S+)"
+			assert(session, "Bad AUTH status text format.")
+
+			self.sessionKey = session
+			_logprint("Started session. (%s)", session)
+
+			if self.natMode ~= NAT_MODE_OFF then
+				local ip, port = natInfo:match"^(%d+)%.(%d+)%.(%d+)%.(%d+):(%d+)$"
+				port = tonumber(port)
+
+				if not port then
+					_logprinterror("Expected NAT information from AUTH request.")
+				else
+					updateNatInfo(self, port)
+				end
+			end
+
+			addEvent(self, "loginsuccess")
+			if statusCode == 201 then
+				addEvent(self, "newversionavailable")
+			end
+			self.onLogin(true)
+
+		-- 500 LOGIN FAILED
+		elseif statusCode == 500 then
+			addEvent(self, "loginbadlogin")
+			self.onLogin(false)
+
+		-- 503 CLIENT VERSION OUTDATED
+		elseif statusCode == 503 then
+			addEvent(self, "loginfail", "MyHappyList is outdated. Please download the newest version.")
+			self.onLogin(false)
+
+		-- 504 CLIENT BANNED - reason
+		elseif statusCode == 504 then
+			local reason = trim(statusText:match"%- (.+)" or "")
+			reason       = reason == "" and "No reason given." or "Reason: "..reason
+
+			addEvent(self, "loginfail", "The client has been banned from AniDB.\n"..reason)
+			self.onLogin(false)
+
+		-- 505 555 598 600 601 602 604 [501 502 506]
+		else
+			addEvent(self, "loginfail", "AniDB error "..statusCode..": "..statusText)
+			self.onLogin(false)
+		end
+	end,
+
+
+
+	["LOGOUT"] = function(msg, self, ok, statusCode, statusText, entries)
+		if not ok then
+			addEvent(self, "logoutfail", "Something went wrong while logging out. Check the log.")
+
+		-- 203 LOGGED OUT
+		elseif statusCode == 203 then
+			dropSession(self)
+			addEvent(self, "logoutsuccess")
+
+		-- 403 NOT LOGGED IN
+		elseif statusCode == 403 then
+			_logprinterror("Tried to log out, but we weren't logged in.")
+			dropSession(self)
+			addEvent(self, "logoutsuccess") -- Still count as success.
+
+		-- 505 555 598 600 601 602 604 [501 502 506]
+		else
+			addEvent(self, "logoutfail", "AniDB error "..statusCode..": "..statusText)
+		end
+	end,
+
+
+
+	["MYLIST"] = function(msg, self, ok, statusCode, statusText, entries)
+		if not ok then
+			addEvent(self, "mylistgetfail", "Something went wrong while retrieving mylist entries. Check the log.")
+
+		-- 221 MYLIST\nint4 lid|int fid|int eid|int aid|int gid|int date|int state|int viewdate|str storage|str source|str other|int filestate
+		elseif statusCode == 221 then
+			local nextField = arrayIterator(entries[1])
+
+			local lid = paramNumberDecode(nextField())
+
+			local mylistEntry = {
+				id        = lid,
+				lid       = lid,
+				fid       = paramNumberDecode(nextField()),
+				eid       = paramNumberDecode(nextField()),
+				aid       = paramNumberDecode(nextField()),
+				gid       = paramNumberDecode(nextField()),
+				date      = paramNumberDecode(nextField()),
+				state     = paramNumberDecode(nextField()),
+				viewdate  = paramNumberDecode(nextField()),
+				storage   = paramStringDecode(nextField()),
+				source    = paramStringDecode(nextField()),
+				other     = paramStringDecode(nextField()),
+				filestate = paramNumberDecode(nextField()),
+				ed2k      = msg.params.ed2k, -- Extra.
+				size      = msg.params.size, -- Extra.
+				path      = getPathByEd2k(msg.params.ed2k), -- Extra.
+			}
+			mylistEntry = cacheSave(self, "l", mylistEntry, false)
+
+			addEvent(self, "mylistgetsuccess", "entry", mylistEntry)
+
+		-- 312 MULTIPLE MYLIST ENTRIES\nstr anime title|int episodes|str eps with state unknown|str eps with state on hhd|str eps with state on cd|str eps with state deleted|str watched eps|str group 1 short name|str eps for group 1|...
+		elseif statusCode == 312 then
+			local mylistSelection = {
+				animeTitle               = paramStringDecode(nextField()), -- 'anime title'
+				episodeCount             = paramNumberDecode(nextField()), -- 'episodes'
+				episodesWithStateUnknown = parseEpisodes(nextField()),     -- 'eps with state unknown'
+				episodesWithStateOnHhd   = parseEpisodes(nextField()),     -- 'eps with state on hhd'
+				episodesWithStateOnCd    = parseEpisodes(nextField()),     -- 'eps with state on cd'
+				episodesWithStateDeleted = parseEpisodes(nextField()),     -- 'eps with state deleted'
+				watchedEpisodes          = parseEpisodes(nextField()),     -- 'watched eps'
+				groups                   = {},
+			}
+
+			for _ = 1, 10000 do
+				local shortName = nextField()
+				if not shortName then  break  end
+
+				if shortName == "" then
+					_logprinterror("MYLIST 312 can return additional empty fields, apparently.")
+					break
+				end
+
+				table.insert(mylistSelection.groups, {
+					shortName = paramStringDecode(shortName), -- 'group 1 short name'
+					episodes  = parseEpisodes(nextField()),   -- 'eps for group 1'
+				})
+			end
+
+			addEvent(self, "mylistgetsuccess", "selection", mylistSelection)
+
+		-- 321 NO SUCH ENTRY
+		elseif statusCode == 321 then
+			addEvent(self, "mylistgetsuccess", "none", nil)
+
+		-- 505 555 598 600 601 602 604 [501 502 506]
+		else
+			addEvent(self, "mylistgetfail", "AniDB error "..statusCode..": "..statusText)
+		end
+	end,
+
+
+
+	["MYLISTADD"] = function(msg, self, ok, statusCode, statusText, entries)
+		if not ok then
+			addEvent(self, "mylistaddfail", "Something went wrong while adding mylist entries. Check the log.")
+
+		-- 210 MYLIST ENTRY ADDED\nint mylist id of new entry
+		-- 210 MYLIST ENTRY ADDED\nint number of entries added
+		elseif statusCode == 210 then
+			local nextField = arrayIterator(entries[1])
+
+			if msg.params.aid or msg.params.aname then
+				local count = paramNumberDecode(nextField())
+				addEvent(self, "mylistaddsuccessmultiple", count)
+				return
+			end
+
+			local lid = paramNumberDecode(nextField())
+
+			local mylistEntryPartial = {
+				id        = lid,
+				lid       = lid,
+				fid       = msg.params.fid, -- May be nil.
+				eid       = msg.params.eid, -- May be nil.
+				aid       = msg.params.aid, -- May be nil.
+				gid       = msg.params.gid, -- May be nil.
+				date      = os.time(),
+				state     = msg.params.state,
+				viewdate  = msg.params.viewdate,
+				storage   = msg.params.storage,
+				source    = msg.params.source,
+				other     = msg.params.other,
+				filestate = FILE_STATE_NORMAL_ORIGINAL,
+				ed2k      = msg.params.ed2k, -- Extra. May be nil.
+				size      = msg.params.size, -- Extra. May be nil.
+				path      = getPathByEd2k(msg.params.ed2k), -- Extra. May be nil.
+			}
+			mylistEntryPartial = cacheSave(self, "l", mylistEntryPartial, true)
+
+			addEvent(self, "mylistaddsuccess", mylistEntryPartial)
+
+		-- 310 FILE ALREADY IN MYLIST\nint lid|int fid|int eid|int aid|int gid|int date|int state|int viewdate|str storage|str source|str other|int filestate
+		elseif statusCode == 310 then
+			local nextField = arrayIterator(entries[1])
+
+			local lid = paramNumberDecode(nextField())
+
+			local mylistEntry = {
+				id        = lid,
+				lid       = lid,
+				fid       = paramNumberDecode(nextField()),
+				eid       = paramNumberDecode(nextField()),
+				aid       = paramNumberDecode(nextField()),
+				gid       = paramNumberDecode(nextField()),
+				date      = paramNumberDecode(nextField()),
+				state     = paramNumberDecode(nextField()),
+				viewdate  = paramNumberDecode(nextField()),
+				storage   = paramStringDecode(nextField()),
+				source    = paramStringDecode(nextField()),
+				other     = paramStringDecode(nextField()),
+				filestate = paramNumberDecode(nextField()),
+				ed2k      = msg.params.ed2k, -- Extra.
+				size      = msg.params.size, -- Extra.
+				path      = getPathByEd2k(msg.params.ed2k), -- Extra.
+			}
+			mylistEntry = cacheSave(self, "l", mylistEntry, false)
+
+			addEvent(self, "mylistaddsuccess", mylistEntry)
+
+			-- Also trigger a "get" event, as we may only have had a partial entry before, and now we got a full one.
+			addEvent(self, "mylistgetsuccess", "entry", mylistEntry)
+
+		-- 311 MYLIST ENTRY EDITED
+		-- 311 MYLIST ENTRY EDITED\nint number of entries edited
+		elseif statusCode == 311 then
+			local nextField = arrayIterator(entries[1])
+
+			if msg.params.aid or msg.params.aname then
+				local count = paramNumberDecode(nextField())
+				addEvent(self, "mylistaddsuccessmultiple", count)
+				return
+			end
+
+			local mylistEntryMaybePartial
+				=  msg.params.fid and (
+					itemWith(self.cache.l,        "fid",msg.params.fid) or
+					itemWith(self.cachePartial.l, "fid",msg.params.fid)
+				)
+				or msg.params.ed2k and (
+					itemWith2(self.cache.l,        "ed2k",msg.params.ed2k, "size",msg.params.size) or
+					itemWith2(self.cachePartial.l, "ed2k",msg.params.ed2k, "size",msg.params.size)
+				)
+				or msg.params.lid and (
+					itemWith2(self.cache.l,        "lid",msg.params.lid, "size",msg.params.size) or
+					itemWith2(self.cachePartial.l, "lid",msg.params.lid, "size",msg.params.size)
+				)
+
+			addEvent(self, "mylistaddsuccess", mylistEntryMaybePartial)
+
+		-- 320 NO SUCH FILE
+		elseif statusCode == 320 and msg.params.ed2k then
+			addEvent(self, "mylistaddfail", "No file on AniDB with size %d and hash %s.", msg.params.size, msg.params.ed2k)
+		elseif statusCode == 320 and msg.params.fid then
+			addEvent(self, "mylistaddfail", "No file on AniDB with ID %d.", msg.params.fid)
+
+		-- 322 MULTIPLE FILES FOUND\nint fid 1|int fid 2|...|int fid n
+		elseif statusCode == 322 then
+			local fids = {}
+
+			for _, fidStr in ipairs(entries[1]) do
+				local fid = paramNumberDecode(fidStr)
+				if fid then
+					table.insert(fids, fid)
+				else
+					_logprinterror("Bad file ID value '%s'.", fidStr)
+				end
+			end
+
+			addEvent(self, "mylistaddfoundmultiplefiles", fids)
+
+		-- 330 NO SUCH ANIME
+		elseif statusCode == 330 and msg.params.aid then
+			addEvent(self, "mylistaddfail", "No anime on AniDB with ID %d.", msg.params.aid)
+
+		-- 350 NO SUCH GROUP
+		elseif statusCode == 350 and msg.params.gid then
+			addEvent(self, "mylistaddfail", "No group on AniDB with ID %d.", msg.params.gid)
+
+		-- 411 NO SUCH MYLIST ENTRY
+		elseif statusCode == 411 then
+			addEvent(self, "mylistaddfail", "No mylist entry with ID %d.", msg.params.lid)
+
+		-- 505 555 598 600 601 602 604 [501 502 506]
+		else
+			addEvent(self, "mylistaddfail", "AniDB error "..statusCode..": "..statusText)
+		end
+	end,
+
+
+
+	["MYLISTDEL"] = function(msg, self, ok, statusCode, statusText, entries)
+		if not ok then
+			addEvent(self, "mylistdeletefail", "Something went wrong while deleting mylist entries. Check the log.")
+
+		-- 211 MYLIST ENTRY DELETED\nint number of entries
+		elseif statusCode == 211 then
+			local nextField = arrayIterator(entries[1])
+			local count     = paramNumberDecode(nextField())
+
+			if msg.params.lid then
+				local mylistEntryMaybePartial
+					=  itemWith(self.cache.l,        "lid", msg.params.lid)
+					or itemWith(self.cachePartial.l, "lid", msg.params.lid)
+
+				if mylistEntryMaybePartial then
+					cacheDelete(self, "l", mylistEntryMaybePartial)
+				end
+
+			elseif msg.params.fid then
+				local mylistEntryMaybePartial
+					=  itemWith(self.cache.l,        "fid", msg.params.fid)
+					or itemWith(self.cachePartial.l, "fid", msg.params.fid)
+
+				if mylistEntryMaybePartial then
+					cacheDelete(self, "l", mylistEntryMaybePartial)
+				end
+
+			elseif msg.params.ed2k then
+				local mylistEntryMaybePartial
+					=  itemWith2(self.cache.l,        "ed2k",msg.params.ed2k, "size",msg.params.size)
+					or itemWith2(self.cachePartial.l, "ed2k",msg.params.ed2k, "size",msg.params.size)
+
+				if mylistEntryMaybePartial then
+					cacheDelete(self, "l", mylistEntryMaybePartial)
+				end
+
+			-- elseif msg.params.aname then
+				-- @Incomplete: Delete MyList entries by aname.
+				-- MYLISTDEL aname={str anime name}[&gname={str group name}&epno={int4 episode number}]
+				-- MYLISTDEL aname={str anime name}[&gid={int4 group id}&epno={int4 episode number}]
+
+			-- elseif msg.params.aid then
+				-- @Incomplete: Delete MyList entries by aid.
+				-- MYLISTDEL aid={int4 anime id}[&gname={str group name}&epno={int4 episode number}]
+				-- MYLISTDEL aid={int4 anime id}[&gid={int4 group id}&epno={int4 episode number}]
+
+			else
+				_logprinterror("MyList entries were deleted but can't determine what.")
+			end
+
+			addEvent(self, "mylistdeletesuccess", count)
+
+		-- 411 NO SUCH MYLIST ENTRY
+		elseif statusCode == 411 then
+			addEvent(self, "mylistdeletefail", "No mylist entry with ID %d.", msg.params.lid)
+
+		-- 505 555 598 600 601 602 604 [501 502 506]
+		else
+			addEvent(self, "mylistdeletefail", "AniDB error "..statusCode..": "..statusText)
+		end
+	end,
+
+
+
+}
 --==============================================================
 --= Methods ====================================================
 --==============================================================
@@ -1008,6 +1545,8 @@ function Anidb:init()
 	self.messages  = {}
 	self.theEvents = {}
 
+	self.previousResponseTimes = {}
+
 	self.cache = {
 		l = {byId={}}, -- 'lid' MyList entries.
 		f = {byId={}}, -- 'fid' Files.
@@ -1015,8 +1554,21 @@ function Anidb:init()
 		a = {byId={}}, -- 'aid' Animes.
 		g = {byId={}}, -- 'gid' Groups.
 	}
+	self.cachePartial = {
+		l = {byId={}},
+		f = {byId={}},
+		e = {byId={}},
+		a = {byId={}},
+		g = {byId={}},
+	}
 
-	self.previousResponseTimes = {}
+	self.mylistDefaults = {
+		state   = nil,--MYLIST_STATE_INTERNAL_STORAGE,
+		viewed  = nil,--true,
+		source  = nil,--"",
+		storage = nil,--"",
+		other   = nil,--"",
+	}
 
 	self.udp = assert(socket.udp())
 
@@ -1034,7 +1586,13 @@ function Anidb:init()
 	for name in lfs.dir(CACHE_DIR) do
 		local pageName, id = name:match"^(%l)(%d+)$"
 		if pageName then
-			cacheLoad(self, pageName, tonumber(id))
+			cacheLoad(self, pageName, tonumber(id), false)
+
+		else
+			pageName, id = name:match"^(%l)(%d+)%.part$"
+			if pageName then
+				cacheLoad(self, pageName, tonumber(id), true)
+			end
 		end
 	end
 end
@@ -1070,317 +1628,195 @@ function Anidb:ping()
 	if self.messages[1] then  return  end
 
 	-- PING [nat=1]
-	local paramPairs = {}
+	local params = {}
 
 	if self.natMode ~= NAT_MODE_OFF then
-		addParamPair(paramPairs, "nat", BOOL_TRUE)
+		params["nat"] = BOOL_TRUE
 	end
 
-	addToSendQueue(self, "PING", paramPairs, function(ok, statusCode, statusText, entries)
-		-- 300 PONG
-		-- Also 505 555 598 600 601 602 604 [501 502 506].
-
-		if not ok then
-			addEvent(self, "pingfail", "Something went wrong while sending ping. Check the log.")
-
-		elseif statusCode == 300 then
-			if self.natMode ~= NAT_MODE_OFF then
-				local port = tonumber(entries[1][1])
-
-				if not port then
-					_logprinterror("Expected NAT information from PING request.")
-				else
-					updateNatInfo(self, port)
-				end
-			end
-
-		else
-			addEvent(self, "pingfail", "AniDB error "..statusCode..": "..statusText)
-		end
-	end)
+	send(self, "PING", params)
 end
+
+
 
 -- Should only be called internally!
 function Anidb:login()
-	if self.sessionKey ~= "" then
-		-- Already logged in.
+	if self:isLoggedIn() then
 		self.onLogin(true)
 		return
 	end
+
 	if isMessageInQueue(self, "AUTH") then
 		return
 	end
 
 	local user, pass = self:getLogin()
 
-	-- AUTH user={str}&pass={str}&protover={int4}&client={str}&clientver={int4}[&nat=1&comp=1&enc={str}&mtu={int4}&imgserver=1]
-	local paramPairs = {
-		"user",      user,
-		"pass",      pass,
-		"protover",  PROTOCOL_VERSION,
-		"client",    CLIENT_NAME,
-		"clientver", CLIENT_VERSION,
+	-- AUTH user=str&pass=str&protover=int&client=str&clientver=int[&nat=1&comp=1&enc=str&mtu=int&imgserver=1]
+	local params = {
+		["user"]      = user,
+		["pass"]      = pass,
+		["protover"]  = PROTOCOL_VERSION,
+		["client"]    = CLIENT_NAME,
+		["clientver"] = CLIENT_VERSION,
 	}
 
 	if self.natMode ~= NAT_MODE_OFF then
-		addParamPair(paramPairs, "nat", BOOL_TRUE)
+		params["nat"] = BOOL_TRUE
 	end
 
-	addToSendQueue(self, "AUTH", paramPairs, function(ok, statusCode, statusText, entries)
-		-- 200 {str session_key} LOGIN ACCEPTED
-		-- 201 {str session_key} LOGIN ACCEPTED - NEW VERSION AVAILABLE
-		-- 500 LOGIN FAILED
-		-- 503 CLIENT VERSION OUTDATED
-		-- 504 CLIENT BANNED - {str reason}
-		-- If nat=1:
-		-- 200 {str session_key} {str ip}:{int2 port} LOGIN ACCEPTED
-		-- 201 {str session_key} {str ip}:{int2 port} LOGIN ACCEPTED - NEW VERSION AVAILABLE
-		-- Also 505 555 598 600 601 602 604 [501 502 506].
-
-		if not ok then
-			addEvent(self, "loginfail", "Something went wrong while logging in. Check the log.")
-			self.onLogin(false)
-
-		elseif statusCode == 200 or statusCode == 201 then
-			local session, natInfo = statusText:match"^(%S+) (%S+)"
-			assert(session, "Bad AUTH status text format.")
-
-			self.sessionKey = session
-			_logprint("Started session. (%s)", session)
-
-			if self.natMode ~= NAT_MODE_OFF then
-				local ip, port = natInfo:match"^(%d+)%.(%d+)%.(%d+)%.(%d+):(%d+)$"
-				port = tonumber(port)
-
-				if not port then
-					_logprinterror("Expected NAT information from AUTH request.")
-				else
-					updateNatInfo(self, port)
-				end
-			end
-
-			addEvent(self, "loginsuccess")
-			if statusCode == 201 then
-				addEvent(self, "newversionavailable")
-			end
-			self.onLogin(true)
-
-		elseif statusCode == 500 then
-			addEvent(self, "loginbadlogin")
-			self.onLogin(false)
-
-		elseif statusCode == 503 then
-			addEvent(self, "loginfail", "MyHappyList is outdated. Please download the newest version.")
-			self.onLogin(false)
-
-		elseif statusCode == 504 then
-			local reason = trim(statusText:match"%- (.+)" or "")
-			reason       = reason == "" and "No reason given." or "Reason: "..reason
-
-			addEvent(self, "loginfail", "The client has been banned from AniDB.\n"..reason)
-			self.onLogin(false)
-
-		else
-			addEvent(self, "loginfail", "AniDB error "..statusCode..": "..statusText)
-			self.onLogin(false)
-		end
-	end)
+	send(self, "AUTH", params, true)
 end
 
 function Anidb:logout()
 	if not self:isLoggedIn() or isMessageInQueue(self, "LOGOUT") then  return  end
 
-	-- LOGOUT s={str session_key}
-	local paramPairs = {
-		"s", self.sessionKey,
+	-- LOGOUT s=str
+	local params = {
+		["s"] = "",
 	}
 
-	addToSendQueue(self, "LOGOUT", paramPairs, function(ok, statusCode, statusText, entries)
-		-- 203 LOGGED OUT
-		-- 403 NOT LOGGED IN
-		-- Also 505 555 598 600 601 602 604 [501 502 506].
-
-		if not ok then
-			addEvent(self, "logoutfail", "Something went wrong while logging out. Check the log.")
-
-		elseif statusCode == 203 then
-			dropSession(self)
-			addEvent(self, "logoutsuccess")
-
-		elseif statusCode == 403 then
-			_logprinterror("Tried to log out, but we weren't logged in.")
-			dropSession(self)
-			addEvent(self, "logoutsuccess") -- Still count as success.
-
-		else
-			addEvent(self, "logoutfail", "AniDB error "..statusCode..": "..statusText)
-		end
-	end)
+	send(self, "LOGOUT", params)
 end
 
--- fetchMylistByFile( path )
--- fetchMylistByFile( fileId )
-local pathEd2ks = {}
-local pathSizes = {}
-function Anidb:fetchMylistByFile(pathOrFileId)
+
+
+-- getMylistByFile( path )
+-- getMylistByFile( fileId )
+function Anidb:getMylistByFile(pathOrFileId)
 	assertarg(1, pathOrFileId, "string","number")
 
 	if type(pathOrFileId) == "string" then
-		local path     = pathOrFileId
-		local fileSize = lfs.attributes(path, "size")
+		local path = pathOrFileId
 
-		if not fileSize then
-			_logprinterror("No file at path '%s' (or could not get the file size).", path)
-			return
-		end
-
-		local ed2kHash = pathEd2ks[path]
-
-		if ed2kHash then
-			if ed2kHash == "" then
-				-- The ed2k is already being calculated.
-				return
-
-			elseif pathSizes[path] ~= fileSize then
-				_logprinterror(
-					"%s: Somehow we have the ed2k but the size is wrong. Recalculating. (expected %d, got %d)",
-					path, pathSizes[path], fileSize
-				)
-				pathEd2ks[path] = nil
-				pathSizes[path] = nil
-
-			else
-				-- Both ed2ks and size match previous values.
-				self:fetchMylistByEd2k(ed2kHash, fileSize)
-				return
+		getEd2k(path, function(ed2kState, ed2kHash, fileSize)
+			if ed2kState == ED2K_STATE_SUCCESS then
+				self:getMylistByEd2k(ed2kHash, fileSize)
 			end
-		end
+		end)
 
-		pathEd2ks[path] = "" -- An empty string means "currently calculating".
-		_logprint("Calculating ed2k for '%s'...", path:match"[^/\\]+$")
-
-		scriptCaptureAsync("ed2k", function(output)
-			ed2kHash = output:match"^ed2k: ([%da-f]+)"
-
-			if not ed2kHash then
-				_logprinterror("Calculating ed2k for '%s' failed: %s", path:match"[^/\\]+$", output)
-
-				pathEd2ks[path] = nil
-				pathSizes[path] = nil
-
-				return
-			end
-
-			_logprint("Calculating ed2k for '%s'... %s", path:match"[^/\\]+$", ed2kHash)
-			-- printf("ed2k://|file|%s|%d|%s|/", path:match"[^/\\]+$", fileSize, ed2kHash)
-
-			pathEd2ks[path] = ed2kHash
-			pathSizes[path] = fileSize
-
-			self:fetchMylistByEd2k(ed2kHash, fileSize)
-		end, path)
-
-	else--if type(pathOrFileId) == "number" then
+	else
 		local fileId = pathOrFileId
-		_logprinterror("@Incomplete: fetchMylistByFile(fileId)")
+		_logprinterror("@Incomplete: getMylistByFile(fileId)")
 	end
 end
 
-function Anidb:fetchMylistByEd2k(ed2kHash, fileSize)
+function Anidb:getMylistByEd2k(ed2kHash, fileSize)
 	assertarg(1, ed2kHash, "string")
 	assertarg(2, fileSize, "number")
 
 	for _, msg in ipairs(self.messages) do
-		if msg.command == "MYLIST" and msg.params.size == fileSize and msg.params.ed2khash == ed2kHash then
+		if msg.command == "MYLIST" and msg.params.size == fileSize and msg.params.ed2k == ed2kHash then
 			return
 		end
 	end
 
 	local mylistEntry = itemWith2(self.cache.l, "ed2k",ed2kHash, "size",fileSize)
 	if mylistEntry then
-		addEvent(self, "mylistsuccess", "entry", mylistEntry)
+		addEvent(self, "mylistgetsuccess", "entry", mylistEntry)
 		return
 	end
 
-	-- MYLIST size={int4 size}&ed2k={str ed2khash}&s={str session_key}
-	local paramPairs = {
-		"size",     fileSize,
-		"ed2khash", ed2kHash,
-		"s",        self.sessionKey,
+	-- MYLIST size=int&ed2k=str&s=str
+	local params = {
+		["size"] = fileSize,
+		["ed2k"] = ed2kHash,
+		["s"]    = "",
 	}
 
-	addToSendQueue(self, "MYLIST", paramPairs, function(ok, statusCode, statusText, entries)
-		-- 221 MYLIST\n{int4 lid}|{int4 fid}|{int4 eid}|{int4 aid}|{int4 gid}|{int4 date}|{int2 state}|{int4 viewdate}|{str storage}|{str source}|{str other}|{int2 filestate}
-		-- 312 MULTIPLE MYLIST ENTRIES\n{str anime title}|{int episodes}|{str eps with state unknown}|{str eps with state on hhd}|{str eps with state on cd}|{str eps with state deleted}|{str watched eps}|{str group 1 short name}|{str eps for group 1}|...
-		-- 321 NO SUCH ENTRY
-		-- Also 505 555 598 600 601 602 604 [501 502 506].
+	self:login()
+	send(self, "MYLIST", params)
+end
 
-		if not ok then
-			addEvent(self, "mylistfail", "Something went wrong while retrieving mylist entries. Check the log.")
 
-		elseif statusCode == 221 then
-			local nextField = arrayIterator(entries[1])
 
-			local mylistEntry = {
-				id        = paramNumberDecode(nextField()), -- 'lid'       MyList entry ID.
-				fileId    = paramNumberDecode(nextField()), -- 'fid'
-				episodeId = paramNumberDecode(nextField()), -- 'eid'
-				animeId   = paramNumberDecode(nextField()), -- 'aid'
-				groupId   = paramNumberDecode(nextField()), -- 'gid'
-				addedDate = paramNumberDecode(nextField()), -- 'date'      Unix time.
-				state     = paramNumberDecode(nextField()), -- 'state'     State of entry (NOT file state).
-				viewDate  = paramNumberDecode(nextField()), -- 'viewdate'
-				storage   = paramStringDecode(nextField()), -- 'storage'   Text, i.e. label of cd with this file.
-				source    = paramStringDecode(nextField()), -- 'source'    Text, i.e. ed2k, dc, ftp, irc...
-				other     = paramStringDecode(nextField()), -- 'other'     Note.
-				fileState = paramNumberDecode(nextField()), -- 'filestate'
-				-- Extra:
-				ed2k      = ed2kHash,
-				size      = fileSize,
-			}
-			printobj("mylistEntry", mylistEntry)
-			cacheSave(self, "l", mylistEntry)
+-- addMylistByFile( path )
+-- addMylistByFile( fileId )
+function Anidb:addMylistByFile(pathOrFileId)
+	assertarg(1, pathOrFileId, "string","number")
 
-			addEvent(self, "mylistsuccess", "entry", mylistEntry)
+	if type(pathOrFileId) == "string" then
+		local path = pathOrFileId
 
-		elseif statusCode == 312 then
-			local mylistSelection = {
-				animeTitle               = paramStringDecode(nextField()),
-				episodeCount             = paramNumberDecode(nextField()),
-				episodesWithStateUnknown = parseEpisodes(nextField()),
-				episodesWithStateOnHhd   = parseEpisodes(nextField()),
-				episodesWithStateOnCd    = parseEpisodes(nextField()),
-				episodesWithStateDeleted = parseEpisodes(nextField()),
-				watchedEpisodes          = parseEpisodes(nextField()),
-				groups                   = {},
-			}
-
-			for _ = 1, 10000 do
-				local shortName = nextField()
-				if not shortName then  break  end
-
-				if shortName == "" then
-					_logprinterror("MYLIST 312 can return additional empty fields, apparently.")
-					break
-				end
-
-				table.insert(mylistSelection.groups, {
-					shortName = paramStringDecode(shortName),
-					episodes  = parseEpisodes(nextField()),
-				})
+		getEd2k(path, function(ed2kState, ed2kHash, fileSize)
+			if ed2kState == ED2K_STATE_SUCCESS then
+				self:addMylistByEd2k(ed2kHash, fileSize)
 			end
+		end)
 
-			printobj("mylistSelection", mylistSelection)
+	else
+		local fileId = pathOrFileId
+		_logprinterror("@Incomplete: addMylistByFile(fileId)")
+	end
+end
 
-			addEvent(self, "mylistsuccess", "selection", mylistSelection)
+function Anidb:addMylistByEd2k(ed2kHash, fileSize)
+	assertarg(1, ed2kHash, "string")
+	assertarg(2, fileSize, "number")
 
-		elseif statusCode == 321 then
-			addEvent(self, "mylistsuccess", "none", nil)
-
-		else
-			addEvent(self, "mylistfail", "AniDB error "..statusCode..": "..statusText)
+	for _, msg in ipairs(self.messages) do
+		if msg.command == "MYLISTADD" and msg.params.size == fileSize and msg.params.ed2k == ed2kHash then
+			return
 		end
-	end)
+	end
+
+	local mylistEntryMaybePartial
+		=  itemWith2(self.cache.l,        "ed2k",ed2kHash, "size",fileSize)
+		or itemWith2(self.cachePartial.l, "ed2k",ed2kHash, "size",fileSize)
+
+	if mylistEntryMaybePartial then
+		addEvent(self, "mylistaddsuccess", mylistEntryMaybePartial)
+		return
+	end
+
+	-- MYLISTADD size=int&ed2k=str&s=str[&state=int&viewed=bool&viewdate=int&source=str&storage=str&other=str]
+	local params = {
+		["size"] = fileSize,
+		["ed2k"] = ed2kHash,
+		["s"]    = "",
+	}
+
+	local defaults = self.mylistDefaults
+	if defaults.state     ~= nil then
+		params["state"]    = defaults.state
+	end
+	if defaults.viewed    ~= nil then
+		params["viewed"]   = defaults.viewed
+		params["viewdate"] = defaults.viewed and os.time() or nil
+	end
+	if defaults.source    ~= nil then
+		params["source"]   = defaults.source
+	end
+	if defaults.storage   ~= nil then
+		params["storage"]  = defaults.storage
+	end
+	if defaults.other     ~= nil then
+		params["other"]    = defaults.other
+	end
+
+	self:login()
+	send(self, "MYLISTADD", params)
+end
+
+
+
+function Anidb:deleteMylist(lid)
+	assertarg(1, lid, "number")
+
+	for _, msg in ipairs(self.messages) do
+		if msg.command == "MYLISTDEL" and msg.params.lid == lid then
+			return
+		end
+	end
+
+	-- MYLISTDEL lid=int&s=str
+	local params = {
+		["lid"] = lid,
+		["s"]   = "",
+	}
+
+	self:login()
+	send(self, "MYLISTDEL", params)
 end
 
 
@@ -1393,7 +1829,7 @@ function Anidb:update(force)
 		addEvent(self, "blackoutstop")
 	end
 
-	-- Get responses.
+	-- Handle responses.
 	for data in receive(self) do
 		if data:find"^%z%z" then
 			data = decompress(data)
@@ -1418,21 +1854,33 @@ function Anidb:update(force)
 			removeMessage(self, msg)
 
 			addEvent(self, "errorresponsetimeout", msg.command)
-			msg.callback(false)
+			msg:callback(self, false)
 		end
 	end
 
 	-- Send next message.
 	local msg = getNextMessageToSend(self, force)
 	if msg then
-		_logprint("Sending "..msg.command..".")
-		if DEBUG then  print("--> "..makePrintable(msg.data))  end
+		if msg.params.s then
+			msg.params.s = self.sessionKey -- Should we check if sessionKey is empty?
+		end
 
-		msg.stage    = MESSAGE_STAGE_SENT
-		msg.tries    = msg.tries+1
-		msg.timeSent = time
+		local data = createData(msg.command, msg.params)
 
-		check(self.udp:send(msg.data))
+		if #data > MAX_DATA_LENGTH then
+			_logprinterror("Data for %s command is too long. (length: %d, max: %d)", msg.command, #data, MAX_DATA_LENGTH)
+			msg:callback(self, false)
+
+		else
+			_logprint("Sending "..msg.command..".")
+			if DEBUG then  print("--> "..makePrintable(data))  end
+
+			msg.stage    = MESSAGE_STAGE_SENT
+			msg.tries    = msg.tries+1
+			msg.timeSent = time
+
+			check(self.udp:send(data))
+		end
 	end
 
 	-- Send ping.
@@ -1454,6 +1902,7 @@ end
 
 
 function Anidb:isLoggedIn()
+	-- Note: The session might have expired on the server.
 	return self.sessionKey ~= ""
 end
 
@@ -1483,7 +1932,7 @@ function Anidb:clearMessageQueue()
 			msg.stage = MESSAGE_STAGE_ABORTED
 			removeMessage(self, msg)
 
-			msg.callback(false)
+			msg:callback(self, false)
 		end
 	end
 end
