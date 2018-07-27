@@ -13,6 +13,16 @@
 local anidb
 local frame
 
+local movieExtensionSet = newSet{"avi","flv","mkv","mov","mp4","mpeg","mpg","ogm","ogv","swf","webm","wmv"} -- @Setting
+
+--==============================================================
+local addFile
+
+function addFile(path)
+	print(path)
+	-- @@
+end
+
 --==============================================================
 
 local anidbEventHandlers = {
@@ -108,42 +118,135 @@ logFile = assert(io.open("logs/output.log", "a"))
 anidb = require"Anidb"()
 
 -- Main window.
-----------------------------------------------------------------
-frame = wx.wxFrame(WX_NULL, WX_ID_ANY, "MyHappyList", WX_DEFAULT_POSITION, WxSize(450, 450), WX_DEFAULT_FRAME_STYLE)
+--==============================================================
+frame = wx.wxFrame(WX_NULL, WX_ID_ANY, "MyHappyList", WX_DEFAULT_POSITION, WxSize(1000, 400), WX_DEFAULT_FRAME_STYLE)
 
 setTimerDummyOwner(frame)
 
 frame:CreateStatusBar()
 -- frame:SetStatusText("...")
 
+frame:DragAcceptFiles(true)
+
+on(frame, "DROP_FILES", function(e, paths)
+	local pathsToAdd = {}
+
+	for _, path in ipairs(paths) do
+		local mode = getFileMode(path)
+
+		if mode == "directory" then
+			traverseFiles(path, function(path, pathRel, name, ext)
+				if movieExtensionSet[ext:lower()] then
+					table.insert(pathsToAdd, path)
+				end
+
+				if pathsToAdd[MAX_DROPPED_FILES+1] then
+					return true -- Break.
+				end
+			end)
+
+		elseif mode == "file" then
+			table.insert(pathsToAdd, path)
+		end
+
+		if pathsToAdd[MAX_DROPPED_FILES+1] then
+			showError(frame, "Error", F("Too many dropped files. (Max is %d)", MAX_DROPPED_FILES))
+			return
+		end
+	end
+
+	for _, path in ipairs(pathsToAdd) do
+		addFile(toNormalPath(path))
+	end
+end)
+
 --[[
 local accelerators = {}
 onAccelerator(frame, accelerators, "c", KC_1, function(e)
 	print("Hello")
 end)
-frame:SetAcceleratorTable(wx.wxAcceleratorTable(accelerators))
+setAccelerators(frame, accelerators)
 --]]
 
 -- Menus.
-----------------------------------------------------------------
-local menuFile = wx.wxMenu()
--- local menuHelp = wx.wxMenu()
+--==============================================================
+local menuFile  = wx.wxMenu()
+local menuEdit  = wx.wxMenu()
+local menuDebug = wx.wxMenu()
+local menuHelp  = wx.wxMenu()
 
-newMenuItem(frame, menuFile, WX_ID_EXIT, "E&xit\tCtrl+Q", "Quit the program", function(e)
+-- File menu.
+--------------------------------
+
+newMenuItem(menuFile, frame, WX_ID_EXIT, "E&xit\tCtrl+Q", "Quit the program", function(e)
 	frame:Close(true)
 end)
 
--- newMenuItem(frame, menuHelp, WX_ID_ABOUT, "&About", "About MyHappyList", function(e)
--- 	showMessage(frame, "About MyHappyList", "@Incomplete")
+-- Edit menu.
+--------------------------------
+
+newMenuItem(menuEdit, frame, "&Settings", "Change settings", function(e)
+	showMessage(frame, "Settings", "@Incomplete")
+end)
+
+-- Debug menu.
+--------------------------------
+
+if DEBUG then
+	newMenuItem(menuDebug, frame, "ping", function(e)
+		anidb:ping()
+	end)
+	newMenuItem(menuDebug, frame, "login", function(e)
+		anidb:login()
+	end)
+
+	newMenuItemSeparator(menuDebug)
+
+	newMenuItem(menuDebug, frame, "getMylistByFile", function(e)
+		anidb:getMylistByFile(getFileContents"local/exampleFilePathGb.txt")
+	end)
+	newMenuItem(menuDebug, frame, "addMylistByFile", function(e)
+		anidb:addMylistByFile(getFileContents"local/exampleFilePathGb.txt")
+	end)
+	newMenuItem(menuDebug, frame, "deleteMylist x2", function(e)
+		anidb:deleteMylist(115)
+		anidb:deleteMylist(2468)
+	end)
+
+	newMenuItemSeparator(menuDebug)
+
+	newMenuItem(menuDebug, frame, "clearMessageQueue", function(e)
+		anidb:clearMessageQueue()
+	end)
+end
+
+-- Help menu.
+--------------------------------
+
+newMenuItem(menuHelp, frame, "&Forum Thread", "Go to MyHappyList's forum thread on AniDB", function(e)
+	showMessage(frame, "Link", "@Incomplete")
+end)
+-- newMenuItem(menuHelp, frame, "&Changes", "View the changelog", function(e)
+-- 	showMessage(frame, "Changelog", "@Incomplete")
 -- end)
+newMenuItem(menuHelp, frame, WX_ID_ABOUT, "&Log", "Show text log", function(e)
+	showMessage(frame, "Log", "@Incomplete")
+end)
+newMenuItem(menuHelp, frame, WX_ID_ABOUT, "&About", "About MyHappyList", function(e)
+	showMessage(frame, "About MyHappyList", "@Incomplete")
+end)
+
+--------------------------------
 
 local menuBar = wx.wxMenuBar()
-menuBar:Append(menuFile, "&File")
--- menuBar:Append(menuHelp, "&Help")
+menuBar:Append(menuFile,  "&File")
+menuBar:Append(menuEdit,  "&Edit")
+menuBar:Append(menuDebug, "&Debug")
+menuBar:Append(menuHelp,  "&Help")
 frame:SetMenuBar(menuBar)
 
 -- AniDB update timer.
-----------------------------------------------------------------
+--==============================================================
 
 local anidbUpdateTimer = newTimer(function(e)
 	anidb:update()
@@ -162,7 +265,8 @@ local anidbUpdateTimer = newTimer(function(e)
 end)
 
 -- Main panel.
-----------------------------------------------------------------
+--==============================================================
+--[[
 local panel = wx.wxPanel(frame, WX_ID_ANY)
 
 local y = 0
@@ -171,29 +275,38 @@ local function addButton(caption, cb)
 	y = y+button:GetSize():GetHeight()
 end
 
-addButton("ping", function(e)
-	anidb:ping()
-end)
-addButton("login", function(e)
-	anidb:login()
-end)
+addButton("ping", function(e) end)
+newText(panel, "Text?", WxPoint(0, y))
+]]
 
-addButton("getMylistByFile", function(e)
-	anidb:getMylistByFile(getFileContents"local/exampleFilePathGb.txt")
-end)
-addButton("addMylistByFile", function(e)
-	anidb:addMylistByFile(getFileContents"local/exampleFilePathGb.txt")
-end)
-addButton("deleteMylist x2", function(e)
-	anidb:deleteMylist(115)
-	anidb:deleteMylist(2468)
-end)
+-- File list.
+--==============================================================
+local fileList = wx.wxListCtrl(
+	frame, WX_ID_ANY, WX_DEFAULT_POSITION, WX_DEFAULT_SIZE,
+	WX_LC_REPORT + WX_LC_HRULES --+ WX_LC_SORT_ASCENDING
+)
 
-addButton("clearMessageQueue", function(e)
-	anidb:clearMessageQueue()
-end)
+listCtrlInsertColumn(fileList, "File", 800)
+listCtrlInsertColumn(fileList, "Size")
+listCtrlInsertColumn(fileList, "Watched")
 
-local textEl = newText(panel, "Text?", WxPoint(0, y))
+listCtrlInsertItem(fileList, "Super_Anime_Ep_1.mkv", formatBytes(math.random(8000000, 350000000)), "Yes")
+listCtrlInsertItem(fileList, "Super_Anime_Ep_2.mkv", formatBytes(math.random(8000000, 350000000)), "No")
+listCtrlInsertItem(fileList, "Super_Anime_Ep_3.mkv", formatBytes(math.random(8000000, 350000000)), "No")
+
+-- Sizer for frame.
+--==============================================================
+--[[ Is this needed?
+local frameSizer = wx.wxBoxSizer(WX_VERTICAL)
+frame:SetAutoLayout(true)
+frame:SetSizer(frameSizer)
+
+for _, child in eachChild(frame) do
+	if not is(child, frame:GetStatusBar()) then
+		frameSizer:Add(fileList, 1, WX_GROW+WX_ALL, 0)
+	end
+end
+--]]
 
 --==============================================================
 --= Show GUI ===================================================
@@ -219,9 +332,8 @@ end
 -- Cleanup.
 if isDirectory"temp" then
 	traverseFiles("temp", function(path)
-		local ok, err = os.remove(path)
-		if not ok then
-			logprinterror(nil, "Could not delete file '%s': %s", path, err)
+		if not deleteFile(path) then
+			logprinterror(nil, "Could not delete file '%s'.", path)
 		end
 	end)
 end

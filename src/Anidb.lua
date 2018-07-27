@@ -888,11 +888,8 @@ do
 			F("%s/%s%d%s",     CACHE_DIR, pageName, id, (isPartial and ".part" or "")),
 			F("%s/%s%d%s.bak", CACHE_DIR, pageName, id, (isPartial and ".part" or "")),
 		} do
-			if isFile(path) then
-				local ok, err = os.remove(path)
-				if not ok then
-					_logprinterror("Could not delete '%s': %s", path, err)
-				end
+			if isFile(path) and not deleteFile(path) then
+				_logprinterror("Could not delete '%s'.", path)
 			end
 		end
 
@@ -1115,7 +1112,7 @@ do
 	function getEd2k(path, cb)
 		if not isLoaded then  loadEd2ks()  end
 
-		local fileSize, err = lfs.attributes(path, "size")
+		local fileSize, err = getFileSize(path)
 
 		if not fileSize then
 			_logprinterror("Could not get info about file '%s': %s", path, err)
@@ -1636,7 +1633,7 @@ function Anidb:init()
 	loadBlackout(self)
 	loadNatInfo(self)
 
-	for name in lfs.dir(CACHE_DIR) do
+	for name in directoryItems(CACHE_DIR) do
 		local pageName, id = name:match"^(%l)(%d+)$"
 		if pageName then
 			cacheLoad(self, pageName, tonumber(id), false)

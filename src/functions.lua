@@ -15,15 +15,11 @@
 	clamp
 	cleanupPath
 	cmdAsync, cmdCapture, scriptCaptureAsync, cmdEscapeArgs
-	createDirectory, isDirectoryEmpty, removeEmptyDirectories
 	encodeHtmlEntities
 	errorf, fileerror
 	F, formatBytes
-	getDirectory, getFilename, getExtension, getBasename
-	getFileContents, writeFile
 	getKeys
 	getLineNumber
-	getTempFilePath
 	getTime
 	getTimezone, getTimezoneOffsetString, getTimezoneOffset
 	gsub2
@@ -32,10 +28,10 @@
 	indexOf, itemWith, itemWith2, itemWithAll
 	ipairsr, iprev
 	isAny
-	isFile, isDirectory
 	isInt
 	isStringMatchingAnyPattern
 	makePrintable
+	newSet
 	newStringBuilder
 	newTimer, setTimerDummyOwner
 	pack
@@ -48,41 +44,69 @@
 	sort
 	sortNatural, compareNatural
 	splitString
-	toNormalPath, toWindowsPath
-	traverseDirectory, traverseFiles
 	trim, trimNewlines
 
-	WX:
-	newMenuItem, newButton, newText
+	File system:
+	createDirectory, isDirectoryEmpty, removeEmptyDirectories
+	deleteFile
+	directoryItems, traverseDirectory, traverseFiles
+	getDirectory, getFilename, getExtension, getBasename
+	getFileContents, writeFile
+	getFileMode, getFileSize
+	getTempFilePath
+	isFile, isDirectory
+	mkdir
+	toNormalPath, toWindowsPath
+	toShortPath
+
+	wxWidgets:
+	cast, is
+	eachChild
+	listCtrlInsertColumn, listCtrlInsertItem
+	newMenuItem, newMenuItemSeparator, newButton, newText
 	on, onAccelerator
+	setAccelerators
 
 --============================================================]]
 
 
 
+-- for name in directoryItems( directoryPath ) do
+function directoryItems(dirPath)
+	local dirObj = wx.wxDir(dirPath)
+
+	local ok, nameNext = dirObj:GetFirst()
+	if not ok then  nameNext = nil  end
+
+	return function()
+		local name = nameNext
+
+		ok, nameNext = dirObj:GetNext()
+		if not ok then  nameNext = nil  end
+
+		if name then  return name  end
+	end
+end
+
 function traverseDirectory(dirPath, cb, _pathRelStart)
 	_pathRelStart = _pathRelStart or #dirPath+2
 
-	for name in lfs.dir(dirPath) do
+	for name in directoryItems(dirPath) do
 		local path = dirPath.."/"..name
+		local mode = getFileMode(path)
 
-		if name ~= "." and name ~= ".." then
-			local mode = lfs.attributes(path, "mode")
+		if mode == "file" then
+			local pathRel = path:sub(_pathRelStart)
+			local abort   = cb(path, pathRel, name, "file")
+			if abort then  return true  end
 
-			if mode == "file" then
-				local pathRel = path:sub(_pathRelStart)
-				local abort   = cb(path, pathRel, name, "file")
-				if abort then  return true  end
+		elseif mode == "directory" then
+			local pathRel = path:sub(_pathRelStart)
+			local abort   = cb(path, pathRel, name, "directory")
+			if abort then  return true  end
 
-			elseif mode == "directory" then
-				local pathRel = path:sub(_pathRelStart)
-				local abort   = cb(path, pathRel, name, "directory")
-				if abort then  return true  end
-
-				local abort = traverseDirectory(path, cb, _pathRelStart)
-				if abort then  return true  end
-			end
-
+			local abort = traverseDirectory(path, cb, _pathRelStart)
+			if abort then  return true  end
 		end
 	end
 
@@ -91,23 +115,19 @@ end
 function traverseFiles(dirPath, cb, _pathRelStart)
 	_pathRelStart = _pathRelStart or #dirPath+2
 
-	for name in lfs.dir(dirPath) do
+	for name in directoryItems(dirPath) do
 		local path = dirPath.."/"..name
+		local mode = getFileMode(path)
 
-		if name ~= "." and name ~= ".." then
-			local mode = lfs.attributes(path, "mode")
+		if mode == "file" then
+			local pathRel  = path:sub(_pathRelStart)
+			local ext      = getExtension(name)
+			local abort    = cb(path, pathRel, name, ext)
+			if abort then  return true  end
 
-			if mode == "file" then
-				local pathRel  = path:sub(_pathRelStart)
-				local ext      = getExtension(name)
-				local abort    = cb(path, pathRel, name, ext)
-				if abort then  return true  end
-
-			elseif mode == "directory" then
-				local abort = traverseFiles(path, cb, _pathRelStart)
-				if abort then  return true  end
-			end
-
+		elseif mode == "directory" then
+			local abort = traverseFiles(path, cb, _pathRelStart)
+			if abort then  return true  end
 		end
 	end
 
@@ -220,41 +240,33 @@ function createDirectory(path)
 		return false, F("[internal] Absolute paths are disabled. (%s)", path)
 	end
 
-	local pathConstructed = ""
-
-	for folder in path:gmatch"[^/]+" do
-		pathConstructed = (pathConstructed == "" and folder or pathConstructed.."/"..folder)
-
-		if not isDirectory(pathConstructed) then
-			local ok, err = lfs.mkdir(pathConstructed)
-			if not ok then
-				return false, F("Could not create directory '%s': %s", pathConstructed, err)
-			end
-		end
+	if not mkdir(path, true) then
+		return false, F("Could not create directory '%s'.", path)
 	end
 
 	return true
 end
 
+--[[
 function isDirectoryEmpty(dirPath)
-	for name in lfs.dir(dirPath) do
-		if name ~= "." and name ~= ".." then  return false  end
+	for name in directoryItems(dirPath) do
+		return false
 	end
 	return true
 end
 
 -- success, errorMessage = removeEmptyDirectories( directory )
 function removeEmptyDirectories(dirPath)
-	for name in lfs.dir(dirPath) do
+	for name in directoryItems(dirPath) do
 		local path = dirPath.."/"..name
 
-		if name ~= "." and name ~= ".." and isDirectory(path) then
+		if isDirectory(path) then
 			removeEmptyDirectories(path)
 
 			if isDirectoryEmpty(path) then
 				log("Removing empty folder: %s", path)
 
-				local ok, err = lfs.rmdir(path)
+				local ok, err = lfs?.rmdir(path)
 				if not ok then
 					return false, F("Could not create directory '%s': %s", pathConstructed, err)
 				end
@@ -265,6 +277,7 @@ function removeEmptyDirectories(dirPath)
 
 	return true
 end
+]]
 
 
 
@@ -433,11 +446,11 @@ end
 
 
 function isFile(path)
-	return lfs.attributes(path, "mode") == "file"
+	return getFileMode(path) == "file"
 end
 
 function isDirectory(path)
-	return lfs.attributes(path, "mode") == "directory"
+	return getFileMode(path) == "directory"
 end
 
 
@@ -445,14 +458,15 @@ end
 F = string.format
 
 function formatBytes(n)
-	if n > (1024*1024*1024)/100 then
-		return F("%.2f GB", n/(1024*1024*1024))
-	elseif n > (1024*1024)/100 then
-		return F("%.2f MB", n/(1024*1024))
-	elseif n > (1024)/100 then
-		return F("%.2f KB", n/(1024))
+	if     n >= 1024*1024*1024 then
+		return F("%.2f GB",  n/(1024*1024*1024))
+	elseif n >= 1024*1024      then
+		return F("%.2f MB",  n/(1024*1024))
+	elseif n >= 1024           then
+		return F("%.2f KB",  n/(1024))
+	else
+		return F("%d bytes", n)
 	end
-	return F("%d bytes", n)
 end
 
 
@@ -806,6 +820,9 @@ end
 -- on( wxObject, [ id, ] eventType, callback )
 do
 	local eventExpanders = {
+		["DROP_FILES"] = function(e)
+			return e:GetFiles()
+		end,
 		["KEY_DOWN"] = function(e)
 			return e:GetKeyCode()
 		end,
@@ -852,9 +869,29 @@ end
 
 
 
-function newMenuItem(eHandler, menu, id, caption, info, onPress)
-	menu:Append(id, caption, info)
+function setAccelerators(window, accelerators)
+	window:SetAcceleratorTable(wx.wxAcceleratorTable(accelerators))
+end
+
+
+
+-- newMenuItem( menu, eventHandler [, id ], caption [, helpInfo ], onPress )
+function newMenuItem(menu, eHandler, id, caption, helpInfo, onPress)
+	if type(id) == "string" then
+		id, caption, helpInfo, onPress = nil, id, caption, helpInfo
+	end
+	if type(helpInfo) == "function" then
+		helpInfo, onPress = "", helpInfo
+	end
+
+	id = id or wx.wxNewId()
+
+	menu:Append(wx.wxMenuItem(menu, id, caption, helpInfo))
 	on(eHandler, id, "COMMAND_MENU_SELECTED", onPress)
+end
+
+function newMenuItemSeparator(menu)
+	menu:Append(wx.wxMenuItem())
 end
 
 -- button = newButton( parent, [ id, ] caption, [ position, size, ] onPress )
@@ -1104,7 +1141,7 @@ function cmdCapture(cmd, timeout)
 		local time = getTime()
 		socket.sleep(time < timeStart+5 and 1/30  or time < timeStart+10 and 1/5  or 1)
 
-		if lfs.attributes(outputPath, "mode") == "file" then
+		if getFileMode(outputPath) == "file" then
 			break
 		end
 
@@ -1133,7 +1170,7 @@ function cmdCapture(cmd, timeout)
 	local output = file:read"*a"
 	file:close()
 
-	os.remove(outputPath) -- Could fail, but we'll cleanup later.
+	deleteFile(outputPath) -- Could fail, but we'll cleanup later.
 	return output
 end
 
@@ -1148,7 +1185,7 @@ function scriptCaptureAsync(scriptName, cb, ...)
 	end
 
 	local timer; timer = newTimer(1000/10, function(e)
-		if not lfs.attributes(outputPath, "mode") then return end
+		if not getFileMode(outputPath) then return end
 
 		local file = io.open(outputPath, "a+")
 		if not file then return end
@@ -1159,7 +1196,7 @@ function scriptCaptureAsync(scriptName, cb, ...)
 		local output = file:read"*a"
 		file:close()
 
-		os.remove(outputPath) -- Could fail, but we'll cleanup later.
+		deleteFile(outputPath) -- Could fail, but we'll cleanup later.
 		cb(output)
 	end)
 end
@@ -1205,7 +1242,7 @@ function getTempFilePath(asWindowsPath)
 	local path
 	repeat
 		path = F("temp/%06x%06x%04x", math.random(0, 0xFFFFFF), math.random(0, 0xFFFFFF), math.random(0, 0xFFFF))
-	until not lfs.attributes(path, "mode")
+	until not getFileMode(path)
 
 	if asWindowsPath then
 		path = path:gsub("/", "\\")
@@ -1225,6 +1262,121 @@ function arrayIterator(t)
 
 		if v ~= n then  return v  end
 	end
+end
+
+
+
+-- wxColumn = listCtrlInsertColumn( listCtrl [, wxColumn=end ], heading [, width=auto ] )
+function listCtrlInsertColumn(listCtrl, wxCol, heading, w)
+	if type(wxCol) == "string" then
+		wxCol, heading, w = listCtrl:GetColumnCount(), wxCol, heading
+	end
+
+	wxCol = listCtrl:InsertColumn(wxCol, heading, WX_LIST_FORMAT_LEFT, w or -1)
+	return wxCol
+end
+
+-- wxIndex = listCtrlInsertItem( listCtrl [, wxIndex=end ], item1, ... )
+-- Note: wxWidgets is 0-indexed.
+-- Note: At least one item must be specified.
+function listCtrlInsertItem(listCtrl, wxIndex, ...)
+	if type(wxIndex) ~= "number" then
+		return listCtrlInsertItem(listCtrl, listCtrl:GetItemCount(), wxIndex, ...)
+	end
+
+	wxIndex = listCtrl:InsertItem(wxIndex, (...))
+	-- Note: wxIndex will have changed if the list sorts automatically.
+
+	for i = 2, select("#", ...) do
+		local item = select(i, ...)
+
+		if listCtrl:SetItem(wxIndex, i-1, item) == 0 then
+			logprinterror("WX", "ListCtrl: Trying to add more items than there are columns.")
+			break
+		end
+	end
+
+	return wxIndex
+end
+
+
+
+-- for index, child in eachChild( window ) do
+function eachChild(window)
+	local childList = window:GetChildren()
+	local wxIndex   = -1
+	local childNode
+
+	return function()
+		wxIndex   = wxIndex+1
+		childNode = childList:Item(wxIndex)
+
+		if childNode then
+			return wxIndex+1, cast(childNode:GetData())
+		end
+	end
+end
+
+
+
+-- wxObject:className = cast( wxObject [, className=actualClassOfWxObject ] )
+function cast(obj, className)
+	className = className or obj:GetClassInfo():GetClassName()
+	return obj:DynamicCast(className)
+end
+
+do
+	local windowClassInfo = nil
+
+	function is(a, b)
+		windowClassInfo = windowClassInfo or wx.wxClassInfo.FindClass"wxWindow"
+
+		return
+			wxlua.istrackedobject(a) and
+			wxlua.istrackedobject(b) and
+			a:IsKindOf(windowClassInfo) and
+			b:IsKindOf(windowClassInfo) and
+			a:GetHandle() == b:GetHandle()
+	end
+end
+
+
+
+function newSet(t)
+	local set = {}
+	for _, v in ipairs(t) do  set[v] = true  end
+	return set
+end
+
+
+
+-- Note: May return the path as-is if the file doesn't exist.
+function toShortPath(path)
+	return wx.wxFileName(path):GetShortPath()
+end
+
+
+
+function getFileMode(path)
+	return lfs.attributes(toShortPath(path), "mode")
+end
+
+function getFileSize(path)
+	return lfs.attributes(toShortPath(path), "size")
+end
+
+
+
+-- success = mkdir( path [, full=false ] )
+function mkdir(path, full)
+	local flags = (full and WX_PATH_MKDIR_FULL or 0)
+	return wx.wxFileName.Mkdir(path, 4095, flags)
+end
+
+
+
+function deleteFile(path)
+	return wx.wxRemoveFile(path)
 end
 
 

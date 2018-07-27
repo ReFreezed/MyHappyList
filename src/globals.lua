@@ -12,13 +12,14 @@
 
 
 
--- Settings.
+-- Settings, debug.
 DEBUG                               = true
 DEBUG_LOCAL                         = true and DEBUG
 DEBUG_FORCE_NAT_OFF                 = true and DEBUG_LOCAL
 DEBUG_EXPIRATION_TIME_PORT          = 60
 DEBUG_EXPIRATION_TIME_SESSION       = 3*60 -- Only useful is NAT is off.
 
+-- Settings, AniDB.
 SERVER_ADDRESS                      = DEBUG_LOCAL and "localhost" or "api.anidb.net"
 SERVER_PORT                         = 9000
 LOCAL_PORT                          = DEBUG_LOCAL and 9000 or 24040
@@ -41,6 +42,9 @@ MAX_DATA_LENGTH                     = 1400 -- Must be between 400 and 1400. (MTU
 
 FLOOD_PROTECTION_SHORT_TERM         = 20
 FLOOD_PROTECTION_WINDOW             = 10   -- Saved amount of lastResponseTimes.
+
+-- Settings, MyHappyList.
+MAX_DROPPED_FILES                   = 1000
 
 
 
