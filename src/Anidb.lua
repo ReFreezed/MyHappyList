@@ -93,8 +93,6 @@ local FILE_STATE_STREAMED             = 15  -- normal
 local FILE_STATE_ON_BLURAY            = 16  -- generic
 local FILE_STATE_OTHER                = 100 -- normal
 
-local CACHE_DIR                       = DEBUG_LOCAL and "cacheDebug" or "cache"
-
 local ED2K_STATE_ERROR                = 1
 local ED2K_STATE_IN_PROGRESS          = 2
 local ED2K_STATE_SUCCESS              = 3
@@ -837,45 +835,6 @@ end
 
 
 do
-	local function parseValue(path, ln, v)
-		local c = v:sub(1, 1)
-
-		-- Number.
-		if ("0123456789"):find(c, 1, true) then
-			local n = tonumber(v)
-			if not n then
-				_logprinterror("%s:%d: Malformed number: %s", path, ln, v)
-				return nil
-			end
-			return n
-
-		-- String.
-		elseif c == '"' then
-			local chunk, err = loadstring("return"..v)
-			if not chunk then
-				_logprinterror("%s:%d: Malformed string: %s: %s", path, ln, err, v)
-				return nil
-			end
-
-			local s = chunk()
-			if type(s) ~= "string" then
-				_logprinterror("%s:%d: Malformed string: %s", path, ln, v)
-				return nil
-			end
-			return s
-
-		-- Boolean.
-		elseif v == "true" then
-			return true
-		elseif v == "false" then
-			return false
-
-		else
-			_logprinterror("%s:%d: Unknown value type: %s", path, ln, v)
-			return nil
-		end
-	end
-
 	local function deleteEntry(self, pageName, entry, isPartial)
 		assertarg(1, self,      "table")
 		assertarg(2, pageName,  "string")
@@ -970,31 +929,11 @@ do
 
 		local path = F("%s/%s%d%s", CACHE_DIR, pageName, id, (isPartial and ".part" or ""))
 
-		-- Backup old entry.
-		if isFile(path) then
-			writeFile(path..".bak", getFileContents(path))
-		end
-
-		local file = assert(io.open(path, "w"))
+		backupFileIfExists(path)
+		local file = assert(openFile(path, "w"))
 
 		for k, v in pairsSorted(entry) do
-			if type(v) == "number" then
-				if not isInt(v) then
-					_logprinterror("%s: Non-integer number disabled. Skipping. (%s, entry.%s)", path, tostring(v), k)
-				else
-					file:write(F("%s %d\n", k, v))
-				end
-
-			elseif type(v) == "string" then
-				local s = F("%q", v) :gsub("\\\n", "\\n")
-				file:write(k, " ", s, "\n")
-
-			elseif type(v) == "boolean" then
-				file:write(k, " ", tostring(v), "\n")
-
-			else
-				_logprinterror("%s: Cannot write type '%s'. Skipping. (entry.%s)", path, type(v), k)
-			end
+			writeSimpleKv(file, k, v, path)
 		end
 
 		file:close()
@@ -1019,7 +958,7 @@ do
 
 		local path = F("%s/%s%d%s", CACHE_DIR, pageName, id, (isPartial and ".part" or ""))
 
-		local file, err = io.open(path, "r")
+		local file, err = openFile(path, "r")
 		if not file then  return nil, err  end
 
 		entry    = {}
@@ -1028,18 +967,13 @@ do
 		for line in file:lines() do
 			ln = ln+1
 
-			if line ~= "" then
-				local k, v = line:match"^(%S+) +(%S.*)$"
+			local k, v = parseSimpleKv(line, path, ln)
 
-				if not k then
-					_logprinterror("%s:%d: Bad line format: %s", path, ln, line)
-
-				else
-					if entry[k] ~= nil then
-						_logprinterror("%s:%d: Duplicate key '%s'. Overwriting.", path, ln, k)
-					end
-					entry[k] = parseValue(path, ln, v)
+			if k then
+				if entry[k] ~= nil then
+					_logprinterror("%s:%d: Duplicate key '%s'. Overwriting.", path, ln, k)
 				end
+				entry[k] = v
 			end
 		end
 
@@ -1073,7 +1007,7 @@ do
 	local isLoaded  = false
 
 	local function saveEd2ks()
-		local file = assert(io.open(CACHE_DIR.."/ed2ks", "w"))
+		local file = assert(openFile(CACHE_DIR.."/ed2ks", "w"))
 
 		for path, ed2kHash in pairsSorted(pathEd2ks) do
 			local fileSize = pathSizes[path]
@@ -1086,7 +1020,7 @@ do
 	local function loadEd2ks()
 		isLoaded = true
 
-		local file = io.open(CACHE_DIR.."/ed2ks", "r")
+		local file = openFile(CACHE_DIR.."/ed2ks", "r")
 		if not file then  return  end
 
 		local ln = 0
@@ -1652,7 +1586,7 @@ end
 function Anidb:getLogin()
 	if DEBUG_LOCAL then  return "MyName", "ABC123"  end
 
-	local file, err = io.open("local/login", "r")
+	local file, err = openFile("local/login", "r")
 	if not file then
 		_logprinterror("Could not open file 'local/login': %s", err)
 		return nil

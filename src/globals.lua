@@ -19,6 +19,9 @@ DEBUG_FORCE_NAT_OFF                 = true and DEBUG_LOCAL
 DEBUG_EXPIRATION_TIME_PORT          = 60
 DEBUG_EXPIRATION_TIME_SESSION       = 3*60 -- Only useful is NAT is off.
 
+-- Settings.
+CACHE_DIR                           = DEBUG_LOCAL and "cacheDebug" or "cache"
+
 -- Settings, AniDB.
 SERVER_ADDRESS                      = DEBUG_LOCAL and "localhost" or "api.anidb.net"
 SERVER_PORT                         = 9000
