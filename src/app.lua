@@ -10,98 +10,112 @@
 --=
 --============================================================]]
 
-local FILE_INFO_VERSION -- Set later.
-local FILE_INFO_DONT_SERIALIZE
+local FILE_INFO_DONT_SERIALIZE -- Set later.
 
 local FILE_COLUMN_FILE -- Set later.
 local FILE_COLUMN_FOLDER
 local FILE_COLUMN_SIZE
 local FILE_COLUMN_VIEWED
+local FILE_COLUMN_STATUS
 
 local anidb
 local frame
 local fileList
 
-local files      = {}
-local lastFileId = 0 -- Local ID, not AniDB fid.
+local fileInfos  = {}
+local lastFileId = 0 -- Local ID, not fid on AniDB.
 
 local settings = {
-	trunkateFolders = true,
+	autoHash        = true,
 	movieExtensions = newSet{"avi","flv","mkv","mov","mp4","mpeg","mpg","ogm","ogv","swf","webm","wmv"},
+	trunkateFolders = true,
 }
 
 --==============================================================
 --==============================================================
 --==============================================================
 
-local addFile, removeFile, updateFileList, saveFiles, loadFiles
+local addFileInfo, removeFileInfo
+local getFileStatus, getFileInfoByRow, getFileRow
+local saveFileInfos, loadFileInfos
+local setFileInfo
+local updateFileList
 
 
 
--- fileInfo = addFile( path )
--- fileInfo = addFile( fileInfo ) -- For loading phase.
-FILE_INFO_DONT_SERIALIZE = newSet{"name","folder"}
-function addFile(path)
-	-- @@ Use these:
-	-- bool fileList:SetItemData(long item, long data)
-	-- long fileList:GetItemData(long item) const
-	-- long fileList:FindItem(long start, long data)
-
+-- fileInfo = addFileInfo( path )
+-- fileInfo = addFileInfo( fileInfo ) -- For loading phase.
+FILE_INFO_DONT_SERIALIZE = newSet{"name","folder","isHashing"}
+function addFileInfo(path)
 	local fileInfo
 
 	if type(path) == "table" then
 		fileInfo = path
+		path     = fileInfo.path
 
 	else
-		fileInfo = files[path]
+		fileInfo = fileInfos[path]
 		if fileInfo then  return fileInfo  end
 
 		lastFileId = lastFileId+1
 
 		fileInfo = {
-			id     = lastFileId,
+			id        = lastFileId,
 
-			path   = path,
-			name   = "",
-			folder = "",
+			path      = path,
+			name      = "",
+			folder    = "",
 
-			ed2k   = "",
-			size   = getFileSize(path),
+			ed2k      = "",
+			size      = getFileSize(path),
 
-			lid    = -1,
+			lid       = -1,
+
+			isHashing = false,
 		}
 	end
 
-	fileInfo.name   = getFilename(fileInfo.path)
-	fileInfo.folder = getDirectory(fileInfo.path)
+	fileInfo.name      = getFilename(path)
+	fileInfo.folder    = getDirectory(path)
+	fileInfo.isHashing = false
 
-	setAndInsert(files, fileInfo.path, fileInfo)
+	setAndInsert(fileInfos, path, fileInfo)
 
-	listCtrlInsertRow(fileList, fileInfo.name, fileInfo.folder, formatBytes(fileInfo.size), "?")
+	local wxRow = listCtrlInsertRow(
+		fileList, fileInfo.name, fileInfo.folder, formatBytes(fileInfo.size), "?", getFileStatus(fileInfo)
+	)
+	fileList:SetItemData(wxRow, fileInfo.id)
+
+	if settings.autoHash and fileInfo.ed2k == "" then
+		setFileInfo(fileInfo, "isHashing", true)
+		anidb:hashFile(path)
+	end
 
 	return fileInfo
 end
 
-function removeFile(fileInfo)
-	fileInfo = files[fileInfo.path]
+function removeFileInfo(fileInfo)
+	fileInfo = fileInfos[fileInfo.path]
 	if not fileInfo then  return  end
 
-	local i = indexOf(files, fileInfo)
-	unsetAndRemove(files, fileInfo.path)
+	unsetAndRemove(fileInfos, fileInfo.path)
 
-	fileList:DeleteItem(i-1)
+	local wxRow = getFileRow(fileInfo)
+	fileList:DeleteItem(wxRow)
 end
 
+
+
 function updateFileList()
-	if not files[1] then return end
+	if not fileInfos[1] then return end
 
 	local commonFolder        = ""
 	local allInSameFolder     = true
 	local filesInCommonFolder = false
 
 	-- Start the common folder value with a path that isn't the shortest.
-	if files[2] then
-		for _, fileInfo in ipairs(files) do
+	if fileInfos[2] then
+		for _, fileInfo in ipairs(fileInfos) do
 			if #fileInfo.folder > #commonFolder then
 				commonFolder = fileInfo.folder
 			end
@@ -109,7 +123,7 @@ function updateFileList()
 	end
 
 	-- Narrow down the value to the actual common folder.
-	for i, fileInfo in ipairs(files) do
+	for _, fileInfo in ipairs(fileInfos) do
 		for ptr = 1, math.max(#fileInfo.folder, #commonFolder) do
 			if fileInfo.folder:byte(ptr) ~= commonFolder:byte(ptr) then
 				commonFolder        = commonFolder:sub(1, ptr-1)
@@ -138,91 +152,153 @@ function updateFileList()
 
 	local usePrefix = (settings.trunkateFolders and prefix ~= "")
 
-	for i, fileInfo in ipairs(files) do
+	for _, fileInfo in ipairs(fileInfos) do
 		listCtrlSetItem(
 			fileList,
-			i-1,
+			getFileRow(fileInfo),
 			FILE_COLUMN_FOLDER,
 			usePrefix and "..."..fileInfo.folder:sub(#prefix+1) or fileInfo.folder
 		)
 	end
+
+	fileList:SortItems(function(a, b)
+		a = itemWith(fileInfos, "id", a)
+		b = itemWith(fileInfos, "id", b)
+		if a.folder ~= b.folder then
+			return a.folder < b.folder and -1 or 1
+		end
+		if a.name ~= b.name then
+			return a.name < b.name and -1 or 1
+		end
+		return 0 -- Should never happen.
+	end, 0)
+
+	local colorStripe1 = wx.wxWHITE
+	local colorStripe2 = wx.wxColour(245, 245, 245)
+
+	for wxRow = 0, fileList:GetItemCount()-1 do
+		local color = (wxRow%2 == 0 and colorStripe1 or colorStripe2)
+		fileList:SetItemBackgroundColour(wxRow, color)
+	end
 end
 
-function saveFiles()
-	local path = CACHE_DIR.."/files"
 
-	backupFileIfExists(path)
-	local file = assert(openFile(path, "w"))
+do
+	local FILE_INFO_VERSION = 1
 
-	writeLine(file, FILE_INFO_VERSION)
+	function saveFileInfos()
+		local path = CACHE_DIR.."/files"
 
-	for _, fileInfo in ipairs(files) do
-		writeLine(file) -- An empty line separates file entries.
+		backupFileIfExists(path)
+		local file = assert(openFile(path, "w"))
 
-		for k, v in pairsSorted(fileInfo) do
-			if not FILE_INFO_DONT_SERIALIZE[k] then
-				writeSimpleKv(file, k, v, path)
-			end
-		end
-	end
+		writeLine(file, FILE_INFO_VERSION)
 
-	file:close()
-end
+		for _, fileInfo in ipairs(fileInfos) do
+			writeLine(file) -- An empty line separates file entries.
 
-FILE_INFO_VERSION = 1
-function loadFiles()
-	local path = CACHE_DIR.."/files"
-	if not isFile(path) then  return  end
-
-	local file = assert(openFile(path, "r"))
-	local ln   = 0
-
-	local fileInfo = nil
-
-	local function finishEntry()
-		if not fileInfo then  return  end
-
-		if fileInfo.id then
-			addFile(fileInfo)
-			lastFileId = math.max(fileInfo.id, lastFileId)
-		else
-			logprinterror(nil, "%s:%d: Missing ID for previous entry. Skipping.", path, ln)
-		end
-
-		fileInfo = nil
-	end
-
-	lastFileId = 0
-
-	for line in file:lines() do
-		ln = ln+1
-
-		if ln == 1 then
-			local ver = tonumber(line)
-			if not (isInt(ver) and ver >= 1 and ver <= FILE_INFO_VERSION) then
-				errorf("%s:%d: Missing or invalid version number.", path, ln)
-			end
-
-		elseif line == "" then
-			finishEntry() -- An empty line separates file entries.
-
-		else
-			local k, v = parseSimpleKv(line, path, ln)
-
-			if k then
-				fileInfo = fileInfo or {}
-				if fileInfo[k] ~= nil then
-					logprinterror(nil, "%s:%d: Duplicate key '%s'. Overwriting.", path, ln, k)
+			for k, v in pairsSorted(fileInfo) do
+				if not FILE_INFO_DONT_SERIALIZE[k] then
+					writeSimpleKv(file, k, v, path)
 				end
-				fileInfo[k] = v
 			end
 		end
+
+		file:close()
 	end
 
-	finishEntry()
-	file:close()
+	function loadFileInfos()
+		local path = CACHE_DIR.."/files"
+		if not isFile(path) then  return  end
 
-	updateFileList()
+		local file = assert(openFile(path, "r"))
+		local ln   = 0
+
+		local fileInfo = nil
+
+		local function finishEntry()
+			if not fileInfo then  return  end
+
+			if fileInfo.id then
+				addFileInfo(fileInfo)
+				lastFileId = math.max(fileInfo.id, lastFileId)
+			else
+				logprinterror(nil, "%s:%d: Missing ID for previous entry. Skipping.", path, ln)
+			end
+
+			fileInfo = nil
+		end
+
+		lastFileId = 0
+
+		for line in file:lines() do
+			ln = ln+1
+
+			if ln == 1 then
+				local ver = tonumber(line)
+				if not (isInt(ver) and ver >= 1 and ver <= FILE_INFO_VERSION) then
+					errorf("%s:%d: Missing or invalid version number.", path, ln)
+				end
+
+			elseif line == "" then
+				finishEntry() -- An empty line separates file entries.
+
+			else
+				local k, v = parseSimpleKv(line, path, ln)
+
+				if k then
+					fileInfo = fileInfo or {}
+					if fileInfo[k] ~= nil then
+						logprinterror(nil, "%s:%d: Duplicate key '%s'. Overwriting.", path, ln, k)
+					end
+					fileInfo[k] = v
+				end
+			end
+		end
+
+		finishEntry()
+		file:close()
+
+		updateFileList()
+	end
+end
+
+
+
+function setFileInfo(fileInfo, k, v)
+	if fileInfo[k] == v then
+		return
+	end
+
+	fileInfo[k] = v
+
+	local wxRow = fileList:FindItem(-1, fileInfo.id)
+	if wxRow == -1 then
+		logprinterror(nil, "File %d is not in list.", fileInfo.id)
+		return
+	end
+
+	if isAny(k, "ed2k","isHashing") then
+		fileList:SetItem(wxRow, FILE_COLUMN_STATUS, getFileStatus(fileInfo))
+	end
+end
+
+
+
+function getFileStatus(fileInfo)
+	return
+		fileInfo.isHashing     and "Calculating hash"
+		or fileInfo.ed2k == "" and "Not hashed"
+		or "Hashed"
+end
+
+function getFileRow(fileInfo)
+	local wxRow = fileList:FindItem(-1, fileInfo.id)
+	return wxRow ~= -1 and wxRow or nil
+end
+
+function getFileInfoByRow(wxRow)
+	return itemWith(fileInfos, "id", fileList:GetItemData(wxRow))
 end
 
 
@@ -232,70 +308,112 @@ end
 --==============================================================
 
 local anidbEventHandlers = {
-	["loginsuccess"] = function() end,
-	["loginbadlogin"] = function()
-		showError(frame, "Bad Login", "The username or password is incorrect.")
-		frame:Close(true)
-	end,
-	["loginfail"] = function(userMessage) end,
+	["ed2ksuccess"] =
+		function(path, ed2kHash, fileSize)
+			for _, fileInfo in ipairs(fileInfos) do
+				if fileInfo.ed2k == "" and fileInfo.path == path then
+					setFileInfo(fileInfo, "ed2k",      ed2kHash)
+					setFileInfo(fileInfo, "isHashing", false)
+					saveFileInfos()
+					break
+				end
+			end
+		end,
+	["ed2kfail"] =
+		function(path)
+			for _, fileInfo in ipairs(fileInfos) do
+				if fileInfo.isHashing and fileInfo.path == path then
+					-- @Incomplete: Show an error message.
+					setFileInfo(fileInfo, "isHashing", false)
+					saveFileInfos()
+					break
+				end
+			end
+		end,
 
-	["mylistgetsuccess"] = function(what, ...)
-		if what == "entry" then
-			local mylistEntry = ...
+	["loginsuccess"] =
+		function() end,
+	["loginbadlogin"] =
+		function()
+			showError(frame, "Bad Login", "The username or password is incorrect.")
+			frame:Close(true)
+		end,
+	["loginfail"] =
+		function(userMessage) end,
+
+	["mylistgetsuccess"] =
+		function(what, ...)
+			if what == "entry" then
+				local mylistEntry = ...
+				-- @@
+
+			elseif what == "selection" then
+				local mylistSelection = ...
+				-- @@
+
+			elseif what ~= "none" then
+				logprinterror(nil, "mylistgetsuccess: Unknown what value '%s'.", what)
+			end
+		end,
+	["mylistgetfail"] =
+		function(userMessage) end,
+
+	["mylistaddsuccess"] =
+		function(mylistEntryPartial)
+			-- anidb:getMylist(mylistEntryPartial.lid) -- @@
+		end,
+	["mylistaddsuccessmultiple"] =
+		function(count)
 			-- @@
-
-		elseif what == "selection" then
-			local mylistSelection = ...
+		end,
+	["mylistaddfoundmultiplefiles"] =
+		function(fids)
 			-- @@
+		end,
+	["mylistaddfail"] =
+		function(userMessage) end,
 
-		elseif what ~= "none" then
-			logprinterror(nil, "mylistgetsuccess: Unknown what value '%s'.", what)
-		end
-	end,
-	["mylistgetfail"] = function(userMessage) end,
+	["mylistdeletesuccess"] =
+		function(count)
+			-- @@
+		end,
+	["mylistdeletefail"] =
+		function(userMessage) end,
 
-	["mylistaddsuccess"] = function(mylistEntryPartial)
-		-- anidb:getMylist(mylistEntryPartial.lid) -- @@
-	end,
-	["mylistaddsuccessmultiple"] = function(count)
-		-- @@
-	end,
-	["mylistaddfoundmultiplefiles"] = function(fids)
-		-- @@
-	end,
-	["mylistaddfail"] = function(userMessage) end,
+	["blackoutstart"] =
+		function() end,
+	["blackoutstop"] =
+		function() end,
 
-	["mylistdeletesuccess"] = function(count)
-		-- @@
-	end,
-	["mylistdeletefail"] = function(userMessage) end,
+	["pingfail"] =
+		function(userMessage) end,
 
-	["blackoutstart"] = function() end,
-	["blackoutstop"] = function() end,
+	["resend"] =
+		function(command) end,
 
-	["pingfail"] = function(userMessage) end,
+	["newversionavailable"] =
+		function(userMessage)
+			-- @UX: A less intrusive "Update Available" notification.
+			showMessage(frame, "Update Available", "A new version of MyHappyList is available.")
+		end,
+	["message"] =
+		function(userMessage)
+			showMessage(frame, "Message", userMessage)
+		end,
 
-	["resend"] = function(command) end,
-
-	["newversionavailable"] = function(userMessage)
-		-- @UX: A less intrusive "Update Available" notification.
-		showMessage(frame, "Update Available", "A new version of MyHappyList is available.")
-	end,
-	["message"] = function(userMessage)
-		showMessage(frame, "Message", userMessage)
-	end,
-
-	["errorresponsetimeout"] = function(command)
-		showError(
-			frame,
-			"Timeout",
-			"Got no response from AniDB in time. Maybe the server is offline or your Internet connection is down?"
-				.."\n\nCommand: "..command
-		)
-	end,
-	_error = function(eName, userMessage)
-		showError(frame, "Error", F("%s: %s", eName, userMessage))
-	end,
+	["errorresponsetimeout"] =
+		function(command)
+			showError(
+				frame,
+				"Timeout",
+				"Got no response from AniDB in time. Maybe the server is offline or your Internet connection is down?"
+					.."\n\nCommand: "..command
+			)
+		end,
+	_error =
+		function(eName, userMessage)
+			showError(frame, "Error", F("%s: %s", eName, userMessage))
+		end,
 }
 
 --==============================================================
@@ -327,7 +445,7 @@ anidb = require"Anidb"()
 
 -- Main window.
 --==============================================================
-frame = wx.wxFrame(WX_NULL, WX_ID_ANY, "MyHappyList", WX_DEFAULT_POSITION, WxSize(1000, 400), WX_DEFAULT_FRAME_STYLE)
+frame = wx.wxFrame(WX_NULL, WX_ID_ANY, "MyHappyList", WX_DEFAULT_POSITION, WxSize(1300, 400), WX_DEFAULT_FRAME_STYLE)
 
 setTimerDummyOwner(frame)
 
@@ -363,11 +481,16 @@ on(frame, "DROP_FILES", function(e, paths)
 		end
 	end
 
+	if not pathsToAdd[1] then  return  end
+
+	local previousLastWxRow = fileList:GetItemCount()-1
+
 	for _, path in ipairs(pathsToAdd) do
-		addFile(toNormalPath(path))
+		addFileInfo(toNormalPath(path))
 	end
 
-	saveFiles()
+	saveFileInfos()
+	listCtrlSelectRows(fileList, range(previousLastWxRow+1, fileList:GetItemCount()-1))
 	updateFileList()
 end)
 
@@ -494,33 +617,31 @@ newText(panel, "Text?", WxPoint(0, y))
 --==============================================================
 
 local function removeSelectedFiles()
-	local wxIndices = listCtrlGetSelectedRows(fileList)
-	if not wxIndices[1] then  return  end
+	local wxRows = listCtrlGetSelectedRows(fileList)
+	if not wxRows[1] then  return  end
 
-	for i, fileInfo in ipairsr(files) do
-		if indexOf(wxIndices, i-1) then
-			removeFile(fileInfo)
-		end
+	for _, wxRow in ipairsr(wxRows) do
+		removeFileInfo(getFileInfoByRow(wxRow))
 	end
 
-	saveFiles()
+	saveFileInfos()
 	updateFileList()
-
-	listCtrlSelectRows(fileList, {wxIndices[1]}, true)
+	listCtrlSelectRows(fileList, {wxRows[1]}, true)
 end
 
 fileList = wx.wxListCtrl(
 	frame, WX_ID_ANY, WX_DEFAULT_POSITION, WX_DEFAULT_SIZE,
-	WX_LC_REPORT + WX_LC_HRULES --+ WX_LC_SORT_ASCENDING
+	WX_LC_REPORT
 )
 
-FILE_COLUMN_FILE   = listCtrlInsertColumn(fileList, "File",    400)
-FILE_COLUMN_FOLDER = listCtrlInsertColumn(fileList, "Folder",  400)
+FILE_COLUMN_FILE   = listCtrlInsertColumn(fileList, "File",    500)
+FILE_COLUMN_FOLDER = listCtrlInsertColumn(fileList, "Folder",  500)
 FILE_COLUMN_SIZE   = listCtrlInsertColumn(fileList, "Size",    80)
 FILE_COLUMN_VIEWED = listCtrlInsertColumn(fileList, "Watched", 60)
+FILE_COLUMN_STATUS = listCtrlInsertColumn(fileList, "Status",  120)
 
-on(fileList, "COMMAND_LIST_ITEM_ACTIVATED", function(e, wxIndex)
-	local fileInfo = files[wxIndex+1]
+on(fileList, "COMMAND_LIST_ITEM_ACTIVATED", function(e, wxRow)
+	local fileInfo = getFileInfoByRow(wxRow)
 	openFileExternally(fileInfo.path)
 end)
 
@@ -531,30 +652,44 @@ on(fileList, "KEY_DOWN", function(e, kc)
 	elseif kc == KC_SPACE and not e:HasModifiers() then
 		-- Do nothing. For some reason space activates the thing.
 
+	elseif kc == KC_A and e:GetModifiers() == WX_MOD_CONTROL then
+		listCtrlSelectRows(fileList, range(0, fileList:GetItemCount()-1))
+
 	else
 		e:Skip()
 	end
 end)
 
 on(fileList, "CONTEXT_MENU", function(e)
-	local wxIndices = listCtrlGetSelectedRows(fileList)
-	if not wxIndices[1] then  return  end
+	local wxRows = listCtrlGetSelectedRows(fileList)
+	if not wxRows[1] then  return  end
 
 	local popupMenu = wx.wxMenu()
 
-	if wxIndices[2] then
-		newMenuItem(popupMenu, frame, #wxIndices.." Files Selected"):Enable(false)
+	if wxRows[2] then
+		newMenuItem(popupMenu, frame, #wxRows.." Files Selected"):Enable(false)
 		newMenuItemSeparator(popupMenu)
 	end
 
-	local helpText = wxIndices[2] and "Open the first selected file" or "Open the file"
+	local helpText = wxRows[2] and "Open the first selected file" or "Open the file"
 	newMenuItem(popupMenu, frame, "&Play\tEnter", helpText, function(e)
-		local fileInfo = files[wxIndices[1]+1]
+		local fileInfo = getFileInfoByRow(wxRows[1])
 		openFileExternally(fileInfo.path)
 	end)
 
 	newMenuItem(popupMenu, frame, "Remove from List\tDelete", "Remove selected files from the list", function(e)
 		removeSelectedFiles()
+	end)
+
+	newMenuItem(popupMenu, frame, "Calculate hash", "Calculate ed2k hash for files", function(e)
+		for _, wxRow in ipairs(wxRows) do
+			local fileInfo = getFileInfoByRow(wxRow)
+
+			if fileInfo.ed2k == "" and not fileInfo.isHashing then
+				setFileInfo(fileInfo, "isHashing", true)
+				anidb:hashFile(fileInfo.path)
+			end
+		end
 	end)
 
 	newMenuItemSeparator(popupMenu)
@@ -567,7 +702,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 		-- @@
 	end)
 
-	listCtrlPopupMenu(fileList, popupMenu, wxIndices[1], e:GetPosition())
+	listCtrlPopupMenu(fileList, popupMenu, wxRows[1], e:GetPosition())
 end)
 
 -- Sizer for frame.
@@ -587,7 +722,7 @@ end
 -- Loading.
 --==============================================================
 
-loadFiles()
+loadFileInfos()
 
 --==============================================================
 --= Show GUI ===================================================

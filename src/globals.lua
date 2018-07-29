@@ -55,12 +55,13 @@ MAX_DROPPED_FILES                   = 1000
 require(... .."_keys") -- Extra stuff that WX don't add.
 require(... .."_wx")
 
-NOOP   = function()end
+EMPTY_TABLE = {}
+NOOP        = function()end
 
-lfs    = require"lfs"
-socket = require"socket"
+lfs         = require"lfs"
+socket      = require"socket"
 
-_print = print
+_print      = print
 
 
 

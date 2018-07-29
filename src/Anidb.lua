@@ -17,6 +17,7 @@
 	clearMessageQueue
 	events
 	getLogin
+	hashFile
 	isLoggedIn
 	isSendingAnyMessage, getQueuedMessageCount
 	update
@@ -93,9 +94,9 @@ local FILE_STATE_STREAMED             = 15  -- normal
 local FILE_STATE_ON_BLURAY            = 16  -- generic
 local FILE_STATE_OTHER                = 100 -- normal
 
-local ED2K_STATE_ERROR                = 1
-local ED2K_STATE_IN_PROGRESS          = 2
-local ED2K_STATE_SUCCESS              = 3
+local ED2K_STATE_IN_PROGRESS          = 1
+local ED2K_STATE_SUCCESS              = 2
+local ED2K_STATE_ERROR                = 3
 
 
 
@@ -237,7 +238,7 @@ end
 
 function paramNumberEncode(n)
 	assert(isInt(n) and n >= 0, n)
-	return F("%d", n)
+	return F("%.0f", n)
 end
 function paramNumberDecode(v)
 	if v == "" or v:find"%D" then  return nil  end
@@ -440,7 +441,7 @@ do
 
 		local line = lineIter()
 		if not line then
-			_logprinterror("Server response is empty. (Length: %d)", #data)
+			_logprinterror("Server response is empty. (Length: %.0f)", #data)
 			return false
 		end
 
@@ -1000,18 +1001,23 @@ end
 
 
 do
-	local pathEd2ks = {}
-	local pathSizes = {}
-	local ed2kPaths = {}
+	local pathEd2ks    = {}
+	local pathSizes    = {}
+	local ed2kPaths    = {}
 
-	local isLoaded  = false
+	local isLoaded     = false
+
+	local ed2kQueue    = {}
+	local isProcessing = false
 
 	local function saveEd2ks()
 		local file = assert(openFile(CACHE_DIR.."/ed2ks", "w"))
 
 		for path, ed2kHash in pairsSorted(pathEd2ks) do
-			local fileSize = pathSizes[path]
-			file:write(F("%s %d %s\n", ed2kHash, fileSize, path))
+			if ed2kHash ~= "" then
+				local fileSize = pathSizes[path]
+				file:write(F("%s %.0f %s\n", ed2kHash, fileSize, path))
+			end
 		end
 
 		file:close()
@@ -1028,14 +1034,14 @@ do
 		for line in file:lines() do
 			ln = ln+1
 
-			local ed2kHash, size, path = line:match"^(%S+) (%d+) (%S.*)$"
-			size = tonumber(size)
+			local ed2kHash, fileSize, path = line:match"^(%S+) (%d+) (%S.*)$"
+			fileSize = tonumber(fileSize)
 
 			if not ed2kHash then
 				_logprinterror("%s:%d: Bad line format: %s", CACHE_DIR.."/ed2ks", ln, line)
 			else
 				pathEd2ks[path]     = ed2kHash
-				pathSizes[path]     = size
+				pathSizes[path]     = fileSize
 				ed2kPaths[ed2kHash] = path
 			end
 		end
@@ -1043,43 +1049,13 @@ do
 		file:close()
 	end
 
-	function getEd2k(path, cb)
-		if not isLoaded then  loadEd2ks()  end
+	local function processNextQueueItem()
+		local queueItem = table.remove(ed2kQueue, 1)
+		if not queueItem then  return  end
 
-		local fileSize, err = getFileSize(path)
+		isProcessing = true
 
-		if not fileSize then
-			_logprinterror("Could not get info about file '%s': %s", path, err)
-			cb(ED2K_STATE_ERROR)
-			return
-		end
-
-		local ed2kHash = pathEd2ks[path]
-
-		if ed2kHash then
-			if ed2kHash == "" then
-				cb(ED2K_STATE_IN_PROGRESS)
-				return
-
-			elseif pathSizes[path] ~= fileSize then
-				_logprinterror(
-					"%s: Somehow we have the ed2k but the size is wrong. Recalculating. (expected %d, got %d)",
-					path, pathSizes[path], fileSize
-				)
-
-				pathEd2ks[path]     = nil
-				pathSizes[path]     = nil
-				ed2kPaths[ed2kHash] = nil
-
-			else
-				-- Both ed2ks and size match previous values.
-				cb(ED2K_STATE_SUCCESS, ed2kHash, fileSize)
-				return
-			end
-		end
-
-		pathEd2ks[path] = "" -- An empty string means "currently calculating".
-		_logprint("Calculating ed2k for '%s'...", path:match"[^/\\]+$")
+		local self, path, fileSize, cb = unpack(queueItem)
 
 		scriptCaptureAsync("ed2k", function(output)
 			ed2kHash = output:match"^ed2k: ([%da-f]+)"
@@ -1098,7 +1074,12 @@ do
 				end
 
 				saveEd2ks()
+
+				addEvent(self, "ed2kfail", path)
 				cb(ED2K_STATE_ERROR)
+
+				isProcessing = false
+				processNextQueueItem()
 				return
 			end
 
@@ -1114,8 +1095,60 @@ do
 			ed2kPaths[ed2kHash] = path
 
 			saveEd2ks()
+
+			addEvent(self, "ed2ksuccess", path, ed2kHash, fileSize)
 			cb(ED2K_STATE_SUCCESS, ed2kHash, fileSize)
-		end, path)
+
+			isProcessing = false
+			processNextQueueItem()
+		end, toShortPath(path))
+	end
+
+	function getEd2k(self, path, cb)
+		if not isLoaded then  loadEd2ks()  end
+
+		local fileSize, err = getFileSize(path)
+
+		if not fileSize then
+			_logprinterror("Could not get info about file '%s': %s", path, err)
+			addEvent(self, "ed2kfail", path)
+			cb(ED2K_STATE_ERROR)
+			return
+		end
+
+		local ed2kHash = pathEd2ks[path]
+
+		if ed2kHash then
+			if ed2kHash == "" then
+				cb(ED2K_STATE_IN_PROGRESS)
+				return
+
+			elseif pathSizes[path] ~= fileSize then
+				_logprinterror(
+					"%s: Somehow we have the ed2k but the size is wrong. Recalculating. (expected %.0f, got %.0f)",
+					path, pathSizes[path], fileSize
+				)
+
+				pathEd2ks[path]     = nil
+				pathSizes[path]     = nil
+				ed2kPaths[ed2kHash] = nil
+
+			else
+				-- Both ed2ks and size match previous values.
+
+				-- This event may be overkill, but solves desync between local file list and ed2k list.
+				addEvent(self, "ed2ksuccess", path, ed2kHash, fileSize)
+
+				cb(ED2K_STATE_SUCCESS, ed2kHash, fileSize)
+				return
+			end
+		end
+
+		pathEd2ks[path] = "" -- An empty string means "currently calculating".
+		_logprint("Calculating ed2k for '%s'...", path:match"[^/\\]+$")
+
+		table.insert(ed2kQueue, {self, path, fileSize, cb})
+		if not isProcessing then  processNextQueueItem()  end
 	end
 
 	function getPathByEd2k(ed2kHash)
@@ -1415,7 +1448,7 @@ responseHandlers = {
 
 		-- 320 NO SUCH FILE
 		elseif statusCode == 320 and msg.params.ed2k then
-			addEvent(self, "mylistaddfail", "No file on AniDB with size %d and hash %s.", msg.params.size, msg.params.ed2k)
+			addEvent(self, "mylistaddfail", "No file on AniDB with size %.0f and hash %s.", msg.params.size, msg.params.ed2k)
 		elseif statusCode == 320 and msg.params.fid then
 			addEvent(self, "mylistaddfail", "No file on AniDB with ID %d.", msg.params.fid)
 
@@ -1673,7 +1706,7 @@ function Anidb:getMylistByFile(pathOrFileId)
 	if type(pathOrFileId) == "string" then
 		local path = pathOrFileId
 
-		getEd2k(path, function(ed2kState, ed2kHash, fileSize)
+		getEd2k(self, path, function(ed2kState, ed2kHash, fileSize)
 			if ed2kState == ED2K_STATE_SUCCESS then
 				self:getMylistByEd2k(ed2kHash, fileSize)
 			end
@@ -1722,7 +1755,7 @@ function Anidb:addMylistByFile(pathOrFileId)
 	if type(pathOrFileId) == "string" then
 		local path = pathOrFileId
 
-		getEd2k(path, function(ed2kState, ed2kHash, fileSize)
+		getEd2k(self, path, function(ed2kState, ed2kHash, fileSize)
 			if ed2kState == ED2K_STATE_SUCCESS then
 				self:addMylistByEd2k(ed2kHash, fileSize)
 			end
@@ -1851,7 +1884,7 @@ function Anidb:update(force)
 		local data = createData(msg.command, msg.params)
 
 		if #data > MAX_DATA_LENGTH then
-			_logprinterror("Data for %s command is too long. (length: %d, max: %d)", msg.command, #data, MAX_DATA_LENGTH)
+			_logprinterror("Data for %s command is too long. (length: %.0f, max: %d)", msg.command, #data, MAX_DATA_LENGTH)
 			msg:callback(self, false)
 
 		else
@@ -1916,6 +1949,13 @@ function Anidb:clearMessageQueue()
 			msg:callback(self, false)
 		end
 	end
+end
+
+
+
+function Anidb:hashFile(path)
+	assertarg(1, path, "string")
+	getEd2k(self, path, NOOP)
 end
 
 
