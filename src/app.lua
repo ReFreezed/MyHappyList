@@ -18,6 +18,10 @@ local FILE_COLUMN_SIZE
 local FILE_COLUMN_VIEWED
 local FILE_COLUMN_STATUS
 
+local MYLIST_STATUS_UNKNOWN = 0
+local MYLIST_STATUS_NO      = 1
+local MYLIST_STATUS_YES     = 2
+
 local anidb
 local frame
 local fileList
@@ -26,7 +30,9 @@ local fileInfos  = {}
 local lastFileId = 0 -- Local ID, not fid on AniDB.
 
 local settings = {
-	autoHash        = true,
+	autoHash        = false,--true,
+	autoAddToMylist = false, -- @Incomplete
+
 	movieExtensions = newSet{"avi","flv","mkv","mov","mp4","mpeg","mpg","ogm","ogv","swf","webm","wmv"},
 	trunkateFolders = true,
 }
@@ -36,7 +42,9 @@ local settings = {
 --==============================================================
 
 local addFileInfo, removeFileInfo
-local getFileStatus, getFileInfoByRow, getFileRow
+local eachFileInfoByRow
+local getFileInfoByRow, getFileRow
+local getFileStatus, getFileViewed
 local saveFileInfos, loadFileInfos
 local setFileInfo
 local updateFileList
@@ -60,18 +68,19 @@ function addFileInfo(path)
 		lastFileId = lastFileId+1
 
 		fileInfo = {
-			id        = lastFileId,
+			id           = lastFileId,
 
-			path      = path,
-			name      = "",
-			folder    = "",
+			path         = path,
+			name         = "",
+			folder       = "",
 
-			ed2k      = "",
-			size      = getFileSize(path),
+			ed2k         = "",
+			size         = getFileSize(path),
 
-			lid       = -1,
+			mylistStatus = MYLIST_STATUS_UNKNOWN,
+			lid          = -1,
 
-			isHashing = false,
+			isHashing    = false,
 		}
 	end
 
@@ -82,13 +91,17 @@ function addFileInfo(path)
 	setAndInsert(fileInfos, path, fileInfo)
 
 	local wxRow = listCtrlInsertRow(
-		fileList, fileInfo.name, fileInfo.folder, formatBytes(fileInfo.size), "?", getFileStatus(fileInfo)
+		fileList, fileInfo.name, fileInfo.folder, formatBytes(fileInfo.size),
+		getFileViewed(fileInfo), getFileStatus(fileInfo)
 	)
 	fileList:SetItemData(wxRow, fileInfo.id)
 
 	if settings.autoHash and fileInfo.ed2k == "" then
 		setFileInfo(fileInfo, "isHashing", true)
 		anidb:hashFile(path)
+
+	elseif fileInfo.lid == -1 and fileInfo.ed2k ~= "" and fileInfo.mylistStatus == MYLIST_STATUS_UNKNOWN then
+		anidb:getMylistByEd2k(fileInfo.ed2k, fileInfo.size)
 	end
 
 	return fileInfo
@@ -278,8 +291,11 @@ function setFileInfo(fileInfo, k, v)
 		return
 	end
 
-	if isAny(k, "ed2k","isHashing") then
+	if isAny(k, "ed2k","isHashing","mylistStatus") then
 		fileList:SetItem(wxRow, FILE_COLUMN_STATUS, getFileStatus(fileInfo))
+
+	elseif isAny(k, "lid") then
+		fileList:SetItem(wxRow, FILE_COLUMN_VIEWED, getFileViewed(fileInfo))
 	end
 end
 
@@ -287,10 +303,21 @@ end
 
 function getFileStatus(fileInfo)
 	return
-		fileInfo.isHashing     and "Calculating hash"
-		or fileInfo.ed2k == "" and "Not hashed"
+		nil
+		or fileInfo.mylistStatus == MYLIST_STATUS_YES and "In MyList"
+		or fileInfo.ed2k == "" and (fileInfo.isHashing and "Calculating hash" or "Not hashed")
 		or "Hashed"
 end
+
+function getFileViewed(fileInfo)
+	local lid = fileInfo.lid
+	if lid == -1 then  return "?"  end
+
+	local time = anidb:getCacheMylist(lid).viewdate
+	return time == 0 and "No" or os.date("%Y-%m-%d", time)
+end
+
+
 
 function getFileRow(fileInfo)
 	local wxRow = fileList:FindItem(-1, fileInfo.id)
@@ -299,6 +326,17 @@ end
 
 function getFileInfoByRow(wxRow)
 	return itemWith(fileInfos, "id", fileList:GetItemData(wxRow))
+end
+
+
+
+function eachFileInfoByRow(wxRows)
+	local i = 0
+	return function()
+		i = i+1
+		local wxRow = wxRows[i]
+		if wxRow then  return getFileInfoByRow(wxRow)  end
+	end
 end
 
 
@@ -315,6 +353,8 @@ local anidbEventHandlers = {
 					setFileInfo(fileInfo, "ed2k",      ed2kHash)
 					setFileInfo(fileInfo, "isHashing", false)
 					saveFileInfos()
+
+					anidb:getMylistByEd2k(fileInfo.ed2k, fileInfo.size)
 					break
 				end
 			end
@@ -345,13 +385,29 @@ local anidbEventHandlers = {
 		function(what, ...)
 			if what == "entry" then
 				local mylistEntry = ...
-				-- @@
+				local fileInfo    = itemWith(fileInfos, "ed2k", mylistEntry.ed2k)
+
+				if fileInfo then
+					setFileInfo(fileInfo, "lid",          mylistEntry.lid)
+					setFileInfo(fileInfo, "mylistStatus", MYLIST_STATUS_YES)
+					saveFileInfos()
+				end
+
+			elseif what == "none" then
+				local ed2kHash, fileSize = ...
+				local fileInfo = itemWith(fileInfos, "ed2k", ed2kHash)
+
+				if fileInfo then
+					setFileInfo(fileInfo, "lid",          -1) -- A previously existing entry may have been removed.
+					setFileInfo(fileInfo, "mylistStatus", MYLIST_STATUS_NO)
+					saveFileInfos()
+				end
 
 			elseif what == "selection" then
 				local mylistSelection = ...
 				-- @@
 
-			elseif what ~= "none" then
+			else
 				logprinterror(nil, "mylistgetsuccess: Unknown what value '%s'.", what)
 			end
 		end,
@@ -360,7 +416,8 @@ local anidbEventHandlers = {
 
 	["mylistaddsuccess"] =
 		function(mylistEntryPartial)
-			-- anidb:getMylist(mylistEntryPartial.lid) -- @@
+			-- @@ Update file info, and maybe:
+			-- anidb:getMylist(mylistEntryPartial.lid)
 		end,
 	["mylistaddsuccessmultiple"] =
 		function(count)
@@ -375,7 +432,7 @@ local anidbEventHandlers = {
 
 	["mylistdeletesuccess"] =
 		function(count)
-			-- @@
+			-- @@ Update file info.
 		end,
 	["mylistdeletefail"] =
 		function(userMessage) end,
@@ -423,6 +480,12 @@ local anidbEventHandlers = {
 log("~~~ MyHappyList ~~~")
 log(os.date"%Y-%m-%d %H:%M:%S")
 
+if DEBUG_LOCAL then
+	print("!! DEBUG (local) !!")
+elseif DEBUG then
+	print("!!!!!! DEBUG !!!!!!")
+end
+
 --[[
 for _, t in ipairs{wx, wxlua} do
 	for k, v in pairs(t) do
@@ -454,6 +517,8 @@ frame:CreateStatusBar()
 
 frame:DragAcceptFiles(true)
 
+frame:SetIcons(wx.wxIconBundle("gfx/appicon.ico", WX_BITMAP_TYPE_ANY))
+
 on(frame, "DROP_FILES", function(e, paths)
 	local pathsToAdd = {}
 
@@ -472,7 +537,9 @@ on(frame, "DROP_FILES", function(e, paths)
 			end)
 
 		elseif mode == "file" then
-			table.insert(pathsToAdd, path)
+			if settings.movieExtensions[getExtension(getFilename(path)):lower()] then
+				table.insert(pathsToAdd, path)
+			end
 		end
 
 		if pathsToAdd[MAX_DROPPED_FILES+1] then
@@ -506,7 +573,7 @@ setAccelerators(frame, accelerators)
 --==============================================================
 local menuFile  = wx.wxMenu()
 local menuEdit  = wx.wxMenu()
-local menuDebug = wx.wxMenu()
+local menuDebug = DEBUG and wx.wxMenu() or nil
 local menuHelp  = wx.wxMenu()
 
 -- File menu.
@@ -526,7 +593,7 @@ end)
 -- Debug menu.
 --------------------------------
 
-if DEBUG then
+if menuDebug then
 	newMenuItem(menuDebug, frame, "ping", function(e)
 		anidb:ping()
 	end)
@@ -536,16 +603,22 @@ if DEBUG then
 
 	newMenuItemSeparator(menuDebug)
 
-	newMenuItem(menuDebug, frame, "getMylistByFile", function(e)
-		anidb:getMylistByFile(getFileContents"local/exampleFilePathGb.txt")
-	end)
-	newMenuItem(menuDebug, frame, "addMylistByFile", function(e)
-		anidb:addMylistByFile(getFileContents"local/exampleFilePathGb.txt")
-	end)
-	newMenuItem(menuDebug, frame, "deleteMylist x2", function(e)
-		anidb:deleteMylist(115)
-		anidb:deleteMylist(2468)
-	end)
+	if DEBUG_LOCAL then
+		newMenuItem(menuDebug, frame, "getMylistByFile", function(e)
+			anidb:getMylistByFile(getFileContents"local/exampleFilePathGb.txt")
+		end)
+		newMenuItem(menuDebug, frame, "addMylistByFile", function(e)
+			anidb:addMylistByFile(getFileContents"local/exampleFilePathGb.txt")
+		end)
+		newMenuItem(menuDebug, frame, "deleteMylist x2", function(e)
+			anidb:deleteMylist(115)
+			anidb:deleteMylist(2468)
+		end)
+	else
+		newMenuItem(menuDebug, frame, "getMylistByEd2k", function(e)
+			anidb:getMylistByEd2k("9244372db8b1e10c5882d5e0ad814a35", 367902232) -- Excel Saga ep. 1
+		end)
+	end
 
 	newMenuItemSeparator(menuDebug)
 
@@ -563,7 +636,7 @@ end)
 -- newMenuItem(menuHelp, frame, "&Changes", "View the changelog", function(e)
 -- 	showMessage(frame, "Changelog", "@Incomplete")
 -- end)
-newMenuItem(menuHelp, frame, WX_ID_ABOUT, "&Log", "Show text log", function(e)
+newMenuItem(menuHelp, frame, "&Log", "Show text log", function(e)
 	showMessage(frame, "Log", "@Incomplete")
 end)
 newMenuItem(menuHelp, frame, WX_ID_ABOUT, "&About", "About MyHappyList", function(e)
@@ -573,10 +646,12 @@ end)
 --------------------------------
 
 local menuBar = wx.wxMenuBar()
+
 menuBar:Append(menuFile,  "&File")
 menuBar:Append(menuEdit,  "&Edit")
-menuBar:Append(menuDebug, "&Debug")
+if menuDebug then menuBar:Append(menuDebug, "&Debug") end
 menuBar:Append(menuHelp,  "&Help")
+
 frame:SetMenuBar(menuBar)
 
 -- AniDB update timer.
@@ -637,7 +712,7 @@ fileList = wx.wxListCtrl(
 FILE_COLUMN_FILE   = listCtrlInsertColumn(fileList, "File",    500)
 FILE_COLUMN_FOLDER = listCtrlInsertColumn(fileList, "Folder",  500)
 FILE_COLUMN_SIZE   = listCtrlInsertColumn(fileList, "Size",    80)
-FILE_COLUMN_VIEWED = listCtrlInsertColumn(fileList, "Watched", 60)
+FILE_COLUMN_VIEWED = listCtrlInsertColumn(fileList, "Watched", 80)
 FILE_COLUMN_STATUS = listCtrlInsertColumn(fileList, "Status",  120)
 
 on(fileList, "COMMAND_LIST_ITEM_ACTIVATED", function(e, wxRow)
@@ -664,10 +739,27 @@ on(fileList, "CONTEXT_MENU", function(e)
 	local wxRows = listCtrlGetSelectedRows(fileList)
 	if not wxRows[1] then  return  end
 
+	local anyIsInMylist             = false
+	local anyIsNotInMylistOrUnknown = false
+	local anyIsUnwatched            = false
+
+	for fileInfo in eachFileInfoByRow(wxRows) do
+		if fileInfo.mylistStatus == MYLIST_STATUS_YES then
+			anyIsInMylist = true
+		else
+			anyIsNotInMylistOrUnknown = true
+		end
+
+		if fileInfo.lid ~= -1 and anidb:getCacheMylist(fileInfo.lid).viewdate ~= 0 then
+			anyIsUnwatched = true
+		end
+	end
+
 	local popupMenu = wx.wxMenu()
+	----------------------------------------------------------------
 
 	if wxRows[2] then
-		newMenuItem(popupMenu, frame, #wxRows.." Files Selected"):Enable(false)
+		newMenuItemLabel(popupMenu, #wxRows.." Files Selected")
 		newMenuItemSeparator(popupMenu)
 	end
 
@@ -677,31 +769,64 @@ on(fileList, "CONTEXT_MENU", function(e)
 		openFileExternally(fileInfo.path)
 	end)
 
+	newMenuItem(popupMenu, frame, "Mark as &Watched", "Mark selected files as watched", function(e)
+		-- @@
+	end):Enable(anyIsUnwatched)
+
+	newMenuItem(popupMenu, frame, "Open &Contaning Folder", "Open the folder contaning the file", function(e)
+		local fileInfo = getFileInfoByRow(wxRows[1])
+		cmdAsync(cmdEscapeArgs("start", "explorer", "/select,"..toShortPath(fileInfo.path)))
+	end)
+
 	newMenuItem(popupMenu, frame, "Remove from List\tDelete", "Remove selected files from the list", function(e)
 		removeSelectedFiles()
 	end)
 
-	newMenuItem(popupMenu, frame, "Calculate hash", "Calculate ed2k hash for files", function(e)
-		for _, wxRow in ipairs(wxRows) do
-			local fileInfo = getFileInfoByRow(wxRow)
+	----------------------------------------------------------------
+	newMenuItemSeparator(popupMenu)
 
-			if fileInfo.ed2k == "" and not fileInfo.isHashing then
+	newMenuItem(popupMenu, frame, "Add to MyList", "Add file to MyList", function(e)
+		for fileInfo in eachFileInfoByRow(wxRows) do
+			if fileInfo.ed2k ~= "" then
+				anidb:addMylistByEd2k(fileInfo.ed2k, fileInfo.size)
+
+			elseif not fileInfo.isHashing then
 				setFileInfo(fileInfo, "isHashing", true)
 				anidb:hashFile(fileInfo.path)
 			end
 		end
-	end)
+	end):Enable(anyIsNotInMylistOrUnknown)
 
-	newMenuItemSeparator(popupMenu)
+	newMenuItem(popupMenu, frame, "Delete from MyList", "Delete file from MyList", function(e)
+		for fileInfo in eachFileInfoByRow(wxRows) do
+			if fileInfo.lid ~= -1 then
+				anidb:deleteMylist(fileInfo.lid)
+			end
+		end
+	end):Enable(anyIsInMylist)
 
-	newMenuItem(popupMenu, frame, "Add to MyList", "Add file to MyList", function(e)
-		-- @@
-	end)
+	if DEBUG then
+		newMenuItemSeparator(popupMenu)
 
-	newMenuItem(popupMenu, frame, "Mark as &Watched", "Mark selected files as watched", function(e)
-		-- @@
-	end)
+		newMenuItem(popupMenu, frame, "[DEBUG] Get MyList status", "Check if the selected files are in MyList", function(e)
+			for fileInfo in eachFileInfoByRow(wxRows) do
+				if fileInfo.ed2k ~= "" then
+					anidb:getMylistByEd2k(fileInfo.ed2k, fileInfo.size)
+				end
+			end
+		end)
 
+		newMenuItem(popupMenu, frame, "[DEBUG] Calculate hash", "Calculate ed2k hash for files", function(e)
+			for fileInfo in eachFileInfoByRow(wxRows) do
+				if fileInfo.ed2k == "" and not fileInfo.isHashing then
+					setFileInfo(fileInfo, "isHashing", true)
+					anidb:hashFile(fileInfo.path)
+				end
+			end
+		end)
+	end
+
+	----------------------------------------------------------------
 	listCtrlPopupMenu(fileList, popupMenu, wxRows[1], e:GetPosition())
 end)
 

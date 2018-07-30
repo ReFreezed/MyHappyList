@@ -31,9 +31,9 @@ exec lua "$0" "$@"
 --=
 --============================================================]]
 
-assert(loadfile("src/load.lua"))()
+assert(loadfile"src/load.lua")()
 
-_G.args = {...}
+_G.args = _G.args or {...}
 
 xpcall(
 	function()

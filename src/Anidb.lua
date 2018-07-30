@@ -16,6 +16,7 @@
 
 	clearMessageQueue
 	events
+	getCacheMylist
 	getLogin
 	hashFile
 	isLoggedIn
@@ -731,8 +732,9 @@ function updateNatInfo(self, port)
 		if port ~= self.lastPublicPort then
 			-- @Robustness: Make sure we don't end up here too many times within ~1 hour. [LOW]
 			_logprint("Port got deallocated. Decreasing ping delay.")
+			dropSession(self)
 
-			if natLimitLo > pingDelay then
+			if natLimitLo > pingDelay-10 then
 				natLimitLo = -1
 			end
 
@@ -749,8 +751,8 @@ function updateNatInfo(self, port)
 				natLimitUp = -1
 			end
 
-			natLimitLo = pingDelay
-			pingDelay  = natLimitUp > 0 and (natLimitLo+natLimitUp)/2 or pingDelay*1.5
+			natLimitLo = pingDelay-10
+			pingDelay  = natLimitUp > 0 and (pingDelay+natLimitUp)/2 or pingDelay*1.5
 		end
 
 		if not (pingDelay == self.pingDelay and natLimitLo == self.natLimitLower and natLimitUp == self.natLimitUpper) then
@@ -830,7 +832,10 @@ end
 
 function dropSession(self)
 	self.sessionKey = ""
-	self.isActive   = false -- Should we stop pinging here?
+
+	-- Note: We don't stop pinging here as we're most likely dropping the session
+	-- because AniDB notified us of it. That means a new port has opened!
+	-- self.isActive = false -- Bad!
 end
 
 
@@ -982,7 +987,10 @@ do
 
 		page.byId[id] = entry
 		table.insert(page, entry)
-		_logprint("Loaded %s '%s' entry %d.", (isPartial and "partial" or "full"), pageName, id)
+
+		if DEBUG then
+			_logprint("Loaded %s '%s' entry %d.", (isPartial and "partial" or "full"), pageName, id)
+		end
 
 		return entry
 	end
@@ -1339,7 +1347,8 @@ responseHandlers = {
 
 		-- 321 NO SUCH ENTRY
 		elseif statusCode == 321 then
-			addEvent(self, "mylistgetsuccess", "none", nil)
+			-- @Robustness @Check: Are ed2k and size params always set here?
+			addEvent(self, "mylistgetsuccess", "none", msg.params.ed2k, msg.params.size)
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
@@ -1956,6 +1965,16 @@ end
 function Anidb:hashFile(path)
 	assertarg(1, path, "string")
 	getEd2k(self, path, NOOP)
+end
+
+
+
+-- mylistEntry = getCacheMylist( lid [, acceptPartial=false ] )
+function Anidb:getCacheMylist(lid, acceptPartial)
+	return
+		self.cache.l.byId[lid]
+		or acceptPartial and self.cachePartial.l.byId[lid]
+		or nil
 end
 
 

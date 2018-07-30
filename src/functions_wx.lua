@@ -12,7 +12,7 @@
 
 	cast, is
 	eachChild
-	newMenuItem, newMenuItemSeparator, newButton, newText
+	newMenuItem, newMenuItemLabel, newMenuItemSeparator, newButton, newText
 	newTimer, setTimerDummyOwner
 	on, onAccelerator
 	setAccelerators
@@ -209,6 +209,13 @@ function newMenuItem(menu, eHandler, id, caption, helpText, onPress)
 		on(eHandler, id, "COMMAND_MENU_SELECTED", onPress)
 	end
 
+	return item
+end
+
+-- item = newMenuItemLabel( menu, caption )
+function newMenuItemLabel(menu, caption)
+	local item = menu:Append(wx.wxMenuItem(menu, wx.wxNewId(), caption))
+	item:Enable(false)
 	return item
 end
 

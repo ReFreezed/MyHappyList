@@ -768,13 +768,13 @@ do
 	end
 end
 
--- string, errorMessage = cmdCapture( cmd [, timeoutInSeconds=600 ] )
+-- output, errorMessage = cmdCapture( cmd [, timeoutInSeconds=600 ] )
 function cmdCapture(cmd, timeout)
 	timeout = timeout or 600
 
 	local outputPath = getTempFilePath()
 
-	if not cmdAsync(cmd.." > "..toWindowsPath(outputPath)) then
+	if not cmdAsync(cmd.." > "..cmdEscapeArgs(toWindowsPath(outputPath))) then
 		return nil, "Could not execute command: "..cmd
 	end
 
@@ -786,7 +786,11 @@ function cmdCapture(cmd, timeout)
 	-- Wait until the output file exists and is done writing.
 	while true do
 		local time = getTime()
-		socket.sleep(time < timeStart+5 and 1/30  or time < timeStart+10 and 1/5  or 1)
+		socket.sleep(
+			time    < timeStart+5  and 1/30
+			or time < timeStart+10 and 1/5
+			or 1
+		)
 
 		if isFileWritable(outputPath) then
 			break
@@ -804,13 +808,15 @@ function cmdCapture(cmd, timeout)
 end
 
 -- scriptCaptureAsync( scriptName, callback, arg1, ... )
+-- callback( output )
 function scriptCaptureAsync(scriptName, cb, ...)
 	local scriptPath = "src/scripts/"..scriptName..".lua"
 	local cmd        = cmdEscapeArgs("bin\\wlua5.1.exe", scriptPath, ...)
+	local args = pack(...)
 
 	local outputPath = getTempFilePath()
 
-	if not cmdAsync(cmd.." > "..toWindowsPath(outputPath)) then
+	if not cmdAsync(cmd.." > "..cmdEscapeArgs(toWindowsPath(outputPath))) then
 		return nil, "Could not execute command: "..cmd
 	end
 
@@ -931,7 +937,7 @@ end
 
 
 function openFileExternally(path)
-	cmdAsync(cmdEscapeArgs("start", "", path))
+	cmdAsync(cmdEscapeArgs("start", "", toShortPath(path)))
 end
 
 

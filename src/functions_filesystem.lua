@@ -204,12 +204,6 @@ function getFileMode(path)
 end
 
 function getFileSize(path)
-	print( --asdf
-		"getFileSize",
-		lfs.attributes(toShortPath(path), "size"),
-		F("%.0f", lfs.attributes(toShortPath(path), "size")),
-		path
-	)
 	return lfs.attributes(toShortPath(path), "size") -- lfs usage accepted.
 end
 
@@ -220,7 +214,7 @@ function getTempFilePath(asWindowsPath)
 	assert(createDirectory("temp"))
 
 	local path = "temp/"..os.tmpname():gsub("[\\/]+", ""):gsub("%.$", "")
-	writeFile(path, "")
+	-- writeFile(path, "") -- Bad! The program may want to wait for this file to exist from calling cmdAsync().
 
 	if asWindowsPath then
 		path = path:gsub("/", "\\")
@@ -274,12 +268,12 @@ do
 			return nil, F("Invalid mode '%s'.", modeFull)
 		end
 
-		if not isFile(path) then
-			return nil, path..": File does not exist"
-		end
-
 		update = (update == "+")
 		binary = (binary == "b" or not wx.wxGetOsDescription():find"Windows")
+
+		if mode == "r" and not isFile(path) then
+			return nil, path..": File does not exist"
+		end
 
 		local file
 		local bufferingMode = "full"

@@ -39,7 +39,7 @@ DELAY_BEFORE_RESENDING              = {30, 2*60, 5*60, 10*60, 30*60, 1*60*60, 2*
 
 NAT_LIMIT_MIN                       = 10
 NAT_LIMIT_MAX                       = 15*60
-NAT_LIMIT_TOLERANCE_BEFORE_SETTLING = 10
+NAT_LIMIT_TOLERANCE_BEFORE_SETTLING = 15
 
 MAX_DATA_LENGTH                     = 1400 -- Must be between 400 and 1400. (MTU, PPPoE etc.)
 
