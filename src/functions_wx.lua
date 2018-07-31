@@ -13,7 +13,7 @@
 	cast, is
 	eachChild
 	newMenuItem, newMenuItemLabel, newMenuItemSeparator, newButton, newText
-	newTimer, setTimerDummyOwner
+	newTimer
 	on, onAccelerator
 	setAccelerators
 	showMessage, showError
@@ -24,6 +24,7 @@
 	listCtrlPopupMenu
 	listCtrlSelectRows
 	listCtrlSetItem
+	listCtrlSort
 
 --============================================================]]
 
@@ -158,8 +159,8 @@ function listCtrlPopupMenu(listCtrl, menu, wxRow, x, y)
 	listCtrl:PopupMenu(menu, x, y)
 end
 
--- anyRowWasSelected = listCtrlSelectRows( listCtrl, wxIndices [, fallbackWxIndex ] )
--- anyRowWasSelected = listCtrlSelectRows( listCtrl, wxIndices [, fallbackToLastRow=false ] )
+-- anyRowWasSelected = listCtrlSelectRows( listCtrl [, wxIndices, fallbackWxIndex ] )
+-- anyRowWasSelected = listCtrlSelectRows( listCtrl [, wxIndices, fallbackToLastRow=false ] )
 function listCtrlSelectRows(listCtrl, wxIndices, fallback)
 	local count = listCtrl:GetItemCount()
 	if count == 0 then  return false  end
@@ -168,7 +169,7 @@ function listCtrlSelectRows(listCtrl, wxIndices, fallback)
 	local anyStatesWereSet = false
 
 	for wxRow = 0, count-1 do
-		if indexOf(wxIndices, wxRow) then
+		if wxIndices and indexOf(wxIndices, wxRow) then
 			listCtrl:SetItemState(
 				wxRow,
 				flags-(anyStatesWereSet and WX_LIST_STATE_FOCUSED or 0),
@@ -321,43 +322,54 @@ end
 
 
 
-do
-	local dummyOwner = nil
-
-	-- timer = newTimer( [ milliseconds, oneShot=false, ] callback )
-	function newTimer(milliseconds, oneShot, cb)
-		if type(milliseconds) ~= "number" then
-			milliseconds, oneShot, cb = nil, milliseconds, oneShot
-		end
-		if type(oneShot) ~= "boolean" then
-			oneShot, cb = false, oneShot
-		end
-
-		local timer = wx.wxTimer(dummyOwner)
-		timer:SetOwner(timer)
-
-		on(timer, "TIMER", cb)
-
-		if milliseconds then
-			timer:Start(milliseconds, oneShot)
-		end
-
-		return timer
+-- timer = newTimer( [ milliseconds, oneShot=false, ] callback )
+function newTimer(milliseconds, oneShot, cb)
+	if type(milliseconds) ~= "number" then
+		milliseconds, oneShot, cb = nil, milliseconds, oneShot
+	end
+	if type(oneShot) ~= "boolean" then
+		oneShot, cb = false, oneShot
 	end
 
-	function setTimerDummyOwner(obj)
-		dummyOwner = obj
+	local timer = wx.wxTimer(WX_NULL)
+	timer:SetOwner(timer)
+
+	on(timer, "TIMER", cb)
+
+	if milliseconds then
+		timer:Start(milliseconds, oneShot)
 	end
+
+	return timer
 end
 
 
 
+-- showMessage( [ window, ] caption, message )
 function showMessage(window, caption, message)
-	wx.wxMessageBox(message, caption, WX_OK + WX_ICON_INFORMATION + WX_CENTRE, window)
+	if type(window) == "string" then
+		window, caption, message = nil, window, caption
+		wx.wxMessageBox(message, caption, WX_OK + WX_ICON_INFORMATION + WX_CENTRE)
+	else
+		wx.wxMessageBox(message, caption, WX_OK + WX_ICON_INFORMATION + WX_CENTRE, window)
+	end
 end
 
+-- showError( [ window, ] caption, message )
 function showError(window, caption, message)
-	wx.wxMessageBox(message, caption, WX_OK + WX_ICON_ERROR + WX_CENTRE, window)
+	if type(window) == "string" then
+		window, caption, message = nil, window, caption
+		wx.wxMessageBox(message, caption, WX_OK + WX_ICON_ERROR + WX_CENTRE)
+	else
+		wx.wxMessageBox(message, caption, WX_OK + WX_ICON_ERROR + WX_CENTRE, window)
+	end
+end
+
+
+
+-- listCtrlSort( listCtrl, cb [, dataInt=0 ] )
+function listCtrlSort(listCtrl, cb, dataInt)
+	listCtrl:SortItems(wrapCall(cb), (dataInt or 0))
 end
 
 

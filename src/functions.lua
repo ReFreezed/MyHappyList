@@ -88,10 +88,22 @@ end
 
 
 function handleError(err)
-	print(debug.traceback(tostring(err), 2))
+	local errWithStack = debug.traceback(tostring(err), 2)
+	print(errWithStack)
 
 	if logFile then
 		logFile:close()
+	end
+
+	if not DEBUG then
+	 	wx.wxTextEntryDialog(
+	 		WX_NULL,
+	 		"An error ocurred and the program crashed! Sorry about that.\n"
+	 			.."The log file may have more information.\n\nMessage:",
+	 		"Error",
+	 		errWithStack,
+	 		WX_OK + WX_CENTRE + WX_TE_MULTILINE + WX_TE_DONTWRAP
+ 		):ShowModal()
 	end
 
 	os.exit(1)
@@ -811,8 +823,7 @@ end
 -- callback( output )
 function scriptCaptureAsync(scriptName, cb, ...)
 	local scriptPath = "src/scripts/"..scriptName..".lua"
-	local cmd        = cmdEscapeArgs("bin\\wlua5.1.exe", scriptPath, ...)
-	local args = pack(...)
+	local cmd        = cmdEscapeArgs([[wlua5.1.exe]], scriptPath, ...)
 
 	local outputPath = getTempFilePath()
 

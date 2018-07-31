@@ -23,16 +23,30 @@ local lastConnectionTime = 0
 
 
 
-local function _logprint(s, ...)
+--==============================================================
+--==============================================================
+--==============================================================
+
+local _logprint, _logprinterror
+local encodeEntry, encodeString
+local getCacheSharp
+local newServerResponseBuilder
+local parseDataFromClient
+local simulateServerResponse
+local startNewSession, checkSession
+
+
+
+function _logprint(s, ...)
 	logprint("FakeServer", s, ...)
 end
-local function _logprinterror(s, ...)
+function _logprinterror(s, ...)
 	logprinterror("FakeServer", s, ...)
 end
 
 
 
-local function startNewSession()
+function startNewSession()
 	session = {}
 
 	for i = 1, math.random(4, 8) do
@@ -44,7 +58,7 @@ local function startNewSession()
 	_logprint("Started session. (%s)", session)
 end
 
-local function checkSession(params, b)
+function checkSession(params, b)
 	if session == "" then
 		b("501 LOGIN FIRST\n")
 		return false
@@ -64,7 +78,7 @@ end
 
 
 
-local function parseDataFromClient(data)
+function parseDataFromClient(data)
 	local command, query = data:match"^([A-Z]+) (.*)$"
 	if not command then
 		_logprinterror("Invalid data format: %s", data)
@@ -115,7 +129,7 @@ end
 
 
 
-local function newServerResponseBuilder(params)
+function newServerResponseBuilder(params)
 	local b = newStringBuilder()
 
 	if params["tag"] then
@@ -128,7 +142,58 @@ end
 
 
 
-local function simulateServerResponse(udp, data)
+function getCacheSharp(pageName, id)
+	local path = F("cache/%s%d", pageName, id)
+
+	local file, err = openFile(path, "r")
+	if not file then  return nil, err  end
+
+	entry    = {}
+	local ln = 0
+
+	for line in file:lines() do
+		ln = ln+1
+
+		local k, v = parseSimpleKv(line, path, ln)
+
+		if k then  entry[k] = v  end
+	end
+
+	file:close()
+	return entry
+end
+
+
+
+function encodeEntry(...)
+	local values = {...}
+
+	for i, v in ipairs(values) do
+		if type(v) == "string" then
+			values[i] = encodeString(v)
+
+		elseif type(v) == "number" then
+			values[i] = F("%.0f", v)
+
+		else
+			values[i] = tostring(v)
+		end
+	end
+
+	return table.concat(values, "|")
+end
+
+function encodeString(s)
+	return (s:gsub("[\n'|]", {
+		["\n"] = "<br />",
+		["'"]  = "`",
+		["|"]  = "/",
+	}))
+end
+
+
+
+function simulateServerResponse(udp, data)
 	local time = getTime()
 
 	if port == -1 then
@@ -195,10 +260,36 @@ local function simulateServerResponse(udp, data)
 		local b = newServerResponseBuilder(params)
 
 		if checkSession(params, b) then
-			if params.lid or params.fid or (params.ed2k and params.size) then
-				b("221 MYLIST\n%d|417417|33333|410|810|1234000|4|1234567|Somewhere|Outer Space|Hmm...<br />Nothing to say.|2", tonumber(params.lid or 115))
+			local mylistEntry = nil
+
+			if params.ed2k == "9244372db8b1e10c5882d5e0ad814a35" and tonumber(params.size) == 367902232 then
+				mylistEntry = getCacheSharp("l", 252003620)
+			elseif params.ed2k == "cbce0f1101f33ef95ed87f6f986cf6b3" and tonumber(params.size) == 369066876 then
+				mylistEntry = getCacheSharp("l", 252003656)
+			end
+
+			if mylistEntry then
+				b("221 MYLIST\n")
+				b(encodeEntry(
+					mylistEntry.lid, mylistEntry.fid, mylistEntry.eid, mylistEntry.aid, mylistEntry.gid, mylistEntry.date,
+					mylistEntry.state, mylistEntry.viewdate, mylistEntry.storage, mylistEntry.source, mylistEntry.other,
+					mylistEntry.filestate
+				))
+
+			elseif params.lid or params.fid or (params.ed2k and params.size) then
+				b("321 NO SUCH ENTRY\n")
+
 			elseif params.aname or params.aid then
-				b("322 MULTIPLE FILES FOUND\nKoukaku Kidoutai STAND ALONE COMPLEX|26||1-26|1-26,S2-S27|||V-A|S2-S27|LMF|20-26|KAA|1-26|AonE|1-19|Anime-MX|1-3,9-20")
+				b("322 MULTIPLE FILES FOUND\n")
+				b(encodeEntry( -- int fid 1|...|int fid n
+					25, 748, 1468
+
+					-- The stuff below seem to be an incorrect example from the wiki. Doesn't seem
+					-- to match any reply from any existing command. I dunno... 2018-07-31
+
+					-- "Koukaku Kidoutai STAND ALONE COMPLEX", 26, "", "1-26", "1-26,S2-S27", "", "", "V-A", "S2-S27",
+					-- "LMF", "20-26", "KAA", "1-26", "AonE", "1-19", "Anime-MX", "1-3,9-20"
+				))
 			else
 				b("321 NO SUCH ENTRY\n")
 			end
@@ -273,5 +364,9 @@ local function simulateServerResponse(udp, data)
 end
 
 
+
+--==============================================================
+--==============================================================
+--==============================================================
 
 return simulateServerResponse

@@ -18,7 +18,7 @@ local path = ...
 
 xpcall(
 	function()
-		local output, err = cmdCapture(F([[utils\rhash.exe --ed2k "%s"]], path))
+		local output, err = cmdCapture(cmdEscapeArgs([[utils\rhash.exe]], "--ed2k", path))
 		if not output then
 			errorf("%s: Could not run rhash: %s", path, err)
 		end

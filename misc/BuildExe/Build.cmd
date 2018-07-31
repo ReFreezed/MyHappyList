@@ -2,7 +2,7 @@
 CD ..\..
 
 ECHO Making ico...
-utils\ImageMagick\convert.exe "misc\AppIcon\AppIcon*.png" "gfx\appicon.ico"
+utils\ImageMagick\convert.exe "misc\AppIcon\AppIcon0*.png" "gfx\appicon.ico"
 ECHO Making ico... done!
 
 ECHO Making exe...

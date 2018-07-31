@@ -1069,7 +1069,7 @@ do
 			ed2kHash = output:match"^ed2k: ([%da-f]+)"
 
 			if not ed2kHash then
-				_logprinterror("Calculating ed2k for '%s' failed: %s", path:match"[^/\\]+$", output)
+				_logprinterror("Calculating ed2k for '%s' failed: %s", getFilename(path), output)
 
 				pathEd2ks[path] = nil
 				pathSizes[path] = nil
@@ -1453,7 +1453,11 @@ responseHandlers = {
 					itemWith2(self.cachePartial.l, "lid",msg.params.lid, "size",msg.params.size)
 				)
 
-			addEvent(self, "mylistaddsuccess", mylistEntryMaybePartial)
+			if not mylistEntryMaybePartial then
+				_logprinterror("MyList entry added, but can't figure out how.")
+			else
+				addEvent(self, "mylistaddsuccess", mylistEntryMaybePartial)
+			end
 
 		-- 320 NO SUCH FILE
 		elseif statusCode == 320 and msg.params.ed2k then
@@ -1512,6 +1516,7 @@ responseHandlers = {
 
 				if mylistEntryMaybePartial then
 					cacheDelete(self, "l", mylistEntryMaybePartial)
+					addEvent(self, "mylistdeletesuccess", mylistEntryMaybePartial)
 				end
 
 			elseif msg.params.fid then
@@ -1521,6 +1526,7 @@ responseHandlers = {
 
 				if mylistEntryMaybePartial then
 					cacheDelete(self, "l", mylistEntryMaybePartial)
+					addEvent(self, "mylistdeletesuccess", mylistEntryMaybePartial)
 				end
 
 			elseif msg.params.ed2k then
@@ -1530,6 +1536,7 @@ responseHandlers = {
 
 				if mylistEntryMaybePartial then
 					cacheDelete(self, "l", mylistEntryMaybePartial)
+					addEvent(self, "mylistdeletesuccess", mylistEntryMaybePartial)
 				end
 
 			-- elseif msg.params.aname then
@@ -1545,8 +1552,6 @@ responseHandlers = {
 			else
 				_logprinterror("MyList entries were deleted but can't determine what.")
 			end
-
-			addEvent(self, "mylistdeletesuccess", count)
 
 		-- 411 NO SUCH MYLIST ENTRY
 		elseif statusCode == 411 then
