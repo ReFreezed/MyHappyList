@@ -12,11 +12,15 @@
 
 	cast, is
 	eachChild
+	getSize, getWidth, getHeight
 	newMenuItem, newMenuItemLabel, newMenuItemSeparator, newButton, newText
 	newTimer
 	on, onAccelerator
 	setAccelerators
-	showMessage, showError
+	setBoxSizer, setBoxSizerWithSpace
+	showButtonDialog, showMessage, showError, confirm
+
+	checkBoxClick
 
 	listCtrlGetSelectedRows, listCtrlGetFirstSelectedRow
 	listCtrlInsertColumn
@@ -26,13 +30,23 @@
 	listCtrlSetItem
 	listCtrlSort
 
+	statusBarInitFields
+	statusBarSetField
+
+	textCtrlSelectAll
+
 --============================================================]]
 
 
 
 -- wxObject:className = cast( wxObject [, className=actualClassOfWxObject ] )
+local classNameSubstitutes = {
+	["wxGauge95"] = "wxGauge",
+}
 function cast(obj, className)
+	-- print(obj:GetClassInfo():GetClassName())
 	className = className or obj:GetClassInfo():GetClassName()
+	className = classNameSubstitutes[className] or className
 	return obj:DynamicCast(className)
 end
 
@@ -77,7 +91,7 @@ function listCtrlInsertColumn(listCtrl, wxCol, heading, w)
 		wxCol, heading, w = listCtrl:GetColumnCount(), wxCol, heading
 	end
 
-	wxCol = listCtrl:InsertColumn(wxCol, heading, WX_LIST_FORMAT_LEFT, w or -1)
+	wxCol = listCtrl:InsertColumn(wxCol, heading, wxLIST_FORMAT_LEFT, w or -1)
 	return wxCol
 end
 
@@ -119,7 +133,7 @@ function listCtrlGetSelectedRows(listCtrl)
 	local wxRow     = -1
 
 	while true do
-		wxRow = listCtrl:GetNextItem(wxRow, WX_LIST_NEXT_ALL, WX_LIST_STATE_SELECTED)
+		wxRow = listCtrl:GetNextItem(wxRow, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED)
 		if wxRow == -1 then break end
 
 		table.insert(wxIndices, wxRow)
@@ -129,7 +143,7 @@ function listCtrlGetSelectedRows(listCtrl)
 end
 
 function listCtrlGetFirstSelectedRow(listCtrl)
-	local wxRow = listCtrl:GetNextItem(-1, WX_LIST_NEXT_ALL, WX_LIST_STATE_SELECTED)
+	local wxRow = listCtrl:GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED)
 
 	return wxRow >= 1 and wxRow or nil
 end
@@ -165,14 +179,14 @@ function listCtrlSelectRows(listCtrl, wxIndices, fallback)
 	local count = listCtrl:GetItemCount()
 	if count == 0 then  return false  end
 
-	local flags = WX_LIST_STATE_SELECTED + WX_LIST_STATE_FOCUSED
+	local flags = wxLIST_STATE_SELECTED + wxLIST_STATE_FOCUSED
 	local anyStatesWereSet = false
 
 	for wxRow = 0, count-1 do
 		if wxIndices and indexOf(wxIndices, wxRow) then
 			listCtrl:SetItemState(
 				wxRow,
-				flags-(anyStatesWereSet and WX_LIST_STATE_FOCUSED or 0),
+				flags-(anyStatesWereSet and wxLIST_STATE_FOCUSED or 0),
 				flags
 			)
 			anyStatesWereSet = true
@@ -235,12 +249,15 @@ function newButton(parent, id, caption, pos, size, onPress)
 		size, onPress = nil, size
 	end
 
-	id   = id   or WX_ID_ANY
-	pos  = pos  or WX_DEFAULT_POSITION
-	size = size or WX_DEFAULT_SIZE
+	id   = id   or wxID_ANY
+	pos  = pos  or wxDEFAULT_POSITION
+	size = size or wxDEFAULT_SIZE
 
 	local button = wx.wxButton(parent, id, caption, pos, size)
-	on(button, "COMMAND_BUTTON_CLICKED", onPress)
+
+	if onPress then
+		on(button, "COMMAND_BUTTON_CLICKED", onPress)
+	end
 
 	return button
 end
@@ -251,9 +268,9 @@ function newText(parent, id, label, pos, size)
 		id, label, pos, size = nil, id, label, pos
 	end
 
-	id   = id   or WX_ID_ANY
-	pos  = pos  or WX_DEFAULT_POSITION
-	size = size or WX_DEFAULT_SIZE
+	id   = id   or wxID_ANY
+	pos  = pos  or wxDEFAULT_POSITION
+	size = size or wxDEFAULT_SIZE
 
 	local textObj = wx.wxStaticText(parent, id, label, pos, size)
 	return textObj
@@ -262,16 +279,24 @@ end
 
 
 -- on( wxObject, [ id, ] eventType, callback )
+-- callback( event, eventSpecificArgument1, ... )
 do
 	local eventExpanders = {
+		["CHAR_HOOK"] = function(e)
+			return e:GetKeyCode()
+		end,
+		["COMMAND_LIST_ITEM_ACTIVATED"] = function(e)
+			return e:GetIndex()--, e:GetColumn()
+		end,
 		["DROP_FILES"] = function(e)
 			return e:GetFiles()
 		end,
 		["KEY_DOWN"] = function(e)
 			return e:GetKeyCode()
 		end,
-		["COMMAND_LIST_ITEM_ACTIVATED"] = function(e)
-			return e:GetIndex()--, e:GetColumn()
+		["SIZE"] = function(e)
+			local size = e:GetSize()
+			return size:GetWidth(), size:GetHeight()
 		end,
 	}
 
@@ -304,9 +329,9 @@ function onAccelerator(obj, accelerators, modKeys, kc, onPress)
 	local id    = wx.wxNewId()
 	local flags = 0
 
-	if modKeys:find("a", 1, true) then  flags = flags+WX_ACCEL_ALT    end
-	if modKeys:find("c", 1, true) then  flags = flags+WX_ACCEL_CTRL   end
-	if modKeys:find("s", 1, true) then  flags = flags+WX_ACCEL_SHIFT  end
+	if modKeys:find("a", 1, true) then  flags = flags+wxACCEL_ALT    end
+	if modKeys:find("c", 1, true) then  flags = flags+wxACCEL_CTRL   end
+	if modKeys:find("s", 1, true) then  flags = flags+wxACCEL_SHIFT  end
 
 	on(obj, id, "COMMAND_MENU_SELECTED", onPress)
 	table.insert(accelerators, {flags, kc, id})
@@ -331,7 +356,7 @@ function newTimer(milliseconds, oneShot, cb)
 		oneShot, cb = false, oneShot
 	end
 
-	local timer = wx.wxTimer(WX_NULL)
+	local timer = wx.wxTimer(wxNULL)
 	timer:SetOwner(timer)
 
 	on(timer, "TIMER", cb)
@@ -345,13 +370,102 @@ end
 
 
 
+-- index = showButtonDialog( window, caption, message, buttonLabels [, icon=wxART_INFORMATION ] )
+-- Returns nil if no button was pressed.
+local ICONS = {
+	[wxICON_NONE]        = "",
+	[wxICON_ERROR]       = wxART_ERROR,
+	[wxICON_WARNING]     = wxART_WARNING,
+	[wxICON_QUESTION]    = wxART_QUESTION,
+	[wxICON_INFORMATION] = wxART_INFORMATION,
+	[wxICON_EXCLAMATION] = wxART_WARNING,
+	[wxICON_HAND]        = wxART_ERROR,
+	-- [wxICON_AUTH_NEEDED] = ?,
+}
+function showButtonDialog(window, caption, message, labels, icon)
+	local dialog      = wx.wxDialog(window, wxID_ANY, caption)
+	local sizerDialog = wx.wxBoxSizer(wxVERTICAL)
+
+	on(dialog, "CHAR_HOOK", function(e, kc)
+		if kc == KC_ESCAPE then
+			dialog:EndModal(wxID_CANCEL)
+		else
+			e:Skip()
+		end
+	end)
+
+	----------------------------------------------------------------
+
+	local panel = wx.wxPanel(dialog, wx.wxID_ANY)
+	panel:SetBackgroundColour(wx.wxColour(255, 255, 255))
+
+	local sizer = wx.wxBoxSizer(wxHORIZONTAL)
+
+	-- Icon.
+	local iconName = ICONS[icon] or ICONS[wxICON_INFORMATION]
+	if iconName ~= "" then
+		local bm    = wx.wxArtProvider.GetBitmap(iconName)
+		local bmObj = wx.wxStaticBitmap(panel, wxID_ANY, bm)
+		sizer:Add(bmObj, 0, wxALIGN_CENTER_VERTICAL)
+
+		sizer:AddSpacer(8)
+	end
+
+	-- Message.
+	local textObj = wx.wxStaticText(panel, wxID_ANY, message)
+	textObj:Wrap(300)
+	sizer:Add(textObj, 0, wxALIGN_CENTER_VERTICAL)
+
+	local sizerWrapper = wx.wxBoxSizer(wxHORIZONTAL)
+	sizerWrapper:Add(sizer, 0, wxGROW_ALL, 24)
+
+	panel:SetAutoLayout(true)
+	panel:SetSizer(sizerWrapper)
+
+	sizerDialog:Add(panel, 0, wxGROW_ALL)
+
+	----------------------------------------------------------------
+
+	local sizer = wx.wxBoxSizer(wxHORIZONTAL)
+	sizer:AddStretchSpacer()
+
+	local buttonIds = {}
+
+	-- Buttons.
+	for i, label in ipairs(labels) do
+		if i > 1 then  sizer:AddSpacer(8)  end
+
+		local id = wx.wxNewId()
+		table.insert(buttonIds, id)
+
+		local button = newButton(dialog, id, label, function(e)
+			dialog:EndModal(id)
+		end)
+
+		sizer:Add(button)
+	end
+
+	sizerDialog:Add(sizer, 0, wxGROW_ALL, 8)
+
+	----------------------------------------------------------------
+
+	dialog:SetAutoLayout(true)
+	dialog:SetSizer(sizerDialog)
+
+	dialog:Fit()
+	dialog:Centre()
+
+	local id = dialog:ShowModal()
+	return indexOf(buttonIds, id)
+end
+
 -- showMessage( [ window, ] caption, message )
 function showMessage(window, caption, message)
 	if type(window) == "string" then
 		window, caption, message = nil, window, caption
-		wx.wxMessageBox(message, caption, WX_OK + WX_ICON_INFORMATION + WX_CENTRE)
+		wx.wxMessageBox(message, caption, wxOK + wxICON_INFORMATION + wxCENTRE)
 	else
-		wx.wxMessageBox(message, caption, WX_OK + WX_ICON_INFORMATION + WX_CENTRE, window)
+		wx.wxMessageBox(message, caption, wxOK + wxICON_INFORMATION + wxCENTRE, window)
 	end
 end
 
@@ -359,10 +473,20 @@ end
 function showError(window, caption, message)
 	if type(window) == "string" then
 		window, caption, message = nil, window, caption
-		wx.wxMessageBox(message, caption, WX_OK + WX_ICON_ERROR + WX_CENTRE)
+		wx.wxMessageBox(message, caption, wxOK + wxICON_ERROR + wxCENTRE)
 	else
-		wx.wxMessageBox(message, caption, WX_OK + WX_ICON_ERROR + WX_CENTRE, window)
+		wx.wxMessageBox(message, caption, wxOK + wxICON_ERROR + wxCENTRE, window)
 	end
+end
+
+-- bool = confirm( frame, caption, message [, okLabel="OK", cancelLabel="Cancel", icon=wxICON_QUESTION ] )
+function confirm(frame, caption, message, okLabel, cancelLabel, icon)
+	okLabel     = okLabel     or "OK"
+	cancelLabel = cancelLabel or "Cancel"
+	icon        = icon        or wxICON_QUESTION
+
+	local i = showButtonDialog(frame, caption, message, {okLabel, cancelLabel}, icon)
+	return i == 1
 end
 
 
@@ -370,6 +494,101 @@ end
 -- listCtrlSort( listCtrl, cb [, dataInt=0 ] )
 function listCtrlSort(listCtrl, cb, dataInt)
 	listCtrl:SortItems(wrapCall(cb), (dataInt or 0))
+end
+
+
+
+-- width, height = getSize( wxObject )
+function getSize(obj)
+	local size = obj:GetSize()
+	return size:GetWidth(), size:GetHeight()
+end
+
+function getWidth(obj)
+	return obj:GetSize():GetWidth()
+end
+
+function getHeight(obj)
+	return obj:GetSize():GetHeight()
+end
+
+
+
+function statusBarInitFields(statusBar, widths)
+	statusBar:SetFieldsCount(#widths)
+	statusBar:SetStatusWidths(widths)
+end
+
+
+
+-- statusBarSetField( statusBar, wxIndex, text )
+-- statusBarSetField( statusBar, wxIndex, format, ... )
+function statusBarSetField(statusBar, wxIndex, s, ...)
+	if select("#", ...) > 0 then
+		s = s:format(...)
+	end
+	statusBar:PushStatusText(s, wxIndex)
+end
+
+
+
+-- sizer = setBoxSizer( wxWindow, direction [, proportion=0, flags, border=0 ] )
+-- direction = wxHORIZONTAL|wxVERTICAL
+function setBoxSizer(window, direction, ...)
+	local sizer = wx.wxBoxSizer(direction)
+
+	for _, child in eachChild(window) do
+		sizer:Add(child, ...)
+	end
+
+	window:SetAutoLayout(true)
+	window:SetSizer(sizer)
+
+	return sizer
+end
+
+-- sizer = setBoxSizerWithSpace( wxWindow, direction, spaceOutside, spaceBetween [, proportion=0, flags ] )
+-- direction = wxHORIZONTAL|wxVERTICAL
+-- Note: wxALL gets added to the flags automatically.
+function setBoxSizerWithSpace(window, direction, spaceOutside, spaceBetween, proportion, flags)
+	local sizer = wx.wxBoxSizer(direction)
+
+	for i, child in eachChild(window) do
+		if i > 1 then
+			sizer:AddSpacer(spaceBetween-2*spaceOutside)
+		end
+		sizer:Add(child, (proportion or 0), (flags or 0)+wxALL, spaceOutside)
+	end
+
+	window:SetAutoLayout(true)
+	window:SetSizer(sizer)
+
+	return sizer
+end
+
+-- spacer, border = getSizerSpace( spaceOutside, spaceBetween )
+function getSizerSpace(spaceOutside, spaceBetween)
+	return spaceBetween-2*spaceOutside, spaceOutside
+end
+
+
+
+function checkBoxClick(checkbox)
+	local state = not checkbox:IsChecked()
+
+	checkbox:SetValue(state)
+
+	local e = wx.wxCommandEvent(wx.wxEVT_COMMAND_CHECKBOX_CLICKED, checkbox:GetId())
+	e:SetEventObject(checkbox)
+	e:SetInt(state and 1 or 0)
+
+	checkbox:ProcessEvent(e)
+end
+
+
+
+function textCtrlSelectAll(textCtrl)
+	textCtrl:SetSelection(0, textCtrl:GetLastPosition())
 end
 
 

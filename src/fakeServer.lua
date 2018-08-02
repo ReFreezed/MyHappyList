@@ -29,7 +29,7 @@ local lastConnectionTime = 0
 
 local _logprint, _logprinterror
 local encodeEntry, encodeString
-local getCacheSharp
+local getCacheSharp, getMylistSharp
 local newServerResponseBuilder
 local parseDataFromClient
 local simulateServerResponse
@@ -163,6 +163,15 @@ function getCacheSharp(pageName, id)
 	return entry
 end
 
+function getMylistSharp(params)
+	if     tonumber(params.lid) == 252003620 or params.ed2k == "9244372db8b1e10c5882d5e0ad814a35" and tonumber(params.size) == 367902232 then
+		return getCacheSharp("l", 252003620)
+	elseif tonumber(params.lid) == 252003656 or params.ed2k == "cbce0f1101f33ef95ed87f6f986cf6b3" and tonumber(params.size) == 369066876 then
+		return getCacheSharp("l", 252003656)
+	end
+	return nil
+end
+
 
 
 function encodeEntry(...)
@@ -260,13 +269,7 @@ function simulateServerResponse(udp, data)
 		local b = newServerResponseBuilder(params)
 
 		if checkSession(params, b) then
-			local mylistEntry = nil
-
-			if params.ed2k == "9244372db8b1e10c5882d5e0ad814a35" and tonumber(params.size) == 367902232 then
-				mylistEntry = getCacheSharp("l", 252003620)
-			elseif params.ed2k == "cbce0f1101f33ef95ed87f6f986cf6b3" and tonumber(params.size) == 369066876 then
-				mylistEntry = getCacheSharp("l", 252003656)
-			end
+			local mylistEntry = getMylistSharp(params)
 
 			if mylistEntry then
 				b("221 MYLIST\n")
@@ -276,7 +279,7 @@ function simulateServerResponse(udp, data)
 					mylistEntry.filestate
 				))
 
-			elseif params.lid or params.fid or (params.ed2k and params.size) then
+			elseif params.lid or params.fid or params.ed2k then
 				b("321 NO SUCH ENTRY\n")
 
 			elseif params.aname or params.aid then
@@ -324,7 +327,8 @@ function simulateServerResponse(udp, data)
 					-- b("310 FILE ALREADY IN MYLIST\n115|417417|33333|410|810|1234000|4|1234567|Somewhere|Outer Space|Hmm...<br />Nothing to say.|2")
 					-- b("322 MULTIPLE FILES FOUND\n{int4 fid 1}|{int4 fid 2}|...|{int4 fid n}")
 				else
-					b("210 MYLIST ENTRY ADDED\n%d", tonumber(params.lid or 2468))
+					local mylistEntry = getMylistSharp(params)
+					b("210 MYLIST ENTRY ADDED\n%d", tonumber(mylistEntry and mylistEntry.lid or params.lid or 2468))
 				end
 			else
 				b("311 MYLIST ENTRY EDITED\n%s", ((params.aname or params.aid) and "5" or ""))

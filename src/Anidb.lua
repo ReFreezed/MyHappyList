@@ -20,13 +20,13 @@
 	getLogin
 	hashFile
 	isLoggedIn
-	isSendingAnyMessage, getQueuedMessageCount
+	isSendingAnyMessage, getActiveMessageCount, getQueuedMessageCount
 	update
 
 	-- Server communication.
 	addMylistByFile, addMylistByEd2k
 	deleteMylist
-	getMylistByFile, getMylistByEd2k
+	getMylist, getMylistByFile, getMylistByEd2k
 	login, logout
 	ping
 
@@ -76,24 +76,6 @@ local MESSAGE_STAGE_ABORTED           = 5
 
 local BOOL_FALSE                      = "0"
 local BOOL_TRUE                       = "1"
-
-local MYLIST_STATE_UNKNOWN            = 0
-local MYLIST_STATE_INTERNAL_STORAGE   = 1
-local MYLIST_STATE_EXTERNAL_STORAGE   = 2
-local MYLIST_STATE_DELETED            = 3
-local MYLIST_STATE_REMOTE_STORAGE     = 4
-
-local FILE_STATE_NORMAL_ORIGINAL      = 0   -- normal
-local FILE_STATE_CORRUPTED_OR_BAD_CRC = 1   -- normal
-local FILE_STATE_SELF_EDITED          = 2   -- normal
-local FILE_STATE_SELF_RIPPED          = 10  -- generic
-local FILE_STATE_ON_DVD               = 11  -- generic
-local FILE_STATE_ON_VHS               = 12  -- generic
-local FILE_STATE_ON_TV                = 13  -- generic
-local FILE_STATE_IN_THEATERS          = 14  -- generic
-local FILE_STATE_STREAMED             = 15  -- normal
-local FILE_STATE_ON_BLURAY            = 16  -- generic
-local FILE_STATE_OTHER                = 100 -- normal
 
 local ED2K_STATE_IN_PROGRESS          = 1
 local ED2K_STATE_SUCCESS              = 2
@@ -621,6 +603,8 @@ function addMessage(self, msg, first)
 
 	self.messages[msg.tag] = msg
 	table.insert(self.messages, i, msg)
+
+	addEvent(self, "messagecount", #self.messages)
 end
 
 -- Note: We allow removeMessage() to be called more than once, unlike addMessage().
@@ -630,6 +614,8 @@ function removeMessage(self, msg)
 
 	self.messages[msg.tag] = nil
 	removeItem(self.messages, msg)
+
+	addEvent(self, "messagecount", #self.messages)
 end
 
 
@@ -795,11 +781,11 @@ end
 
 
 function isAnyMessageInTransit(self)
-	return itemWith(self.messages, "stage", MESSAGE_STAGE_SENT) ~= nil
+	return itemWith(self.messages, "stage",MESSAGE_STAGE_SENT) ~= nil
 end
 
 function isMessageInQueue(self, command)
-	return itemWith2(self.messages, "stage",MESSAGE_STAGE_QUEUE, "command",command) ~= nil
+	return itemWith(self.messages, "stage",MESSAGE_STAGE_QUEUE, "command",command) ~= nil
 end
 
 
@@ -915,7 +901,7 @@ do
 		local page = (isPartial and self.cachePartial or self.cache)[pageName]
 
 		if page.byId[id] then
-			local _, i = itemWith(page, "id", entry.id)
+			local _, i = itemWith(page, "id",entry.id)
 			if not i then
 				errorf("Cache page '%s' is out of sync regarding entry %d.", pageName, id)
 			end
@@ -1388,7 +1374,7 @@ responseHandlers = {
 				storage   = msg.params.storage,
 				source    = msg.params.source,
 				other     = msg.params.other,
-				filestate = FILE_STATE_NORMAL_ORIGINAL,
+				filestate = MYLIST_FILESTATE_NORMAL_ORIGINAL,
 				ed2k      = msg.params.ed2k, -- Extra. May be nil.
 				size      = msg.params.size, -- Extra. May be nil.
 				path      = getPathByEd2k(msg.params.ed2k), -- Extra. May be nil.
@@ -1445,12 +1431,12 @@ responseHandlers = {
 					itemWith(self.cachePartial.l, "fid",msg.params.fid)
 				)
 				or msg.params.ed2k and (
-					itemWith2(self.cache.l,        "ed2k",msg.params.ed2k, "size",msg.params.size) or
-					itemWith2(self.cachePartial.l, "ed2k",msg.params.ed2k, "size",msg.params.size)
+					itemWith(self.cache.l,        "ed2k",msg.params.ed2k, "size",msg.params.size) or
+					itemWith(self.cachePartial.l, "ed2k",msg.params.ed2k, "size",msg.params.size)
 				)
 				or msg.params.lid and (
-					itemWith2(self.cache.l,        "lid",msg.params.lid, "size",msg.params.size) or
-					itemWith2(self.cachePartial.l, "lid",msg.params.lid, "size",msg.params.size)
+					itemWith(self.cache.l,        "lid",msg.params.lid, "size",msg.params.size) or
+					itemWith(self.cachePartial.l, "lid",msg.params.lid, "size",msg.params.size)
 				)
 
 			if not mylistEntryMaybePartial then
@@ -1511,8 +1497,8 @@ responseHandlers = {
 
 			if msg.params.lid then
 				local mylistEntryMaybePartial
-					=  itemWith(self.cache.l,        "lid", msg.params.lid)
-					or itemWith(self.cachePartial.l, "lid", msg.params.lid)
+					=  itemWith(self.cache.l,        "lid",msg.params.lid)
+					or itemWith(self.cachePartial.l, "lid",msg.params.lid)
 
 				if mylistEntryMaybePartial then
 					cacheDelete(self, "l", mylistEntryMaybePartial)
@@ -1521,8 +1507,8 @@ responseHandlers = {
 
 			elseif msg.params.fid then
 				local mylistEntryMaybePartial
-					=  itemWith(self.cache.l,        "fid", msg.params.fid)
-					or itemWith(self.cachePartial.l, "fid", msg.params.fid)
+					=  itemWith(self.cache.l,        "fid",msg.params.fid)
+					or itemWith(self.cachePartial.l, "fid",msg.params.fid)
 
 				if mylistEntryMaybePartial then
 					cacheDelete(self, "l", mylistEntryMaybePartial)
@@ -1531,8 +1517,8 @@ responseHandlers = {
 
 			elseif msg.params.ed2k then
 				local mylistEntryMaybePartial
-					=  itemWith2(self.cache.l,        "ed2k",msg.params.ed2k, "size",msg.params.size)
-					or itemWith2(self.cachePartial.l, "ed2k",msg.params.ed2k, "size",msg.params.size)
+					=  itemWith(self.cache.l,        "ed2k",msg.params.ed2k, "size",msg.params.size)
+					or itemWith(self.cachePartial.l, "ed2k",msg.params.ed2k, "size",msg.params.size)
 
 				if mylistEntryMaybePartial then
 					cacheDelete(self, "l", mylistEntryMaybePartial)
@@ -1712,6 +1698,35 @@ end
 
 
 
+-- getMylist( lid [, forceGetFresh=false ] )
+function Anidb:getMylist(lid, force)
+	assertarg(1, lid,   "number")
+	assertarg(2, force, "boolean","nil")
+
+	for _, msg in ipairs(self.messages) do
+		if msg.command == "MYLIST" and msg.params.lid == lid then
+			return
+		end
+	end
+
+	if not force then
+		local mylistEntry = itemWith(self.cache.l, "lid",lid)
+		if mylistEntry then
+			addEvent(self, "mylistgetsuccess", "entry", mylistEntry)
+			return
+		end
+	end
+
+	-- MYLIST lid=int&s=str
+	local params = {
+		["lid"] = lid,
+		["s"]   = "",
+	}
+
+	self:login()
+	send(self, "MYLIST", params)
+end
+
 -- getMylistByFile( path )
 -- getMylistByFile( fileId )
 function Anidb:getMylistByFile(pathOrFileId)
@@ -1742,7 +1757,7 @@ function Anidb:getMylistByEd2k(ed2kHash, fileSize)
 		end
 	end
 
-	local mylistEntry = itemWith2(self.cache.l, "ed2k",ed2kHash, "size",fileSize)
+	local mylistEntry = itemWith(self.cache.l, "ed2k",ed2kHash, "size",fileSize)
 	if mylistEntry then
 		addEvent(self, "mylistgetsuccess", "entry", mylistEntry)
 		return
@@ -1792,8 +1807,8 @@ function Anidb:addMylistByEd2k(ed2kHash, fileSize)
 	end
 
 	local mylistEntryMaybePartial
-		=  itemWith2(self.cache.l,        "ed2k",ed2kHash, "size",fileSize)
-		or itemWith2(self.cachePartial.l, "ed2k",ed2kHash, "size",fileSize)
+		=  itemWith(self.cache.l,        "ed2k",ed2kHash, "size",fileSize)
+		or itemWith(self.cachePartial.l, "ed2k",ed2kHash, "size",fileSize)
 
 	if mylistEntryMaybePartial then
 		addEvent(self, "mylistaddsuccess", mylistEntryMaybePartial)
@@ -1938,6 +1953,10 @@ end
 
 function Anidb:isSendingAnyMessage()
 	return isAnyMessageInTransit(self)
+end
+
+function Anidb:getActiveMessageCount()
+	return #self.messages
 end
 
 function Anidb:getQueuedMessageCount()

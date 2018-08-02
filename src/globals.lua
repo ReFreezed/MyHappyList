@@ -63,6 +63,25 @@ socket      = require"socket"
 
 _print      = print
 
+-- AniDB.
+MYLIST_STATE_UNKNOWN                  = 0
+MYLIST_STATE_INTERNAL_STORAGE         = 1
+MYLIST_STATE_EXTERNAL_STORAGE         = 2
+MYLIST_STATE_DELETED                  = 3
+MYLIST_STATE_REMOTE_STORAGE           = 4
+
+MYLIST_FILESTATE_NORMAL_ORIGINAL      = 0   -- normal
+MYLIST_FILESTATE_CORRUPTED_OR_BAD_CRC = 1   -- normal
+MYLIST_FILESTATE_SELF_EDITED          = 2   -- normal
+MYLIST_FILESTATE_SELF_RIPPED          = 10  -- generic
+MYLIST_FILESTATE_ON_DVD               = 11  -- generic
+MYLIST_FILESTATE_ON_VHS               = 12  -- generic
+MYLIST_FILESTATE_ON_TV                = 13  -- generic
+MYLIST_FILESTATE_IN_THEATERS          = 14  -- generic
+MYLIST_FILESTATE_STREAMED             = 15  -- normal
+MYLIST_FILESTATE_ON_BLURAY            = 16  -- generic
+MYLIST_FILESTATE_OTHER                = 100 -- normal
+
 
 
 -- Variables.

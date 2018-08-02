@@ -28,6 +28,7 @@ print_lua = nil
 for _, t in ipairs{wx, wxlua} do
 	for k, v in pairs(t) do
 		k = k:gsub("^wx", "")
+
 		if k == k:upper() and (type(v) == "number" or type(v) == "string") then
 
 			-- Key code: remap WXK_* to KC_*
@@ -36,9 +37,9 @@ for _, t in ipairs{wx, wxlua} do
 				-- assert(not _G[k], k)
 				_G[k] = v
 
-			-- Other: remap to WX_*
+			-- Other: remap to wx*
 			else
-				k = "WX_"..k
+				k = "wx"..k
 				-- assert(not _G[k], k)
 				_G[k] = v
 			end
@@ -48,123 +49,128 @@ for _, t in ipairs{wx, wxlua} do
 end
 
 -- Numbers.
-WX_DEFAULT_COORD                    = wx.wxDefaultCoord
-WX_DRAG_ALLOW_MOVE                  = wx.wxDrag_AllowMove
-WX_DRAG_COPY_ONLY                   = wx.wxDrag_CopyOnly
-WX_DRAG_DEFAULT_MOVE                = wx.wxDrag_DefaultMove
-WX_DRAG_RESULT_CANCEL               = wx.wxDragCancel
-WX_DRAG_RESULT_COPY                 = wx.wxDragCopy
-WX_DRAG_RESULT_ERROR                = wx.wxDragError
-WX_DRAG_RESULT_LINK                 = wx.wxDragLink
-WX_DRAG_RESULT_MOVE                 = wx.wxDragMove
-WX_DRAG_RESULT_NONE                 = wx.wxDragNone
-WX_INVALID_TEXT_COORD               = wx.wxInvalidTextCoord
-WX_LAYOUT_DIRECTION_DEFAULT         = wx.wxLayout_Default
-WX_LAYOUT_DIRECTION_LEFT_TO_RIGHT   = wx.wxLayout_LeftToRight
-WX_LAYOUT_DIRECTION_RIGHT_TO_LEFT   = wx.wxLayout_RightToLeft
-WX_LOG_LEVEL_DEBUG                  = wx.wxLOG_Debug
-WX_LOG_LEVEL_ERROR                  = wx.wxLOG_Error
-WX_LOG_LEVEL_FATAL_ERROR            = wx.wxLOG_FatalError
-WX_LOG_LEVEL_INFO                   = wx.wxLOG_Info
-WX_LOG_LEVEL_MAX                    = wx.wxLOG_Max
-WX_LOG_LEVEL_MESSAGE                = wx.wxLOG_Message
-WX_LOG_LEVEL_PROGRESS               = wx.wxLOG_Progress
-WX_LOG_LEVEL_STATUS                 = wx.wxLOG_Status
-WX_LOG_LEVEL_TRACE                  = wx.wxLOG_Trace
-WX_LOG_LEVEL_USER                   = wx.wxLOG_User
-WX_LOG_LEVEL_WARNING                = wx.wxLOG_Warning
-WX_OUT_CODE_INSIDE                  = wx.wxInside
-WX_OUT_CODE_OUT_BOTTOM              = wx.wxOutBottom
-WX_OUT_CODE_OUT_LEFT                = wx.wxOutLeft
-WX_OUT_CODE_OUT_RIGHT               = wx.wxOutRight
-WX_OUT_CODE_OUT_TOP                 = wx.wxOutTop
-WX_OUT_OF_RANGE_TEXT_COORD          = wx.wxOutOfRangeTextCoord
-WX_REGION_CONTAIN_IN_REGION         = wx.wxInRegion
-WX_REGION_CONTAIN_OUT_REGION        = wx.wxOutRegion
-WX_REGION_CONTAIN_PART_REGION       = wx.wxPartRegion
-WX_SEEK_MODE_FROM_CURRENT           = wx.wxFromCurrent
-WX_SEEK_MODE_FROM_END               = wx.wxFromEnd
-WX_SEEK_MODE_FROM_START             = wx.wxFromStart
-WX_SEEK_MODE_INVALID_OFFSET         = wx.wxInvalidOffset
-WX_TEXT_ENTRY_DIALOG_STYLE          = wx.wxTextEntryDialogStyle
-WX_TREE_ITEM_ICON_EXPANDED          = wx.wxTreeItemIcon_Expanded
-WX_TREE_ITEM_ICON_MAX               = wx.wxTreeItemIcon_Max
-WX_TREE_ITEM_ICON_NORMAL            = wx.wxTreeItemIcon_Normal
-WX_TREE_ITEM_ICON_SELECTED          = wx.wxTreeItemIcon_Selected
-WX_TREE_ITEM_ICON_SELECTED_EXPANDED = wx.wxTreeItemIcon_SelectedExpanded
+wxDEFAULT_COORD                    = wx.wxDefaultCoord
+wxDRAG_ALLOW_MOVE                  = wx.wxDrag_AllowMove
+wxDRAG_COPY_ONLY                   = wx.wxDrag_CopyOnly
+wxDRAG_DEFAULT_MOVE                = wx.wxDrag_DefaultMove
+wxDRAG_RESULT_CANCEL               = wx.wxDragCancel
+wxDRAG_RESULT_COPY                 = wx.wxDragCopy
+wxDRAG_RESULT_ERROR                = wx.wxDragError
+wxDRAG_RESULT_LINK                 = wx.wxDragLink
+wxDRAG_RESULT_MOVE                 = wx.wxDragMove
+wxDRAG_RESULT_NONE                 = wx.wxDragNone
+wxINVALID_TEXT_COORD               = wx.wxInvalidTextCoord
+wxLAYOUT_DIRECTION_DEFAULT         = wx.wxLayout_Default
+wxLAYOUT_DIRECTION_LEFT_TO_RIGHT   = wx.wxLayout_LeftToRight
+wxLAYOUT_DIRECTION_RIGHT_TO_LEFT   = wx.wxLayout_RightToLeft
+wxLOG_LEVEL_DEBUG                  = wx.wxLOG_Debug
+wxLOG_LEVEL_ERROR                  = wx.wxLOG_Error
+wxLOG_LEVEL_FATAL_ERROR            = wx.wxLOG_FatalError
+wxLOG_LEVEL_INFO                   = wx.wxLOG_Info
+wxLOG_LEVEL_MAX                    = wx.wxLOG_Max
+wxLOG_LEVEL_MESSAGE                = wx.wxLOG_Message
+wxLOG_LEVEL_PROGRESS               = wx.wxLOG_Progress
+wxLOG_LEVEL_STATUS                 = wx.wxLOG_Status
+wxLOG_LEVEL_TRACE                  = wx.wxLOG_Trace
+wxLOG_LEVEL_USER                   = wx.wxLOG_User
+wxLOG_LEVEL_WARNING                = wx.wxLOG_Warning
+wxOUT_CODE_INSIDE                  = wx.wxInside
+wxOUT_CODE_OUT_BOTTOM              = wx.wxOutBottom
+wxOUT_CODE_OUT_LEFT                = wx.wxOutLeft
+wxOUT_CODE_OUT_RIGHT               = wx.wxOutRight
+wxOUT_CODE_OUT_TOP                 = wx.wxOutTop
+wxOUT_OF_RANGE_TEXT_COORD          = wx.wxOutOfRangeTextCoord
+wxREGION_CONTAIN_IN_REGION         = wx.wxInRegion
+wxREGION_CONTAIN_OUT_REGION        = wx.wxOutRegion
+wxREGION_CONTAIN_PART_REGION       = wx.wxPartRegion
+wxSEEK_MODE_FROM_CURRENT           = wx.wxFromCurrent
+wxSEEK_MODE_FROM_END               = wx.wxFromEnd
+wxSEEK_MODE_FROM_START             = wx.wxFromStart
+wxSEEK_MODE_INVALID_OFFSET         = wx.wxInvalidOffset
+wxTEXT_ENTRY_DIALOG_STYLE          = wx.wxTextEntryDialogStyle
+wxTREE_ITEM_ICON_EXPANDED          = wx.wxTreeItemIcon_Expanded
+wxTREE_ITEM_ICON_MAX               = wx.wxTreeItemIcon_Max
+wxTREE_ITEM_ICON_NORMAL            = wx.wxTreeItemIcon_Normal
+wxTREE_ITEM_ICON_SELECTED          = wx.wxTreeItemIcon_Selected
+wxTREE_ITEM_ICON_SELECTED_EXPANDED = wx.wxTreeItemIcon_SelectedExpanded
 
 -- wxBrush
-WX_BRUSH_BLACK                      = wx.wxBLACK_BRUSH
-WX_BRUSH_BLUE                       = wx.wxBLUE_BRUSH
-WX_BRUSH_CYAN                       = wx.wxCYAN_BRUSH
-WX_BRUSH_GREEN                      = wx.wxGREEN_BRUSH
-WX_BRUSH_GREY                       = wx.wxGREY_BRUSH
-WX_BRUSH_LIGHT_GREY                 = wx.wxLIGHT_GREY_BRUSH
-WX_BRUSH_MEDIUM_GREY                = wx.wxMEDIUM_GREY_BRUSH
-WX_BRUSH_NULL                       = wx.wxNullBrush
-WX_BRUSH_RED                        = wx.wxRED_BRUSH
-WX_BRUSH_TRANSPARENT                = wx.wxTRANSPARENT_BRUSH
-WX_BRUSH_WHITE                      = wx.wxWHITE_BRUSH
+wxBRUSH_BLACK                      = wx.wxBLACK_BRUSH
+wxBRUSH_BLUE                       = wx.wxBLUE_BRUSH
+wxBRUSH_CYAN                       = wx.wxCYAN_BRUSH
+wxBRUSH_GREEN                      = wx.wxGREEN_BRUSH
+wxBRUSH_GREY                       = wx.wxGREY_BRUSH
+wxBRUSH_LIGHT_GREY                 = wx.wxLIGHT_GREY_BRUSH
+wxBRUSH_MEDIUM_GREY                = wx.wxMEDIUM_GREY_BRUSH
+wxBRUSH_NULL                       = wx.wxNullBrush
+wxBRUSH_RED                        = wx.wxRED_BRUSH
+wxBRUSH_TRANSPARENT                = wx.wxTRANSPARENT_BRUSH
+wxBRUSH_WHITE                      = wx.wxWHITE_BRUSH
 
 -- wxColour
-WX_COLOUR_BLACK                     = wx.wxBLACK
-WX_COLOUR_BLUE                      = wx.wxBLUE
-WX_COLOUR_CYAN                      = wx.wxCYAN
-WX_COLOUR_GREEN                     = wx.wxGREEN
-WX_COLOUR_LIGHT_GREY                = wx.wxLIGHT_GREY
-WX_COLOUR_Null                      = wx.wxNullColour
-WX_COLOUR_RED                       = wx.wxRED
-WX_COLOUR_WHITE                     = wx.wxWHITE
+wxCOLOUR_BLACK                     = wx.wxBLACK
+wxCOLOUR_BLUE                      = wx.wxBLUE
+wxCOLOUR_CYAN                      = wx.wxCYAN
+wxCOLOUR_GREEN                     = wx.wxGREEN
+wxCOLOUR_LIGHT_GREY                = wx.wxLIGHT_GREY
+wxCOLOUR_NULL                      = wx.wxNullColour
+wxCOLOUR_RED                       = wx.wxRED
+wxCOLOUR_WHITE                     = wx.wxWHITE
 
 -- wxCursor
-WX_CURSOR_CROSS                     = wx.wxCROSS_CURSOR
-WX_CURSOR_HOURGLASS                 = wx.wxHOURGLASS_CURSOR
-WX_CURSOR_NULL                      = wx.wxNullCursor
-WX_CURSOR_STANDARD                  = wx.wxSTANDARD_CURSOR
+wxCURSOR_CROSS                     = wx.wxCROSS_CURSOR
+wxCURSOR_HOURGLASS                 = wx.wxHOURGLASS_CURSOR
+wxCURSOR_NULL                      = wx.wxNullCursor
+wxCURSOR_STANDARD                  = wx.wxSTANDARD_CURSOR
 
 -- wxFont
-WX_FONT_ITALIC                      = wx.wxITALIC_FONT
-WX_FONT_NORMAL                      = wx.wxNORMAL_FONT
-WX_FONT_NULL                        = wx.wxNullFont
-WX_FONT_SMALL                       = wx.wxSMALL_FONT
-WX_FONT_SWISS                       = wx.wxSWISS_FONT
+wxFONT_ITALIC                      = wx.wxITALIC_FONT
+wxFONT_NORMAL                      = wx.wxNORMAL_FONT
+wxFONT_NULL                        = wx.wxNullFont
+wxFONT_SMALL                       = wx.wxSMALL_FONT
+wxFONT_SWISS                       = wx.wxSWISS_FONT
 
 -- wxPen
-WX_PEN_BLACK                        = wx.wxBLACK_PEN
-WX_PEN_BLACK_DASHED                 = wx.wxBLACK_DASHED_PEN
-WX_PEN_CYAN                         = wx.wxCYAN_PEN
-WX_PEN_GREEN                        = wx.wxGREEN_PEN
-WX_PEN_GREY                         = wx.wxGREY_PEN
-WX_PEN_LIGHT_GREY                   = wx.wxLIGHT_GREY_PEN
-WX_PEN_MEDIUM_GREY                  = wx.wxMEDIUM_GREY_PEN
-WX_PEN_NULL                         = wx.wxNullPen
-WX_PEN_RED                          = wx.wxRED_PEN
-WX_PEN_TRANSPARENT                  = wx.wxTRANSPARENT_PEN
-WX_PEN_WHITE                        = wx.wxWHITE_PEN
+wxPEN_BLACK                        = wx.wxBLACK_PEN
+wxPEN_BLACK_DASHED                 = wx.wxBLACK_DASHED_PEN
+wxPEN_CYAN                         = wx.wxCYAN_PEN
+wxPEN_GREEN                        = wx.wxGREEN_PEN
+wxPEN_GREY                         = wx.wxGREY_PEN
+wxPEN_LIGHT_GREY                   = wx.wxLIGHT_GREY_PEN
+wxPEN_MEDIUM_GREY                  = wx.wxMEDIUM_GREY_PEN
+wxPEN_NULL                         = wx.wxNullPen
+wxPEN_RED                          = wx.wxRED_PEN
+wxPEN_TRANSPARENT                  = wx.wxTRANSPARENT_PEN
+wxPEN_WHITE                        = wx.wxWHITE_PEN
 
 -- Other userdata.
-WX_NULL                             = wx.NULL
+wxNULL                             = wx.NULL
 
-WX_ACCELERATOR_TABLE_NULL           = wx.wxNullAcceleratorTable -- wxAcceleratorTable
-WX_BITMAP_NULL                      = wx.wxNullBitmap           -- wxBitmap
-WX_ICON_NULL                        = wx.wxNullIcon             -- wxIcon
-WX_IMAGE_NULL                       = wx.wxNullImage            -- wxImage
-WX_PALETTE_NULL                     = wx.wxNullPalette          -- wxPalette
+wxACCELERATOR_TABLE_NULL           = wx.wxNullAcceleratorTable -- wxAcceleratorTable
+wxBITMAP_NULL                      = wx.wxNullBitmap           -- wxBitmap
+wxICON_NULL                        = wx.wxNullIcon             -- wxIcon
+wxIMAGE_NULL                       = wx.wxNullImage            -- wxImage
+wxPALETTE_NULL                     = wx.wxNullPalette          -- wxPalette
 
-WX_DEFAULT_DATE_TIME                = wx.wxDefaultDateTime      -- wxDateTime
-WX_DEFAULT_POSITION                 = wx.wxDefaultPosition      -- wxPoint
-WX_DEFAULT_SIZE                     = wx.wxDefaultSize          -- wxSize
-WX_DEFAULT_VALIDATOR                = wx.wxDefaultValidator     -- wxValidator
-WX_DEFAULT_VIDEO_MODE               = wx.wxDefaultVideoMode     -- wxVideoMode
+wxDEFAULT_DATE_TIME                = wx.wxDefaultDateTime      -- wxDateTime
+wxDEFAULT_POSITION                 = wx.wxDefaultPosition      -- wxPoint
+wxDEFAULT_SIZE                     = wx.wxDefaultSize          -- wxSize
+wxDEFAULT_VALIDATOR                = wx.wxDefaultValidator     -- wxValidator
+wxDEFAULT_VIDEO_MODE               = wx.wxDefaultVideoMode     -- wxVideoMode
 
-WX_INVALID_DATA_FORMAT              = wx.wxFormatInvalid        -- wxDataFormat
-WX_NO_GRID_CELL_RECT                = wx.wxGridNoCellRect       -- wxGridCellCoords (should this be wxGridNoCellCoords?)
+wxINVALID_DATA_FORMAT              = wx.wxFormatInvalid        -- wxDataFormat
+wxNO_GRID_CELL_RECT                = wx.wxGridNoCellRect       -- wxGridCellCoords (should this be wxGridNoCellCoords?)
 
-WX_THE_BRUSH_LIST                   = wx.wxTheBrushList         -- wxBrushList
-WX_THE_FONT_LIST                    = wx.wxTheFontList          -- wxFontList
-WX_THE_MIME_TYPES_MANAGER           = wx.wxTheMimeTypesManager  -- wxMimeTypesManager
-WX_THE_PEN_LIST                     = wx.wxThePenList           -- wxPenList
+wxTHE_BRUSH_LIST                   = wx.wxTheBrushList         -- wxBrushList
+wxTHE_FONT_LIST                    = wx.wxTheFontList          -- wxFontList
+wxTHE_MIME_TYPES_MANAGER           = wx.wxTheMimeTypesManager  -- wxMimeTypesManager
+wxTHE_PEN_LIST                     = wx.wxThePenList           -- wxPenList
+
+-- Custom helpers.
+wxGROW_ALL  = wxGROW + wxALL
+wxICON_NONE = 0
 
 -- Common constructors.
-WxPoint = wx.wxPoint
+WxPoint = wx.wxPoint -- @Cleanup: Export all wx.wx* into _G.wx* .
+WxRect  = wx.wxRect
 WxSize  = wx.wxSize

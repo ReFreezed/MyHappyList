@@ -243,7 +243,7 @@ end
 
 -- success = mkdir( path [, full=false ] )
 function mkdir(path, full)
-	local flags = (full and WX_PATH_MKDIR_FULL or 0)
+	local flags = (full and wxPATH_MKDIR_FULL or 0)
 	return wx.wxFileName.Mkdir(path, 4095, flags)
 end
 

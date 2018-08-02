@@ -19,6 +19,7 @@
 	errorf, fileerror
 	F, formatBytes
 	findPreviousChar
+	getColumn
 	getKeys
 	getLineNumber
 	getTime
@@ -26,7 +27,7 @@
 	gsub2
 	handleError, wrapCall
 	iff
-	indexOf, itemWith, itemWith2, itemWithAll
+	indexOf, itemWith, itemWithAll
 	ipairsr, iprev
 	isAny
 	isInt
@@ -97,12 +98,12 @@ function handleError(err)
 
 	if not DEBUG then
 	 	wx.wxTextEntryDialog(
-	 		WX_NULL,
+	 		wxNULL,
 	 		"An error ocurred and the program crashed! Sorry about that.\n"
 	 			.."The log file may have more information.\n\nMessage:",
 	 		"Error",
 	 		errWithStack,
-	 		WX_OK + WX_CENTRE + WX_TE_MULTILINE + WX_TE_DONTWRAP
+	 		wxOK + wxCENTRE + wxTE_MULTILINE + wxTE_DONTWRAP
  		):ShowModal()
 	end
 
@@ -111,14 +112,19 @@ end
 
 function wrapCall(f)
 	return function(...)
-		local args = pack(...)
+		local args         = pack(...)
+		local returnValues = nil
 
 		xpcall(
 			function()
-				f(unpack(args, 1, args.n))
+				returnValues = pack(f(unpack(args, 1, args.n)))
 			end,
 			handleError
 		)
+
+		if returnValues then
+			return unpack(returnValues, 1, returnValues.n)
+		end
 	end
 end
 
@@ -411,24 +417,47 @@ function indexOf(t, v)
 	return nil
 end
 
-function itemWith(t, k, v)
+-- item, index = itemWith( array, key1, value1, ...)
+function itemWith(t, ...)
 	for i, item in ipairs(t) do
-		if item[k] == v then  return item, i  end
+		local isMatch = true
+
+		for argIndex = 1, select("#", ...), 2 do
+			local k, v = select(argIndex, ...)
+			if item[k] ~= v then
+				isMatch = false
+				break
+			end
+		end
+
+		if isMatch then
+			return item, i
+		end
 	end
-	return nil
-end
-function itemWith2(t, k1,v1, k2,v2)
-	for i, item in ipairs(t) do
-		if item[k1] == v1 and item[k2] == v2 then  return item, i  end
-	end
+
 	return nil
 end
 
-function itemWithAll(t, k, v)
+-- items = itemWithAll( array, key1, value1, ...)
+function itemWithAll(t, ...)
 	local items = {}
-	for _, item in ipairs(t) do
-		if item[k] == v then  table.insert(items, item)  end
+
+	for i, item in ipairs(t) do
+		local isMatch = true
+
+		for argIndex = 1, select("#", ...), 2 do
+			local k, v = select(argIndex, ...)
+			if item[k] ~= v then
+				isMatch = false
+				break
+			end
+		end
+
+		if isMatch then
+			table.insert(items, item)
+		end
 	end
+
 	return items
 end
 
@@ -968,6 +997,19 @@ function range(from, to)
 	end
 
 	return t
+end
+
+
+
+-- values = getColumn( array, key )
+function getColumn(t, k)
+	local values = {}
+
+	for i, item in ipairs(t) do
+		values[i] = item[k]
+	end
+
+	return values
 end
 
 
