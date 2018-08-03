@@ -21,6 +21,7 @@ local FILE_COLUMN_STATUS
 local MYLIST_STATUS_UNKNOWN = 0
 local MYLIST_STATUS_NO      = 1
 local MYLIST_STATUS_YES     = 2
+local MYLIST_STATUS_INVALID = 3 -- AniDB don't know of the file (ed2k+size missing).  @Incomplete: Use this!
 
 local DROP_FILES_TO_ADD_MESSAGE = "Drop files here to add them!"
 
@@ -637,7 +638,14 @@ appIcons = wx.wxIconBundle("gfx/appicon.ico", wxBITMAP_TYPE_ANY)
 
 -- Main window.
 --==============================================================
-frame = wx.wxFrame(wxNULL, wxID_ANY, "MyHappyList", wxDEFAULT_POSITION, WxSize(1300, 400), wxDEFAULT_FRAME_STYLE)
+frame = wx.wxFrame(
+	wxNULL,
+	wxID_ANY,
+	"MyHappyList"..(DEBUG_LOCAL and " [OFFLINE]" or ""),
+	wxDEFAULT_POSITION,
+	WxSize(1300, 400),
+	wxDEFAULT_FRAME_STYLE
+)
 
 frame:DragAcceptFiles(true)
 
@@ -752,9 +760,16 @@ if DEBUG then
 	newMenuItem(menuDebug, frame, "ping", function(e)
 		anidb:ping()
 	end)
-
 	newMenuItem(menuDebug, frame, "login", function(e)
 		anidb:login()
+	end)
+	newMenuItem(menuDebug, frame, "logout", function(e)
+		anidb:logout()
+	end)
+	newMenuItem(menuDebug, frame, "dropSession", function(e)
+		if anidb:dropSession() then
+			logprint(nil, "Session dropped.")
+		end
 	end)
 
 	newMenuItemSeparator(menuDebug)
@@ -882,7 +897,9 @@ local anidbUpdateTimer = newTimer(function(e)
 	anidb:update()
 
 	for eName, _1, _2, _3, _4, _5 in anidb:events() do
-		logprint(nil, "Event: %s", eName)
+		if not isAny(eName, "messagecount") then
+			logprint(nil, "Event: %s", eName)
+		end
 
 		local handler = anidbEventHandlers[eName]
 		if handler then
@@ -951,7 +968,7 @@ local function addToOrEditMylistForSelectedFiles()
 
 	local VIEWED_STATES = {
 		{value=nil,   title="Don't change"},
-		{value=true,  title="Yes"},
+		{value=true,  title="Yes"}, -- @Incomplete: Allow direct editing of viewdate.
 		{value=false, title="No"},
 	}
 
@@ -967,8 +984,8 @@ local function addToOrEditMylistForSelectedFiles()
 		{value=nil,                           title="Don't change"},
 		{value=MYLIST_STATE_UNKNOWN,          title="Unknown / unspecified"},
 		{value=MYLIST_STATE_INTERNAL_STORAGE, title="Internal storage (HDD/SSD)"},
-		{value=MYLIST_STATE_EXTERNAL_STORAGE, title="External storage (DVD etc.)"},
-		{value=MYLIST_STATE_REMOTE_STORAGE,   title="Remote storage (NAS, cloud etc.)"},
+		{value=MYLIST_STATE_EXTERNAL_STORAGE, title="External storage (CD, DVD etc.)"},
+		-- {value=MYLIST_STATE_REMOTE_STORAGE,   title="Remote storage (NAS, cloud etc.)"}, -- AniDB complains! :/
 		{value=MYLIST_STATE_DELETED,          title="Deleted"},
 	}
 
@@ -977,32 +994,6 @@ local function addToOrEditMylistForSelectedFiles()
 		getColumn(MYLIST_STATES, "title"), 0, wxRA_SPECIFY_ROWS
 	)
 
-	-- Storage.
-	----------------------------------------------------------------
-
-	local panel = wx.wxPanel(dialog, wx.wxID_ANY)
-
-	local storageCheckbox = wx.wxCheckBox(panel, wxID_ANY, "Storage:")
-	storageCheckbox:SetSizeHints(60, getHeight(storageCheckbox))
-
-	local storageInput = wx.wxTextCtrl(panel, wxID_ANY)
-	storageInput:SetSizeHints(200, getHeight(storageInput))
-	storageInput:SetMaxLength(MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH)
-	storageInput:Enable(false)
-
-	on(storageCheckbox, "COMMAND_CHECKBOX_CLICKED", function(e)
-		storageInput:Enable(e:IsChecked())
-		storageInput:SetFocus()
-	end)
-
-	on(panel, "LEFT_DOWN", function(e)
-		if not storageCheckbox:IsChecked() then
-			checkBoxClick(storageCheckbox)
-		end
-	end)
-
-	setBoxSizer(panel, wxHORIZONTAL, 0, wxALIGN_CENTER_VERTICAL)
-
 	-- Source.
 	----------------------------------------------------------------
 
@@ -1010,10 +1001,12 @@ local function addToOrEditMylistForSelectedFiles()
 
 	local sourceCheckbox = wx.wxCheckBox(panel, wxID_ANY, "Source:")
 	sourceCheckbox:SetSizeHints(60, getHeight(sourceCheckbox))
+	sourceCheckbox:SetToolTip("Source: i.e. ed2k, DC, FTP or IRC")
 
 	local sourceInput = wx.wxTextCtrl(panel, wxID_ANY)
 	sourceInput:SetSizeHints(200, getHeight(sourceInput))
 	sourceInput:SetMaxLength(MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH)
+	sourceInput:SetToolTip(sourceCheckbox:GetToolTip():GetTip())
 	sourceInput:Enable(false)
 
 	on(sourceCheckbox, "COMMAND_CHECKBOX_CLICKED", function(e)
@@ -1029,12 +1022,40 @@ local function addToOrEditMylistForSelectedFiles()
 
 	setBoxSizer(panel, wxHORIZONTAL, 0, wxALIGN_CENTER_VERTICAL)
 
+	-- Storage.
+	----------------------------------------------------------------
+
+	local panel = wx.wxPanel(dialog, wx.wxID_ANY)
+
+	local storageCheckbox = wx.wxCheckBox(panel, wxID_ANY, "Storage:")
+	storageCheckbox:SetSizeHints(60, getHeight(storageCheckbox))
+	storageCheckbox:SetToolTip("Storage: i.e. the label of the CD with this file")
+
+	local storageInput = wx.wxTextCtrl(panel, wxID_ANY)
+	storageInput:SetSizeHints(200, getHeight(storageInput))
+	storageInput:SetMaxLength(MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH)
+	storageInput:SetToolTip(storageCheckbox:GetToolTip():GetTip())
+	storageInput:Enable(false)
+
+	on(storageCheckbox, "COMMAND_CHECKBOX_CLICKED", function(e)
+		storageInput:Enable(e:IsChecked())
+		storageInput:SetFocus()
+	end)
+
+	on(panel, "LEFT_DOWN", function(e)
+		if not storageCheckbox:IsChecked() then
+			checkBoxClick(storageCheckbox)
+		end
+	end)
+
+	setBoxSizer(panel, wxHORIZONTAL, 0, wxALIGN_CENTER_VERTICAL)
+
 	-- Other.
 	----------------------------------------------------------------
 
 	local panel = wx.wxPanel(dialog, wx.wxID_ANY)
 
-	local otherCheckbox = wx.wxCheckBox(panel, wxID_ANY, "Notes:")
+	local otherCheckbox = wx.wxCheckBox(panel, wxID_ANY, "Note:")
 	otherCheckbox:SetSizeHints(60, getHeight(otherCheckbox))
 
 	local otherInput = wx.wxTextCtrl(panel, wxID_ANY, "", wxDEFAULT_POSITION, WxSize(200, 100), wxTE_MULTILINE)
@@ -1247,7 +1268,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 
 	newMenuItem(popupMenu, frame, "Open &Contaning Folder", "Open the folder contaning the file", function(e)
 		local fileInfo = fileInfosSelected[1]
-		cmdAsync(cmdEscapeArgs("start", "explorer", "/select,"..toShortPath(fileInfo.path)))
+		showFileInExplorer(fileInfo.path)
 	end)
 
 	newMenuItem(popupMenu, frame, "&Remove from List\tDelete", "Remove selected files from the list", function(e)
@@ -1302,7 +1323,9 @@ on(fileList, "CONTEXT_MENU", function(e)
 
 		newMenuItem(popupMenu, frame, "[DEBUG] Get MYLIST", function(e)
 			for _, fileInfo in ipairs(fileInfosSelected) do
-				if fileInfo.ed2k ~= "" then
+				if fileInfo.lid ~= "" then
+					anidb:getMylist(fileInfo.lid, true)
+				elseif fileInfo.ed2k ~= "" then
 					anidb:getMylistByEd2k(fileInfo.ed2k, fileInfo.size)
 				end
 			end
@@ -1334,10 +1357,12 @@ wx.wxGetApp():MainLoop()
 --==============================================================
 
 -- AniDB wants us to log out.
-if anidb:isLoggedIn() then
+if anidb:isLoggedIn() and not DEBUG then
 	anidb:clearMessageQueue()
 	anidb:logout()
 	anidb:update(true)
+	-- We don't have time to wait for a reply to logout(), so just remove the session info right away.
+	anidb:dropSession()
 end
 
 -- Cleanup.

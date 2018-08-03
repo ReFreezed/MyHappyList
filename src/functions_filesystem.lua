@@ -214,9 +214,7 @@ function getTempFilePath(asWindowsPath)
 	local path = "temp/"..os.tmpname():gsub("[\\/]+", ""):gsub("%.$", "")
 	-- writeFile(path, "") -- Bad! The program may want to wait for this file to exist from calling cmdAsync().
 
-	if asWindowsPath then
-		path = path:gsub("/", "\\")
-	end
+	if asWindowsPath then  path = toWindowsPath(path)  end
 
 	return path
 end
@@ -572,9 +570,14 @@ end
 
 
 
+-- path = toShortPath( path [, asWindowsPath=false ] )
 -- Note: May return the path as-is if the file doesn't exist.
-function toShortPath(path)
-	return toNormalPath(wx.wxFileName(path):GetShortPath())
+function toShortPath(path, asWindowsPath)
+	local path = wx.wxFileName(path):GetShortPath()
+
+	if not asWindowsPath then  path = toNormalPath(path)  end
+
+	return path
 end
 
 

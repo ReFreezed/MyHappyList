@@ -19,7 +19,7 @@
 	getCacheMylist
 	getLogin
 	hashFile
-	isLoggedIn
+	isLoggedIn, dropSession
 	isSendingAnyMessage, getActiveMessageCount, getQueuedMessageCount
 	update
 
@@ -177,12 +177,11 @@ local responseHandlers
 
 local _logprint, _logprinterror
 local addEvent
-local applyMylistaddValues
+local applyMylistaddValues, compareMylistaddValues
 local blackout, loadBlackout
 local cacheSave, cacheLoad, cacheDelete
 local compress, decompress
 local createData
-local dropSession
 local generateTag
 local getEd2k, getPathByEd2k
 local getMessage, addMessage, removeMessage
@@ -192,6 +191,7 @@ local isAnyMessageInTransit, isMessageInQueue
 local onInternal
 local paramStringEncode, paramStringDecode, paramNumberEncode, paramNumberDecode, paramBooleanEncode, paramBooleanDecode, parseEpisodes
 local send, receive
+local startSession, dropSession, loadSession
 local updateNatInfo
 
 
@@ -699,6 +699,9 @@ end
 
 
 function updateNatInfo(self, port)
+	assertarg(1, self, "table")
+	assertarg(2, port, "number")
+
 	port = DEBUG_FORCE_NAT_OFF and LOCAL_PORT or port
 
 	if self.natMode == NAT_MODE_UNKNOWN then
@@ -817,12 +820,29 @@ end
 
 
 
+function startSession(self, session)
+	self.sessionKey = session
+	_logprint("Started session. (%s)", session)
+
+	writeFile(CACHE_DIR.."/session", session)
+end
+
+-- success = dropSession( self )
 function dropSession(self)
+	if self.sessionKey == "" then  return false  end
+
 	self.sessionKey = ""
 
 	-- Note: We don't stop pinging here as we're most likely dropping the session
 	-- because AniDB notified us of it. That means a new port has opened!
 	-- self.isActive = false -- Bad!
+
+	deleteFile(CACHE_DIR.."/session")
+	return true
+end
+
+function loadSession(self)
+	self.sessionKey = getFileContents(CACHE_DIR.."/session") or ""
 end
 
 
@@ -1175,6 +1195,15 @@ function applyMylistaddValues(params, values)
 	end
 end
 
+function compareMylistaddValues(params, values)
+	return
+		params.state    == values.state    and
+		params.viewed   == values.viewed   and
+		params.source   == values.source   and
+		params.storage  == values.storage  and
+		params.other    == values.other
+end
+
 
 
 --==============================================================
@@ -1222,11 +1251,10 @@ responseHandlers = {
 			local session, natInfo = statusText:match"^(%S+) (%S+)"
 			assert(session, "Bad AUTH status text format.")
 
-			self.sessionKey = session
-			_logprint("Started session. (%s)", session)
+			startSession(self, session)
 
 			if self.natMode ~= NAT_MODE_OFF then
-				local ip, port = natInfo:match"^(%d+)%.(%d+)%.(%d+)%.(%d+):(%d+)$"
+				local ip, port = natInfo:match"^(%d+%.%d+%.%d+%.%d+):(%d+)$"
 				port = tonumber(port)
 
 				if not port then
@@ -1636,6 +1664,7 @@ function Anidb:init()
 
 	loadBlackout(self)
 	loadNatInfo(self)
+	loadSession(self)
 
 	for name in directoryItems(CACHE_DIR) do
 		local pageName, id = name:match"^(%l)(%d+)$"
@@ -1878,11 +1907,17 @@ function Anidb:editMylist(lid, values)
 	assertarg(2, values, "table")
 
 	-- Should we prevent multiple edits? I think it should maybe be allowed.
-	-- for _, msg in ipairs(self.messages) do
-	-- 	if msg.command == "MYLISTADD" and msg.params.lid == lid then
-	-- 		return
-	-- 	end
-	-- end
+	-- Except for identical edits, that is...
+	for _, msg in ipairs(self.messages) do
+		if
+			msg.command == "MYLISTADD"
+			and msg.params.lid  == lid
+			and msg.params.edit == BOOL_TRUE
+			and compareMylistaddValues(msg.params, values)
+		then
+			return
+		end
+	end
 
 	-- MYLISTADD lid=int&edit=1&s=str[&state=int&viewed=bool&viewdate=int&source=str&storage=str&other=str]
 	local params = {
@@ -2001,6 +2036,12 @@ end
 function Anidb:isLoggedIn()
 	-- Note: The session might have expired on the server.
 	return self.sessionKey ~= ""
+end
+
+-- success = dropSession( )
+-- Warning: logout() should be used instead, unless you know what you're doing...
+function Anidb:dropSession()
+	return dropSession(self)
 end
 
 

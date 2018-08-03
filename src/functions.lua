@@ -35,7 +35,7 @@
 	makePrintable
 	newSet
 	newStringBuilder
-	openFileExternally
+	openFileExternally, openFileInNotepad, showFileInExplorer
 	pack
 	pairsSorted
 	print, printOnce, printf, printfOnce, log, logprint, logprinterror, logprintOnce, printobj
@@ -672,11 +672,13 @@ end
 
 function makePrintable(v)
 	return (tostring(v)
+		:gsub("\r", "\\r")
 		:gsub("\n", "\\n")
+		:gsub("\t", "\\t")
 		:gsub("[%z\1-\31]", function(c)
 			return "\\"..c:byte()
 		end)
-		:gsub("(pass=).*(&[^a])", "%1***%2") -- Simple password hiding. Note: "&" should be encoded as "&amp;".
+		:gsub("(pass=).-(&[^a])", "%1***%2") -- Simple password hiding. Note: "&" should be encoded as "&amp;".
 	)
 end
 
@@ -977,13 +979,18 @@ end
 
 
 function openFileExternally(path)
-	path = toWindowsPath(toShortPath(path))
+	path = toShortPath(path, true)
 	cmdAsync(cmdEscapeArgs("start", "", path))
 end
 
 function openFileInNotepad(path)
-	path = toWindowsPath(toShortPath(path))
+	path = toShortPath(path, true)
 	cmdAsync(cmdEscapeArgs("start", "", "notepad", path))
+end
+
+function showFileInExplorer(path)
+	path = toShortPath(path, true)
+	cmdAsync(cmdEscapeArgs("start", "explorer", "/select,"..path))
 end
 
 

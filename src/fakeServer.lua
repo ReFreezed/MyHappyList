@@ -236,7 +236,7 @@ function simulateServerResponse(udp, data)
 		b("300 PONG\n")
 
 		if params["nat"] == BOOL_TRUE then
-			b("%d", port)
+			b("%d\n", port)
 		end
 		check(udp:send(b()))
 
@@ -354,6 +354,19 @@ function simulateServerResponse(udp, data)
 		if checkSession(params, b) then
 			b("211 MYLIST ENTRY DELETED\n%d", ((params.aname or params.aid) and 5 or 1))
 			-- b("411 NO SUCH MYLIST ENTRY\n")
+		end
+
+		check(udp:send(b()))
+
+	-- LOGOUT
+	-- Must have s=str session key.
+	elseif command == "LOGOUT" then
+		local b = newServerResponseBuilder(params)
+
+		if session ~= "" and params["s"] == session then
+			b("203 LOGGED OUT\n")
+		else
+			b("403 NOT LOGGED IN\n")
 		end
 
 		check(udp:send(b()))
