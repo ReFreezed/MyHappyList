@@ -13,13 +13,18 @@
 
 
 -- Settings, debug.
-DEBUG                               = true
-DEBUG_LOCAL                         = true and DEBUG
-DEBUG_FORCE_NAT_OFF                 = true and DEBUG_LOCAL
+DEBUG                               = false
+DEBUG_LOCAL                         = false and DEBUG
+DEBUG_FORCE_NAT_OFF                 = false and DEBUG_LOCAL
 DEBUG_EXPIRATION_TIME_PORT          = 60
 DEBUG_EXPIRATION_TIME_SESSION       = 3*60 -- Only useful is NAT is off.
 
+-- Allow overriding DEBUG settings through a local file.
+local chunk = loadfile"local/debug.lua"
+if chunk then  chunk()  end
+
 -- Settings.
+APP_VERSION                         = "1.0.0"
 CACHE_DIR                           = DEBUG_LOCAL and "cacheDebug" or "cache"
 
 -- Settings, AniDB.

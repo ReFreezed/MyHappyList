@@ -31,9 +31,13 @@ local statusBar
 local fileList
 
 local anidb
+local appIcons
+local bigBoldFont
 
 local fileInfos  = {}
 local lastFileId = 0 -- Local ID, not fid on AniDB.
+
+local updateAvailableMessageReceived = false
 
 local settings = {
 	autoHash        = true,
@@ -46,6 +50,8 @@ local settings = {
 --==============================================================
 --==============================================================
 --==============================================================
+
+local setStatusText
 
 local addFileInfo, removeFileInfo
 local anyFileInfos, noFileInfos
@@ -301,8 +307,9 @@ end
 
 
 
-function setFileInfo(fileInfo, k, v)
-	if fileInfo[k] == v then
+-- setFileInfo( fileInfo, key, value [, force=false ] )
+function setFileInfo(fileInfo, k, v, force)
+	if fileInfo[k] == v and not force then
 		return
 	end
 
@@ -401,6 +408,17 @@ end
 
 
 
+-- setStatusText( text )
+-- setStatusText( format, ... )
+function setStatusText(s, ...)
+	if select("#", ...) > 0 then
+		s = s:format(...)
+	end
+	frame:SetStatusText(s)
+end
+
+
+
 --==============================================================
 --==============================================================
 --==============================================================
@@ -490,8 +508,13 @@ local anidbEventHandlers = {
 		function(userMessage) end,
 
 	["mylistaddsuccess"] =
-		function(mylistEntryPartial)
-			anidb:getMylist(mylistEntryPartial.lid)
+		function(mylistEntryPartial, isEdit)
+			if not isEdit then
+				-- Should we fetch new fresh data for edited entries? Not sure if
+				-- the assurance of having up-to-date data is needed here. Everything
+				-- should already be up to date.
+				anidb:getMylist(mylistEntryPartial.lid)
+			end
 
 			local fileInfo
 				=  mylistEntryPartial.ed2k and itemWith(fileInfos, "ed2k",mylistEntryPartial.ed2k, "size",mylistEntryPartial.size)
@@ -499,7 +522,7 @@ local anidbEventHandlers = {
 
 			if not fileInfo then  return  end
 
-			setFileInfo(fileInfo, "lid",          mylistEntryPartial.lid)
+			setFileInfo(fileInfo, "lid",          mylistEntryPartial.lid, true)
 			setFileInfo(fileInfo, "fid",          mylistEntryPartial.fid or -1)
 			setFileInfo(fileInfo, "mylistStatus", MYLIST_STATUS_YES)
 			saveFileInfos()
@@ -545,6 +568,9 @@ local anidbEventHandlers = {
 
 	["newversionavailable"] =
 		function(userMessage)
+			if updateAvailableMessageReceived then  return  end
+			updateAvailableMessageReceived = true
+
 			-- @UX: A less intrusive "Update Available" notification.
 			showMessage(frame, "Update Available", "A new version of MyHappyList is available.")
 		end,
@@ -594,13 +620,20 @@ for _, t in ipairs{wx, wxlua} do
 end
 --]]
 
-assert(createDirectory(CACHE_DIR))
+assert(createDirectory("local"))
 assert(createDirectory("logs"))
+assert(createDirectory("temp"))
+assert(createDirectory(CACHE_DIR))
 
-logFile = assert(openFile("logs/output.log", "a"))
+local logFilePath = "logs/output.log"
+logFile = assert(openFile(logFilePath, "a"))
 local wxPleaseJustStop = wx.wxLogNull()
 
 anidb = require"Anidb"()
+
+bigBoldFont = wx.wxFont(1.2*wx.wxNORMAL_FONT:GetPointSize(), wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD)
+
+appIcons = wx.wxIconBundle("gfx/appicon.ico", wxBITMAP_TYPE_ANY)
 
 -- Main window.
 --==============================================================
@@ -608,7 +641,7 @@ frame = wx.wxFrame(wxNULL, wxID_ANY, "MyHappyList", wxDEFAULT_POSITION, WxSize(1
 
 frame:DragAcceptFiles(true)
 
-frame:SetIcons(wx.wxIconBundle("gfx/appicon.ico", wxBITMAP_TYPE_ANY))
+frame:SetIcons(appIcons)
 
 on(frame, "CLOSE_WINDOW", function(e)
 	if
@@ -719,6 +752,7 @@ if DEBUG then
 	newMenuItem(menuDebug, frame, "ping", function(e)
 		anidb:ping()
 	end)
+
 	newMenuItem(menuDebug, frame, "login", function(e)
 		anidb:login()
 	end)
@@ -752,17 +786,82 @@ end
 -- Help menu.
 --------------------------------
 
-newMenuItem(menuHelp, frame, "&Forum Thread", "Go to MyHappyList's forum thread on AniDB", function(e)
-	showMessage(frame, "Link", "@Incomplete")
-end)
--- newMenuItem(menuHelp, frame, "&Changes", "View the changelog", function(e)
--- 	showMessage(frame, "Changelog", "@Incomplete")
+-- newMenuItem(menuHelp, frame, "&Forum Thread", "Go to MyHappyList's forum thread on AniDB", function(e)
+-- 	-- @Incomplete
 -- end)
-newMenuItem(menuHelp, frame, "&Log", "Show text log", function(e)
-	showMessage(frame, "Log", "@Incomplete")
+
+-- newMenuItem(menuHelp, frame, "&Changes", "View the changelog", function(e)
+-- 	-- @Incomplete
+-- end)
+
+newMenuItem(menuHelp, frame, "&Log", "Open the text log in Notepad", function(e)
+	-- @UX: Show a window with the log instead of using Notepad.
+	openFileInNotepad(logFilePath)
 end)
+
 newMenuItem(menuHelp, frame, wxID_ABOUT, "&About", "About MyHappyList", function(e)
-	showMessage(frame, "About MyHappyList", "@Incomplete")
+	local title     = "MyHappyList "..APP_VERSION
+	local copyright = "Copyright © 2018 Marcus 'ReFreezed' Thunström. MIT license."
+	local desciption
+		= "MyHappyList is made using Lua, wxLua, Alien FFI, LuaSocket and rhash. "
+		.."The executable is built using srlua, ResourceHacker and ImageMagick."
+
+	local dialog = wx.wxDialog(frame, wxID_ANY, "About MyHappyList")
+	local sizer  = wx.wxBoxSizer(wxVERTICAL)
+
+	on(dialog, "CHAR_HOOK", function(e, kc)
+		if kc == KC_ESCAPE then
+			dialog:EndModal(wxID_CANCEL)
+		else
+			e:Skip()
+		end
+	end)
+
+	-- Icon.
+	local bm = wx.wxBitmap()
+	bm:CopyFromIcon(appIcons:GetIcon(32))
+	local bmObj = wx.wxStaticBitmap(dialog, wxID_ANY, bm)
+	sizer:Add(bmObj, 0, wxALIGN_CENTRE_HORIZONTAL)
+
+	sizer:AddSpacer(8)
+
+	-- Title.
+	local textObj = wx.wxStaticText(dialog, wxID_ANY, title, wxDEFAULT_POSITION, wxDEFAULT_SIZE, wxALIGN_CENTRE_HORIZONTAL)
+	textObj:SetFont(bigBoldFont)
+	sizer:Add(textObj, 0, wxGROW_ALL)
+
+	sizer:AddSpacer(8)
+
+	-- Copyright.
+	local textObj = wx.wxStaticText(dialog, wxID_ANY, copyright, wxDEFAULT_POSITION, wxDEFAULT_SIZE, wxALIGN_CENTRE_HORIZONTAL)
+	sizer:Add(textObj, 0, wxGROW_ALL)
+
+	sizer:AddSpacer(8)
+
+	-- Description.
+	local textObj = wx.wxStaticText(dialog, wxID_ANY, desciption)
+	textObj:Wrap(400)
+	sizer:Add(textObj, 0, wxGROW_ALL)
+
+	sizer:AddSpacer(20)
+
+	-- Close button.
+	local button = newButton(dialog, wxID_OK, "Close", function(e)
+		dialog:EndModal(e:GetId())
+	end)
+	button:SetSizeHints(100, getHeight(button)+2*3)
+	sizer:Add(button, 0, wxALIGN_CENTRE_HORIZONTAL)
+
+	local sizerWrapper = wx.wxBoxSizer(wxHORIZONTAL)
+	sizerWrapper:Add(sizer, 0, wxGROW_ALL, 20)
+
+	dialog:SetAutoLayout(true)
+	dialog:SetSizer(sizerWrapper)
+
+	dialog:Fit()
+	dialog:Centre()
+
+	dialog:ShowModal()
 end)
 
 --------------------------------
@@ -818,23 +917,36 @@ local function addToOrEditMylistForSelectedFiles()
 	local fileInfosSelected = getSelectedFileInfos(true)
 	if not fileInfosSelected[1] then  return  end
 
+	-- Max length of UDP packages (over PPPoE) is 1400 bytes. Let's try to
+	-- stay within the bounds before attempting to send anything.
+	--
+	-- https://wiki.anidb.net/w/UDP_API_Definition#General
+	--
+	-- UDP message example when adding:
+	--    MYLISTADD ed2k=4b7e0f1101fb3ef95e187f6f086cf6b3&other=&s=GM3Fz97&size=3669066876&source=&state=2&storage=&tag=#a01340e&viewdate=1333248804&viewed=1
+	--
+	local MAX_UDP_MESSAGE_LENGTH     = 1400
+	local APPROX_BASE_MESSAGE_LENGTH = 150
+	local SAFETY_MESSAGE_LENGTH      = 20
+
 	local dialog = wx.wxDialog(frame, wxID_ANY, "Add to / Edit MyList")
 
 	on(dialog, "CHAR_HOOK", function(e, kc)
 		if kc == KC_ESCAPE then
 			dialog:EndModal(wxID_CANCEL)
-
 		else
 			e:Skip()
 		end
 	end)
 
+	-- File count text.
 	----------------------------------------------------------------
 
 	newText(dialog, F("Adding/editing %d files.", #fileInfosSelected))
 
 	wx.wxStaticLine(dialog, wxID_ANY)
 
+	-- Viewed.
 	----------------------------------------------------------------
 
 	local VIEWED_STATES = {
@@ -847,13 +959,13 @@ local function addToOrEditMylistForSelectedFiles()
 		dialog, wxID_ANY, "Watched", wxDEFAULT_POSITION, wxDEFAULT_SIZE,
 		getColumn(VIEWED_STATES, "title"), 0, wxRA_SPECIFY_ROWS
 	)
-	-- viewedRadio:SetSelection(?)
 
+	-- MyList state.
 	----------------------------------------------------------------
 
 	local MYLIST_STATES = {
 		{value=nil,                           title="Don't change"},
-		{value=MYLIST_STATE_UNKNOWN,          title="Unknown"},
+		{value=MYLIST_STATE_UNKNOWN,          title="Unknown / unspecified"},
 		{value=MYLIST_STATE_INTERNAL_STORAGE, title="Internal storage (HDD/SSD)"},
 		{value=MYLIST_STATE_EXTERNAL_STORAGE, title="External storage (DVD etc.)"},
 		{value=MYLIST_STATE_REMOTE_STORAGE,   title="Remote storage (NAS, cloud etc.)"},
@@ -864,8 +976,8 @@ local function addToOrEditMylistForSelectedFiles()
 		dialog, wxID_ANY, "State", wxDEFAULT_POSITION, wxDEFAULT_SIZE,
 		getColumn(MYLIST_STATES, "title"), 0, wxRA_SPECIFY_ROWS
 	)
-	-- mylistStateRadio:SetSelection(?)
 
+	-- Storage.
 	----------------------------------------------------------------
 
 	local panel = wx.wxPanel(dialog, wx.wxID_ANY)
@@ -875,6 +987,7 @@ local function addToOrEditMylistForSelectedFiles()
 
 	local storageInput = wx.wxTextCtrl(panel, wxID_ANY)
 	storageInput:SetSizeHints(200, getHeight(storageInput))
+	storageInput:SetMaxLength(MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH)
 	storageInput:Enable(false)
 
 	on(storageCheckbox, "COMMAND_CHECKBOX_CLICKED", function(e)
@@ -890,6 +1003,7 @@ local function addToOrEditMylistForSelectedFiles()
 
 	setBoxSizer(panel, wxHORIZONTAL, 0, wxALIGN_CENTER_VERTICAL)
 
+	-- Source.
 	----------------------------------------------------------------
 
 	local panel = wx.wxPanel(dialog, wx.wxID_ANY)
@@ -899,6 +1013,7 @@ local function addToOrEditMylistForSelectedFiles()
 
 	local sourceInput = wx.wxTextCtrl(panel, wxID_ANY)
 	sourceInput:SetSizeHints(200, getHeight(sourceInput))
+	sourceInput:SetMaxLength(MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH)
 	sourceInput:Enable(false)
 
 	on(sourceCheckbox, "COMMAND_CHECKBOX_CLICKED", function(e)
@@ -914,6 +1029,7 @@ local function addToOrEditMylistForSelectedFiles()
 
 	setBoxSizer(panel, wxHORIZONTAL, 0, wxALIGN_CENTER_VERTICAL)
 
+	-- Other.
 	----------------------------------------------------------------
 
 	local panel = wx.wxPanel(dialog, wx.wxID_ANY)
@@ -921,9 +1037,10 @@ local function addToOrEditMylistForSelectedFiles()
 	local otherCheckbox = wx.wxCheckBox(panel, wxID_ANY, "Notes:")
 	otherCheckbox:SetSizeHints(60, getHeight(otherCheckbox))
 
-	local otherInput = wx.wxTextCtrl(panel, wxID_ANY, "", wxDEFAULT_POSITION, WxSize(200, 150), wxTE_MULTILINE)
+	local otherInput = wx.wxTextCtrl(panel, wxID_ANY, "", wxDEFAULT_POSITION, WxSize(200, 100), wxTE_MULTILINE)
 	local colorOn  = otherInput:GetBackgroundColour()
 	local colorOff = wx.wxSystemSettings.GetColour(wxSYS_COLOUR_3DFACE)
+	otherInput:SetMaxLength(MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH)
 	otherInput:Enable(false)
 	otherInput:SetBackgroundColour(colorOff)
 
@@ -935,7 +1052,7 @@ local function addToOrEditMylistForSelectedFiles()
 
 	on(otherInput, "KEY_DOWN", function(e, kc)
 		if kc == KC_A and e:GetModifiers() == wxMOD_CONTROL then
-			textCtrlSelectAll(wxTextCtrl)
+			textCtrlSelectAll(otherInput)
 		else
 			e:Skip()
 		end
@@ -949,13 +1066,14 @@ local function addToOrEditMylistForSelectedFiles()
 
 	setBoxSizer(panel, wxHORIZONTAL)
 
+	-- Buttons.
 	----------------------------------------------------------------
 
 	wx.wxStaticLine(dialog, wxID_ANY)
 
 	local panel = wx.wxPanel(dialog, wx.wxID_ANY)
 
-	newButton(panel, wxID_OK, "OK", function(e)
+	newButton(panel, wxID_OK, "Add / Edit", function(e)
 		dialog:EndModal(e:GetId())
 	end)
 
@@ -971,28 +1089,55 @@ local function addToOrEditMylistForSelectedFiles()
 	dialog:Fit()
 	dialog:Centre()
 
-	local id = dialog:ShowModal()
-	if id ~= wxID_OK then  return  end
+	local viewed, state, storage, source, other
 
-	local viewed  = VIEWED_STATES[viewedRadio:GetSelection()+1].value
-	local state   = MYLIST_STATES[mylistStateRadio:GetSelection()+1].value
-	local storage = storageCheckbox:IsChecked() and storageInput:GetValue() or nil
-	local source  = sourceCheckbox:IsChecked()  and sourceInput:GetValue()  or nil
-	local other   = otherCheckbox:IsChecked()   and otherInput:GetValue()   or nil
+	while true do
+		local id = dialog:ShowModal()
+		if id ~= wxID_OK then  return  end
 
-	if not (viewed or state or storage or source or other) then  return  end
+		viewed  = VIEWED_STATES[viewedRadio:GetSelection()+1].value
+		state   = MYLIST_STATES[mylistStateRadio:GetSelection()+1].value
+		storage = storageCheckbox:IsChecked() and storageInput:GetValue() or nil
+		source  = sourceCheckbox:IsChecked()  and sourceInput:GetValue()  or nil
+		other   = otherCheckbox:IsChecked()   and otherInput:GetValue()   or nil
 
-	-- @@
+		local totalStrLen = #(storage or "") + #(source or "") + #(other or ""):gsub("\n", "<br />")
 
-	-- for _, fileInfo in ipairs(fileInfosSelected) do
-	-- 	if fileInfo.ed2k ~= "" then
-	-- 		anidb:addMylistByEd2k(fileInfo.ed2k, fileInfo.size)
+		if APPROX_BASE_MESSAGE_LENGTH + totalStrLen > MAX_UDP_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH then
+			showWarning(
+				frame,
+				"Too Long Texts",
+				F(
+					"The combined length of the storage, source and note texts is too long to send over the network. "
+						.."The supported maximum length is around %d characters.",
+					MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH
+				)
+			)
+			-- Loop back and show the dialog again.
 
-	-- 	elseif not fileInfo.isHashing then
-	-- 		setFileInfo(fileInfo, "isHashing", true)
-	-- 		anidb:hashFile(fileInfo.path)
-	-- 	end
-	-- end
+		else
+			break -- Continue.
+		end
+	end
+
+	local values = {
+		viewed  = viewed,
+		state   = state,
+		storage = storage,
+		source  = source,
+		other   = other,
+	}
+
+	for _, fileInfo in ipairs(fileInfosSelected) do
+		if fileInfo.lid ~= -1 then
+			if next(values) then
+				anidb:editMylist(fileInfo.lid, values)
+			end
+
+		elseif fileInfo.ed2k ~= "" then
+			anidb:addMylistByEd2k(fileInfo.ed2k, fileInfo.size, values)
+		end
+	end
 end
 
 fileList = wx.wxListCtrl(
@@ -1040,16 +1185,20 @@ on(fileList, "CONTEXT_MENU", function(e)
 	local fileInfosSelected = getSelectedFileInfos()
 	if not fileInfosSelected[1] then  return  end
 
+	local anyIsHashed      = false
+
 	local anyIsUnknown     = false
 	local anyIsNotInMylist = false
 	local anyIsInMylist    = false
 
-	local anyIsWatched     = false
-	local anyIsUnwatched   = false
-
-	local anyIsHashed      = false
+	-- local anyIsWatched     = false
+	-- local anyIsUnwatched   = false
 
 	for _, fileInfo in ipairs(fileInfosSelected) do
+		if fileInfo.ed2k ~= "" then
+			anyIsHashed = true
+		end
+
 		if fileInfo.mylistStatus == MYLIST_STATUS_YES then
 			anyIsInMylist    = true
 		elseif fileInfo.mylistStatus == MYLIST_STATUS_NO then
@@ -1058,20 +1207,16 @@ on(fileList, "CONTEXT_MENU", function(e)
 			anyIsUnknown     = true
 		end
 
-		if fileInfo.lid ~= -1 then
-			local mylistEntry = anidb:getCacheMylist(fileInfo.lid)
-			if mylistEntry and mylistEntry.viewdate then
-				if mylistEntry.viewdate == 0 then
-					anyIsUnwatched = true
-				else
-					anyIsWatched   = true
-				end
-			end
-		end
-
-		if fileInfo.ed2k ~= "" then
-			anyIsHashed = true
-		end
+		-- if fileInfo.lid ~= -1 then
+		-- 	local mylistEntry = anidb:getCacheMylist(fileInfo.lid)
+		-- 	if mylistEntry and mylistEntry.viewdate then
+		-- 		if mylistEntry.viewdate == 0 then
+		-- 			anyIsUnwatched = true
+		-- 		else
+		-- 			anyIsWatched   = true
+		-- 		end
+		-- 	end
+		-- end
 	end
 
 	local popupMenu = wx.wxMenu()
@@ -1088,8 +1233,17 @@ on(fileList, "CONTEXT_MENU", function(e)
 	end)
 
 	newMenuItem(popupMenu, frame, "Mark as &Watched", "Mark selected files as watched", function(e)
-		-- @@
-	end):Enable(anyIsUnwatched or anyIsUnknown)
+		local values = {viewed=true}
+
+		for _, fileInfo in ipairs(fileInfosSelected) do
+			if fileInfo.lid ~= -1 then
+				anidb:editMylist(fileInfo.lid, values)
+
+			elseif fileInfo.ed2k ~= "" then
+				anidb:addMylistByEd2k(fileInfo.ed2k, fileInfo.size, values)
+			end
+		end
+	end):Enable(anyIsHashed)
 
 	newMenuItem(popupMenu, frame, "Open &Contaning Folder", "Open the folder contaning the file", function(e)
 		local fileInfo = fileInfosSelected[1]
@@ -1117,6 +1271,23 @@ on(fileList, "CONTEXT_MENU", function(e)
 		end
 	end):Enable(anyIsInMylist)
 
+	----------------------------------------------------------------
+	newMenuItemSeparator(popupMenu)
+
+	local submenu = wx.wxMenu()
+
+	newMenuItem(
+		submenu, frame, "Copy ed2k to Clipboard", "Copy ed2k hash to clipboard",
+		function(e)
+			local fileInfo = fileInfosSelected[1]
+			clipboardSetText(fileInfo.ed2k)
+			setStatusText("Copied ed2k hash of '%s' to clipboard", fileInfo.name)
+		end
+	):Enable(#fileInfosSelected == 1 and anyIsHashed)
+
+	newMenuItem(popupMenu, frame, "More", submenu)
+
+	----------------------------------------------------------------
 	if DEBUG then
 		newMenuItemSeparator(popupMenu)
 

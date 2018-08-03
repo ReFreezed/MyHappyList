@@ -211,8 +211,6 @@ end
 
 -- path = getTempFilePath( [ asWindowsPath=false ] )
 function getTempFilePath(asWindowsPath)
-	assert(createDirectory("temp"))
-
 	local path = "temp/"..os.tmpname():gsub("[\\/]+", ""):gsub("%.$", "")
 	-- writeFile(path, "") -- Bad! The program may want to wait for this file to exist from calling cmdAsync().
 
@@ -576,7 +574,7 @@ end
 
 -- Note: May return the path as-is if the file doesn't exist.
 function toShortPath(path)
-	return wx.wxFileName(path):GetShortPath()
+	return toNormalPath(wx.wxFileName(path):GetShortPath())
 end
 
 

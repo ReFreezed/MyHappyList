@@ -977,7 +977,13 @@ end
 
 
 function openFileExternally(path)
-	cmdAsync(cmdEscapeArgs("start", "", toShortPath(path)))
+	path = toWindowsPath(toShortPath(path))
+	cmdAsync(cmdEscapeArgs("start", "", path))
+end
+
+function openFileInNotepad(path)
+	path = toWindowsPath(toShortPath(path))
+	cmdAsync(cmdEscapeArgs("start", "", "notepad", path))
 end
 
 

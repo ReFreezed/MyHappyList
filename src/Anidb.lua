@@ -24,7 +24,7 @@
 	update
 
 	-- Server communication.
-	addMylistByFile, addMylistByEd2k
+	addMylistByFile, addMylistByEd2k, editMylist
 	deleteMylist
 	getMylist, getMylistByFile, getMylistByEd2k
 	login, logout
@@ -177,6 +177,7 @@ local responseHandlers
 
 local _logprint, _logprinterror
 local addEvent
+local applyMylistaddValues
 local blackout, loadBlackout
 local cacheSave, cacheLoad, cacheDelete
 local compress, decompress
@@ -857,7 +858,7 @@ do
 	end
 
 	-- entry = cacheSave( anidb, pageName, entry, isPartial )
-	-- Note: The entry will overwrite any previous one with the same ID.
+	-- Note: The entry will completely overwrite any previous entry with the same ID.
 	function cacheSave(self, pageName, entry, isPartial)
 		assertarg(1, self,      "table")
 		assertarg(2, pageName,  "string")
@@ -1154,6 +1155,28 @@ end
 
 
 
+function applyMylistaddValues(params, values)
+	-- MYLISTADD ...[&state=int&viewed=bool&viewdate=int&source=str&storage=str&other=str]
+	if values.state ~= nil then
+		params["state"] = values.state
+	end
+	if values.viewed ~= nil then
+		params["viewed"]   = values.viewed
+		params["viewdate"] = values.viewed and os.time() or nil
+	end
+	if values.source ~= nil then
+		params["source"] = values.source
+	end
+	if values.storage ~= nil then
+		params["storage"] = values.storage
+	end
+	if values.other ~= nil then
+		params["other"] = values.other
+	end
+end
+
+
+
 --==============================================================
 --= Response Handlers ==========================================
 --==============================================================
@@ -1370,7 +1393,7 @@ responseHandlers = {
 				gid       = msg.params.gid, -- May be nil.
 				date      = os.time(),
 				state     = msg.params.state,
-				viewdate  = msg.params.viewdate,
+				viewdate  = msg.params.viewed ~= nil and (msg.params.viewdate or 0) or nil,
 				storage   = msg.params.storage,
 				source    = msg.params.source,
 				other     = msg.params.other,
@@ -1381,7 +1404,7 @@ responseHandlers = {
 			}
 			mylistEntryPartial = cacheSave(self, "l", mylistEntryPartial, true)
 
-			addEvent(self, "mylistaddsuccess", mylistEntryPartial)
+			addEvent(self, "mylistaddsuccess", mylistEntryPartial, false)
 
 		-- 310 FILE ALREADY IN MYLIST\nint lid|int fid|int eid|int aid|int gid|int date|int state|int viewdate|str storage|str source|str other|int filestate
 		elseif statusCode == 310 then
@@ -1409,7 +1432,7 @@ responseHandlers = {
 			}
 			mylistEntry = cacheSave(self, "l", mylistEntry, false)
 
-			addEvent(self, "mylistaddsuccess", mylistEntry)
+			addEvent(self, "mylistaddsuccess", mylistEntry, false)
 
 			-- Also trigger a "get" event, as we may only have had a partial entry before, and now we got a full one.
 			addEvent(self, "mylistgetsuccess", "entry", mylistEntry)
@@ -1425,25 +1448,42 @@ responseHandlers = {
 				return
 			end
 
+			local mylistEntry
+				=  msg.params.lid  and itemWith(self.cache.l, "lid",msg.params.lid)
+				or msg.params.fid  and itemWith(self.cache.l, "fid",msg.params.fid)
+				or msg.params.ed2k and itemWith(self.cache.l, "ed2k",msg.params.ed2k, "size",msg.params.size)
+
 			local mylistEntryMaybePartial
-				=  msg.params.fid and (
-					itemWith(self.cache.l,        "fid",msg.params.fid) or
-					itemWith(self.cachePartial.l, "fid",msg.params.fid)
-				)
-				or msg.params.ed2k and (
-					itemWith(self.cache.l,        "ed2k",msg.params.ed2k, "size",msg.params.size) or
-					itemWith(self.cachePartial.l, "ed2k",msg.params.ed2k, "size",msg.params.size)
-				)
-				or msg.params.lid and (
-					itemWith(self.cache.l,        "lid",msg.params.lid, "size",msg.params.size) or
-					itemWith(self.cachePartial.l, "lid",msg.params.lid, "size",msg.params.size)
-				)
+				=  mylistEntry
+				or msg.params.lid  and itemWith(self.cachePartial.l, "lid",msg.params.lid)
+				or msg.params.fid  and itemWith(self.cachePartial.l, "fid",msg.params.fid)
+				or msg.params.ed2k and itemWith(self.cachePartial.l, "ed2k",msg.params.ed2k, "size",msg.params.size)
 
 			if not mylistEntryMaybePartial then
-				_logprinterror("MyList entry added, but can't figure out how.")
-			else
-				addEvent(self, "mylistaddsuccess", mylistEntryMaybePartial)
+				_logprinterror("MyList entry edited, but can't figure out how.")
+				return
 			end
+
+			if msg.params.state ~= nil then
+				mylistEntryMaybePartial.state = msg.params.state
+			end
+			if msg.params.viewed ~= nil then
+				mylistEntryMaybePartial.viewdate = msg.params.viewdate or 0
+			end
+			if msg.params.source ~= nil then
+				mylistEntryMaybePartial.source = msg.params.source
+			end
+			if msg.params.storage ~= nil then
+				mylistEntryMaybePartial.storage = msg.params.storage
+			end
+			if msg.params.other ~= nil then
+				mylistEntryMaybePartial.other = msg.params.other
+			end
+
+			local isPartial = (mylistEntry == nil)
+			mylistEntryMaybePartial = cacheSave(self, "l", mylistEntryMaybePartial, isPartial)
+
+			addEvent(self, "mylistaddsuccess", mylistEntryMaybePartial, true)
 
 		-- 320 NO SUCH FILE
 		elseif statusCode == 320 and msg.params.ed2k then
@@ -1580,11 +1620,11 @@ function Anidb:init()
 	}
 
 	self.mylistDefaults = {
-		state   = nil,--MYLIST_STATE_INTERNAL_STORAGE,
-		viewed  = nil,--true,
-		source  = nil,--"",
-		storage = nil,--"",
-		other   = nil,--"",
+		state   = MYLIST_STATE_INTERNAL_STORAGE,
+		viewed  = nil, -- bool
+		source  = nil, -- string
+		storage = nil, -- string
+		other   = nil, -- string (newlines allowed)
 	}
 
 	self.udp = assert(socket.udp())
@@ -1593,9 +1633,6 @@ function Anidb:init()
 	assert(self.udp:setpeername(SERVER_ADDRESS, SERVER_PORT))
 
 	self.udp:settimeout(0)
-
-	assert(createDirectory("local"))
-	assert(createDirectory(CACHE_DIR))
 
 	loadBlackout(self)
 	loadNatInfo(self)
@@ -1776,17 +1813,19 @@ end
 
 
 
--- addMylistByFile( path )
--- addMylistByFile( fileId )
-function Anidb:addMylistByFile(pathOrFileId)
+-- addMylistByFile( path   [, values ] )
+-- addMylistByFile( fileId [, values ] )
+-- values = { [ state=state, viewed=isViewed, source=source, storage=storage, other=other ] }
+function Anidb:addMylistByFile(pathOrFileId, values)
 	assertarg(1, pathOrFileId, "string","number")
+	assertarg(2, values,       "table","nil")
 
 	if type(pathOrFileId) == "string" then
 		local path = pathOrFileId
 
 		getEd2k(self, path, function(ed2kState, ed2kHash, fileSize)
 			if ed2kState == ED2K_STATE_SUCCESS then
-				self:addMylistByEd2k(ed2kHash, fileSize)
+				self:addMylistByEd2k(ed2kHash, fileSize, values)
 			end
 		end)
 
@@ -1796,9 +1835,12 @@ function Anidb:addMylistByFile(pathOrFileId)
 	end
 end
 
-function Anidb:addMylistByEd2k(ed2kHash, fileSize)
+-- addMylistByEd2k( ed2kHash, fileSize [, values ] )
+-- values = { [ state=state, viewed=isViewed, source=source, storage=storage, other=other ] }
+function Anidb:addMylistByEd2k(ed2kHash, fileSize, values)
 	assertarg(1, ed2kHash, "string")
 	assertarg(2, fileSize, "number")
+	assertarg(3, values,   "table","nil")
 
 	for _, msg in ipairs(self.messages) do
 		if msg.command == "MYLISTADD" and msg.params.size == fileSize and msg.params.ed2k == ed2kHash then
@@ -1811,7 +1853,7 @@ function Anidb:addMylistByEd2k(ed2kHash, fileSize)
 		or itemWith(self.cachePartial.l, "ed2k",ed2kHash, "size",fileSize)
 
 	if mylistEntryMaybePartial then
-		addEvent(self, "mylistaddsuccess", mylistEntryMaybePartial)
+		addEvent(self, "mylistaddsuccess", mylistEntryMaybePartial, false)
 		return
 	end
 
@@ -1822,23 +1864,35 @@ function Anidb:addMylistByEd2k(ed2kHash, fileSize)
 		["s"]    = "",
 	}
 
-	local defaults = self.mylistDefaults
-	if defaults.state     ~= nil then
-		params["state"]    = defaults.state
-	end
-	if defaults.viewed    ~= nil then
-		params["viewed"]   = defaults.viewed
-		params["viewdate"] = defaults.viewed and os.time() or nil
-	end
-	if defaults.source    ~= nil then
-		params["source"]   = defaults.source
-	end
-	if defaults.storage   ~= nil then
-		params["storage"]  = defaults.storage
-	end
-	if defaults.other     ~= nil then
-		params["other"]    = defaults.other
-	end
+	applyMylistaddValues(params, self.mylistDefaults)
+	if values then  applyMylistaddValues(params, values)  end
+
+	self:login()
+	send(self, "MYLISTADD", params)
+end
+
+-- editMylist( lid, values )
+-- values = { [ state=state, viewed=isViewed, source=source, storage=storage, other=other ] }
+function Anidb:editMylist(lid, values)
+	assertarg(1, lid,    "number")
+	assertarg(2, values, "table")
+
+	-- Should we prevent multiple edits? I think it should maybe be allowed.
+	-- for _, msg in ipairs(self.messages) do
+	-- 	if msg.command == "MYLISTADD" and msg.params.lid == lid then
+	-- 		return
+	-- 	end
+	-- end
+
+	-- MYLISTADD lid=int&edit=1&s=str[&state=int&viewed=bool&viewdate=int&source=str&storage=str&other=str]
+	local params = {
+		["lid"]  = lid,
+		["edit"] = BOOL_TRUE,
+		["s"]    = "",
+	}
+
+	-- Note: Unsupplied fields keep their current value on AniDB.
+	applyMylistaddValues(params, values)
 
 	self:login()
 	send(self, "MYLISTADD", params)

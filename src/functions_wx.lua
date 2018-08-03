@@ -10,7 +10,7 @@
 --=
 --==============================================================
 
-	cast, is
+	cast, is, isClass
 	eachChild
 	getSize, getWidth, getHeight
 	newMenuItem, newMenuItemLabel, newMenuItemSeparator, newButton, newText
@@ -18,9 +18,11 @@
 	on, onAccelerator
 	setAccelerators
 	setBoxSizer, setBoxSizerWithSpace
-	showButtonDialog, showMessage, showError, confirm
+	showButtonDialog, showMessage, showWarning, showError, confirm
 
 	checkBoxClick
+
+	clipboardSetText
 
 	listCtrlGetSelectedRows, listCtrlGetFirstSelectedRow
 	listCtrlInsertColumn
@@ -63,14 +65,18 @@ do
 			b:IsKindOf(windowClassInfo) and
 			a:GetHandle() == b:GetHandle()
 	end
+
+	function isClass(v, className)
+		return wxlua.istrackedobject(v) and v:IsKindOf(wx.wxClassInfo.FindClass(className))
+	end
 end
 
 
 
 -- for index, child in eachChild( window ) do
 function eachChild(window)
-	local childList = window:GetChildren()
-	local wxRow   = -1
+	local childList = isClass(window, "wxMenu") and window:GetMenuItems() or window:GetChildren()
+	local wxRow     = -1
 	local childNode
 
 	return function()
@@ -156,7 +162,7 @@ function listCtrlPopupMenu(listCtrl, menu, wxRow, x, y)
 	end
 
 	if not (x == -1 and y == -1) then
-		listCtrl:PopupMenu(menu)
+		popupMenu(listCtrl, menu)
 		return
 	end
 
@@ -170,7 +176,7 @@ function listCtrlPopupMenu(listCtrl, menu, wxRow, x, y)
 		y = rect:GetTop()
 	end
 
-	listCtrl:PopupMenu(menu, x, y)
+	popupMenu(listCtrl, menu, x, y)
 end
 
 -- anyRowWasSelected = listCtrlSelectRows( listCtrl [, wxIndices, fallbackWxIndex ] )
@@ -207,22 +213,34 @@ end
 
 
 -- item = newMenuItem( menu, eventHandler [, id ], caption [, helpText ] [, onPress ] )
-function newMenuItem(menu, eHandler, id, caption, helpText, onPress)
+-- item = newMenuItem( menu, eventHandler [, id ], caption [, helpText ] [, submenu ] )
+function newMenuItem(menu, eHandler, id, caption, helpText, onPressOrSubmenu)
 	if type(id) == "string" then
-		id, caption, helpText, onPress = nil, id, caption, helpText
+		id, caption, helpText, onPressOrSubmenu = nil, id, caption, helpText
 	end
-	if type(helpText) == "function" then
-		helpText, onPress = nil, helpText
+	if isAny(type(helpText), "function","userdata") then
+		helpText, onPressOrSubmenu = nil, helpText
 	end
 
 	id       = id or wx.wxNewId()
 	helpText = helpText or ""
 
-	local item = menu:Append(wx.wxMenuItem(menu, id, caption, helpText))
+	local item
 
-	if onPress then
+	if type(onPressOrSubmenu) == "function" then
+		local onPress = onPressOrSubmenu
 		on(eHandler, id, "COMMAND_MENU_SELECTED", onPress)
+		item = wx.wxMenuItem(menu, id, caption, helpText)
+
+	elseif type(onPressOrSubmenu) == "userdata" then
+		local submenu = onPressOrSubmenu
+		item = wx.wxMenuItem(menu, id, caption, helpText, wxITEM_NORMAL, submenu)
+
+	else
+		item = wx.wxMenuItem(menu, id, caption, helpText)
 	end
+
+	item = menu:Append(item)
 
 	return item
 end
@@ -234,8 +252,9 @@ function newMenuItemLabel(menu, caption)
 	return item
 end
 
+-- item = newMenuItemSeparator( menu )
 function newMenuItemSeparator(menu)
-	menu:Append(wx.wxMenuItem())
+	return menu:AppendSeparator()
 end
 
 -- button = newButton( parent, [ id, ] caption, [ position, size, ] onPress )
@@ -406,7 +425,7 @@ function showButtonDialog(window, caption, message, labels, icon)
 	if iconName ~= "" then
 		local bm    = wx.wxArtProvider.GetBitmap(iconName)
 		local bmObj = wx.wxStaticBitmap(panel, wxID_ANY, bm)
-		sizer:Add(bmObj, 0, wxALIGN_CENTER_VERTICAL)
+		sizer:Add(bmObj, 0, wxALIGN_CENTRE_VERTICAL)
 
 		sizer:AddSpacer(8)
 	end
@@ -414,7 +433,7 @@ function showButtonDialog(window, caption, message, labels, icon)
 	-- Message.
 	local textObj = wx.wxStaticText(panel, wxID_ANY, message)
 	textObj:Wrap(300)
-	sizer:Add(textObj, 0, wxALIGN_CENTER_VERTICAL)
+	sizer:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL)
 
 	local sizerWrapper = wx.wxBoxSizer(wxHORIZONTAL)
 	sizerWrapper:Add(sizer, 0, wxGROW_ALL, 24)
@@ -466,6 +485,16 @@ function showMessage(window, caption, message)
 		wx.wxMessageBox(message, caption, wxOK + wxICON_INFORMATION + wxCENTRE)
 	else
 		wx.wxMessageBox(message, caption, wxOK + wxICON_INFORMATION + wxCENTRE, window)
+	end
+end
+
+-- showWarning( [ window, ] caption, message )
+function showWarning(window, caption, message)
+	if type(window) == "string" then
+		window, caption, message = nil, window, caption
+		wx.wxMessageBox(message, caption, wxOK + wxICON_WARNING + wxCENTRE)
+	else
+		wx.wxMessageBox(message, caption, wxOK + wxICON_WARNING + wxCENTRE, window)
 	end
 end
 
@@ -589,6 +618,31 @@ end
 
 function textCtrlSelectAll(textCtrl)
 	textCtrl:SetSelection(0, textCtrl:GetLastPosition())
+end
+
+
+
+function clipboardSetText(s)
+	local data      = wx.wxTextDataObject(s)
+	local clipboard = wx.wxClipboard.Get()
+	clipboard:SetData(data)
+end
+
+
+
+-- Warning: The menu is expected to NOT be reused!
+function popupMenu(obj, menu, ...)
+	local bool = obj:PopupMenu(menu, ...)
+
+	-- Fix crash when using submenus in popups.
+	-- http://docs.wxwidgets.org/trunk/classwx_menu.html#menu_allocation
+	for _, item in eachChild(menu) do
+		if item:IsSubMenu() then
+			menu:Delete(item)
+		end
+	end
+
+	return bool
 end
 
 
