@@ -13,6 +13,7 @@
 
 
 -- Settings, debug.
+
 DEBUG                               = false
 DEBUG_LOCAL                         = false and DEBUG
 DEBUG_FORCE_NAT_OFF                 = false and DEBUG_LOCAL
@@ -23,11 +24,18 @@ DEBUG_EXPIRATION_TIME_SESSION       = 3*60 -- Only useful is NAT is off.
 local chunk = loadfile"local/debug.lua"
 if chunk then  chunk()  end
 
--- Settings.
+
+
+-- Settings, app/general.
+
 APP_VERSION                         = "1.0.0"
 CACHE_DIR                           = DEBUG_LOCAL and "cacheDebug" or "cache"
+MAX_DROPPED_FILES                   = 1000
+
+
 
 -- Settings, AniDB.
+
 SERVER_ADDRESS                      = DEBUG_LOCAL and "localhost" or "api.anidb.net"
 SERVER_PORT                         = 9000
 LOCAL_PORT                          = DEBUG_LOCAL and 9000 or 24040
@@ -51,9 +59,6 @@ MAX_DATA_LENGTH                     = 1400 -- Must be between 400 and 1400. (MTU
 FLOOD_PROTECTION_SHORT_TERM         = 20
 FLOOD_PROTECTION_WINDOW             = 10   -- Saved amount of lastResponseTimes.
 
--- Settings, MyHappyList.
-MAX_DROPPED_FILES                   = 1000
-
 
 
 -- Constants.
@@ -63,12 +68,8 @@ require(... .."_wx")
 EMPTY_TABLE = {}
 NOOP        = function()end
 
-lfs         = require"lfs"
-socket      = require"socket"
-
-_print      = print
-
 -- AniDB.
+
 MYLIST_STATE_UNKNOWN                  = 0
 MYLIST_STATE_INTERNAL_STORAGE         = 1
 MYLIST_STATE_EXTERNAL_STORAGE         = 2
@@ -89,7 +90,17 @@ MYLIST_FILESTATE_OTHER                = 100 -- normal
 
 
 
--- Variables.
+-- Modules.
+
+lfs     = require"lfs"
+socket  = require"socket"
+
+_print  = print
+
+
+
+-- Objects.
+
 logFile = nil
 
 

@@ -247,9 +247,12 @@ function simulateServerResponse(udp, data)
 		local b      = newServerResponseBuilder(params)
 		local natStr = params["nat"] == BOOL_TRUE and F(" %s:%d", "192.0.2.0", port) or ""
 
-		b("200 %s%s LOGIN ACCEPTED\n", session, natStr)
-		-- b("201 %s%s LOGIN ACCEPTED - NEW VERSION AVAILABLE\n", session, natStr)
-		-- b("500 LOGIN FAILED\n")
+		if params["user"]:lower() == "myname" and params["pass"] == "abc123" then
+			b("200 %s%s LOGIN ACCEPTED\n", session, natStr)
+			-- b("201 %s%s LOGIN ACCEPTED - NEW VERSION AVAILABLE\n", session, natStr)
+		else
+			b("500 LOGIN FAILED\n")
+		end
 		-- b("503 CLIENT VERSION OUTDATED\n")
 		-- b("504 CLIENT BANNED - insert reason here\n")
 		-- b("505 ILLEGAL INPUT OR ACCESS DENIED\n")

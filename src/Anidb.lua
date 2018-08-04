@@ -17,7 +17,7 @@
 	clearMessageQueue
 	events
 	getCacheMylist
-	getLogin
+	getCredentials, setCredentials
 	hashFile
 	isLoggedIn, dropSession
 	isSendingAnyMessage, getActiveMessageCount, getQueuedMessageCount
@@ -137,33 +137,34 @@ local ED2K_STATE_ERROR                = 3
 
 
 local Anidb = {
-	udp                   = nil,
+	udp                     = nil,
 
-	messages              = nil,
-	theEvents             = nil,
-	cache                 = nil,
-	cachePartial          = nil,
+	messages                = nil,
+	theEvents               = nil,
+	cache                   = nil,
+	cachePartial            = nil,
 
-	sessionKey            = "", -- This indicates whether we're logged in or not.
+	sessionKey              = "", -- This indicates whether we're logged in or not.
+	canAskForCredentials    = true,
 
-	blackoutUntil         = -1, -- No fraction!
-	isInBlackout          = false,
+	blackoutUntil           = -1, -- Note: No fractions!
+	isInBlackout            = false,
 
-	natMode               = NAT_MODE_UNKNOWN,
-	isActive              = false, -- Active connections should send PINGs. Only used if NAT is on.
-	pingDelay             = DEFAULT_PING_DELAY,
-	natLimitLower         = -1,
-	natLimitUpper         = -1,
-	lastPublicPort        = -1, -- Port seen by the server.
+	natMode                 = NAT_MODE_UNKNOWN,
+	isActive                = false, -- Active connections should send PINGs. Only used if NAT is on.
+	pingDelay               = DEFAULT_PING_DELAY,
+	natLimitLower           = -1,
+	natLimitUpper           = -1,
+	lastPublicPort          = -1, -- Port seen by the server.
 
-	responseTimeLast      = 0.00,
-	responseTimePrevious  = 0.00,
-	previousResponseTimes = nil,
+	responseTimeLast        = 0.00,
+	responseTimePrevious    = 0.00,
+	previousResponseTimes   = nil,
 
-	mylistDefaults        = nil,
+	mylistDefaults          = nil,
 
 	-- Internal events:
-	onLogin           = NOOP,
+	onLogin                 = NOOP,
 }
 Anidb.__index = Anidb
 
@@ -176,7 +177,7 @@ local responseHandlers
 --==============================================================
 
 local _logprint, _logprinterror
-local addEvent
+local addEvent, clearEvents
 local applyMylistaddValues, compareMylistaddValues
 local blackout, loadBlackout
 local cacheSave, cacheLoad, cacheDelete
@@ -282,7 +283,7 @@ function send(self, command, params, first)
 	local cb = responseHandlers[command] or errorf("No response handler for command '%s'.", command)
 
 	local tag = generateTag()
-	params["tag"] = tag
+	params.tag = tag
 
 	local msg = {
 		tag            = tag,
@@ -626,6 +627,14 @@ function addEvent(self, eName, ...)
 	assertarg(2, eName, "string")
 
 	table.insert(self.theEvents, {eName, ...})
+end
+
+function clearEvents(self, eName)
+	for i, eventData in ipairsr(self.theEvents) do
+		if eventData[1] == eName then
+			table.remove(self.theEvents, i)
+		end
+	end
 end
 
 
@@ -1178,20 +1187,20 @@ end
 function applyMylistaddValues(params, values)
 	-- MYLISTADD ...[&state=int&viewed=bool&viewdate=int&source=str&storage=str&other=str]
 	if values.state ~= nil then
-		params["state"] = values.state
+		params.state = values.state
 	end
 	if values.viewed ~= nil then
-		params["viewed"]   = values.viewed
-		params["viewdate"] = values.viewed and os.time() or nil
+		params.viewed   = values.viewed
+		params.viewdate = values.viewed and os.time() or nil
 	end
 	if values.source ~= nil then
-		params["source"] = values.source
+		params.source = values.source
 	end
 	if values.storage ~= nil then
-		params["storage"] = values.storage
+		params.storage = values.storage
 	end
 	if values.other ~= nil then
-		params["other"] = values.other
+		params.other = values.other
 	end
 end
 
@@ -1682,16 +1691,18 @@ end
 
 
 
-function Anidb:getLogin()
-	if DEBUG_LOCAL then  return "MyName", "ABC123"  end
+-- username, password = getCredentials( )
+function Anidb:getCredentials()
+	local path = DEBUG_LOCAL and "local/loginDebug" or "local/login"
 
-	local file, err = openFile("local/login", "r")
+	-- @Speed: Don't read this from disc every time. Sigh.
+	local file, err = openFile(path, "r")
 	if not file then
-		_logprinterror("Could not open file 'local/login': %s", err)
+		-- _logprinterror("Could not open file '%s': %s", path, err)
 		return nil
 	end
 
-	local iter = file:lines"local/login"
+	local iter = file:lines()
 	local user = iter() or ""
 	local pass = iter() or ""
 
@@ -1704,6 +1715,20 @@ function Anidb:getLogin()
 	return user, pass
 end
 
+-- setCredentials( username, password )
+function Anidb:setCredentials(user, pass)
+	local path = DEBUG_LOCAL and "local/loginDebug" or "local/login"
+	local file = assert(openFile(path, "w"))
+
+	writeLine(file, user)
+	writeLine(file, pass)
+
+	file:close()
+
+	clearEvents(self, "needcredentials")
+	self.canAskForCredentials = true
+end
+
 
 
 -- Should only be called internally!
@@ -1714,7 +1739,7 @@ function Anidb:ping()
 	local params = {}
 
 	if self.natMode ~= NAT_MODE_OFF then
-		params["nat"] = BOOL_TRUE
+		params.nat = BOOL_TRUE
 	end
 
 	send(self, "PING", params)
@@ -1733,19 +1758,17 @@ function Anidb:login()
 		return
 	end
 
-	local user, pass = self:getLogin()
-
 	-- AUTH user=str&pass=str&protover=int&client=str&clientver=int[&nat=1&comp=1&enc=str&mtu=int&imgserver=1]
 	local params = {
-		["user"]      = user,
-		["pass"]      = pass,
+		["user"]      = "",
+		["pass"]      = "",
 		["protover"]  = PROTOCOL_VERSION,
 		["client"]    = CLIENT_NAME,
 		["clientver"] = CLIENT_VERSION,
 	}
 
 	if self.natMode ~= NAT_MODE_OFF then
-		params["nat"] = BOOL_TRUE
+		params.nat = BOOL_TRUE
 	end
 
 	send(self, "AUTH", params, true)
@@ -1995,24 +2018,60 @@ function Anidb:update(force)
 	-- Send next message.
 	local msg = getNextMessageToSend(self, force)
 	if msg then
+		local okToSend = true
+
+		-- Update certain standard params.
+		----------------------------------------------------------------
+
+		if msg.params.user and msg.params.pass then
+			local user, pass = self:getCredentials()
+
+			if not (user and pass) then
+				if self.canAskForCredentials then
+					self.canAskForCredentials = false
+					addEvent(self, "needcredentials")
+				end
+				okToSend = false
+
+			else
+				msg.params.user = user
+				msg.params.pass = pass
+			end
+		end
+
 		if msg.params.s then
-			msg.params.s = self.sessionKey -- Should we check if sessionKey is empty?
+			if self.sessionKey == "" then
+				self:login() -- The AUTH should replace the current message as the next one to send.
+				okToSend = false
+			else
+				msg.params.s = self.sessionKey
+			end
 		end
 
-		local data = createData(msg.command, msg.params)
+		-- Send message.
+		----------------------------------------------------------------
 
-		if #data > MAX_DATA_LENGTH then
-			_logprinterror("Data for %s command is too long. (length: %.0f, max: %d)", msg.command, #data, MAX_DATA_LENGTH)
-			msg:callback(self, false)
+		if okToSend then
+			local data = createData(msg.command, msg.params)
 
-		else
-			msg.stage    = MESSAGE_STAGE_SENT
-			msg.tries    = msg.tries+1
-			msg.timeSent = time
+			if #data > MAX_DATA_LENGTH then
+				_logprinterror(
+					"Data for %s command is too long. (length: %.0f, max: %d)",
+					msg.command, #data, MAX_DATA_LENGTH
+				)
+				msg:callback(self, false)
 
-			logprint("IO", "--> "..makePrintable(data))
-			check(self.udp:send(data))
+			else
+				msg.stage    = MESSAGE_STAGE_SENT
+				msg.tries    = msg.tries+1
+				msg.timeSent = time
+
+				logprint("IO", "--> "..makePrintable(data))
+				check(self.udp:send(data))
+			end
 		end
+
+		----------------------------------------------------------------
 	end
 
 	-- Send ping.

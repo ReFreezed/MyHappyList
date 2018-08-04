@@ -15,7 +15,7 @@
 	getSize, getWidth, getHeight
 	newMenuItem, newMenuItemLabel, newMenuItemSeparator, newButton, newText
 	newTimer
-	on, onAccelerator
+	on, onAccelerator, off
 	setAccelerators
 	setBoxSizer, setBoxSizerWithSpace
 	showButtonDialog, showMessage, showWarning, showError, confirm
@@ -229,8 +229,10 @@ function newMenuItem(menu, eHandler, id, caption, helpText, onPressOrSubmenu)
 
 	if type(onPressOrSubmenu) == "function" then
 		local onPress = onPressOrSubmenu
-		on(eHandler, id, "COMMAND_MENU_SELECTED", onPress)
 		item = wx.wxMenuItem(menu, id, caption, helpText)
+
+		local cb = on(eHandler, id, "COMMAND_MENU_SELECTED", onPress)
+		storeEventCallbacks(menu, "COMMAND_MENU_SELECTED", id, cb)
 
 	elseif type(onPressOrSubmenu) == "userdata" then
 		local submenu = onPressOrSubmenu
@@ -297,7 +299,7 @@ end
 
 
 
--- on( wxObject, [ id, ] eventType, callback )
+-- callbackWrapper = on( eventHandler, [ id, ] eventType, callback )  -- @Cleanup: Move id to after eventType.
 -- callback( event, eventSpecificArgument1, ... )
 do
 	local eventExpanders = {
@@ -319,27 +321,33 @@ do
 		end,
 	}
 
-	function on(obj, id, eType, cb)
+	function on(eHandler, id, eType, cb)
 		if type(id) == "string" then
 			id, eType, cb = nil, id, eType
 		end
 
 		local k     = "wxEVT_"..eType
-		local eCode = wx[k] or wxlua[k] or wxaui[k] or wxstc[k] or errorf("Unknown event type '%s'.", eType)
+		local eCode = wx[k] or wxlua[k] or wxaui[k] or wxstc[k] or errorf(2, "Unknown event type '%s'.", eType)
 
 		local expander = eventExpanders[eType] or NOOP
 
+		local cbWrapper = wrapCall(function(e)
+			return cb(e, expander(e))
+		end)
+
 		if id then
-			obj:Connect(id, eCode, wrapCall(function(e)  cb(e, expander(e))  end))
+			eHandler:Connect(id, eCode, cbWrapper)
 		else
-			obj:Connect(    eCode, wrapCall(function(e)  cb(e, expander(e))  end))
+			eHandler:Connect(eCode, cbWrapper)
 		end
+
+		return cbWrapper
 	end
 end
 
--- id = onAccelerator( wxObject, accelerators, modKeys, keyCode, onPress )
-function onAccelerator(obj, accelerators, modKeys, kc, onPress)
-	assertarg(1, obj,          "userdata")
+-- id = onAccelerator( eventHandler, accelerators, modKeys, keyCode, onPress )
+function onAccelerator(eHandler, accelerators, modKeys, kc, onPress)
+	assertarg(1, eHandler,     "userdata")
 	assertarg(2, accelerators, "table")
 	assertarg(3, modKeys,      "string")
 	assertarg(4, kc,           "number")
@@ -352,10 +360,32 @@ function onAccelerator(obj, accelerators, modKeys, kc, onPress)
 	if modKeys:find("c", 1, true) then  flags = flags+wxACCEL_CTRL   end
 	if modKeys:find("s", 1, true) then  flags = flags+wxACCEL_SHIFT  end
 
-	on(obj, id, "COMMAND_MENU_SELECTED", onPress)
+	on(eHandler, id, "COMMAND_MENU_SELECTED", onPress)
 	table.insert(accelerators, {flags, kc, id})
 
 	return id
+end
+
+-- off( eventHandler, eventType, id )
+-- off( eventHandler, eventType, eventHolder )
+function off(eHandler, eType, ...)
+	local k     = "wxEVT_"..eType
+	local eCode = wx[k] or wxlua[k] or wxaui[k] or wxstc[k] or errorf(2, "Unknown event type '%s'.", eType)
+
+	if type(...) == "number" then
+		local id = ...
+		eHandler:Disconnect(id, eCode)
+
+	else
+		local eHolder = ...
+		local cbs     = getStoredEventCallbackAll(eHolder, eType)
+		if not cbs then return end
+
+		for id in pairs(cbs) do
+			eHandler:Disconnect(id, eCode)
+			cbs[id] = nil
+		end
+	end
 end
 
 
@@ -375,7 +405,7 @@ function newTimer(milliseconds, oneShot, cb)
 		oneShot, cb = false, oneShot
 	end
 
-	local timer = wx.wxTimer(wxNULL)
+	local timer = wx.wxTimer(topFrame)
 	timer:SetOwner(timer)
 
 	on(timer, "TIMER", cb)
@@ -389,7 +419,7 @@ end
 
 
 
--- index = showButtonDialog( window, caption, message, buttonLabels [, icon=wxART_INFORMATION ] )
+-- index = showButtonDialog( caption, message, buttonLabels [, icon=wxART_INFORMATION ] )
 -- Returns nil if no button was pressed.
 local ICONS = {
 	[wxICON_NONE]        = "",
@@ -401,8 +431,8 @@ local ICONS = {
 	[wxICON_HAND]        = wxART_ERROR,
 	-- [wxICON_AUTH_NEEDED] = ?,
 }
-function showButtonDialog(window, caption, message, labels, icon)
-	local dialog      = wx.wxDialog(window, wxID_ANY, caption)
+function showButtonDialog(caption, message, labels, icon)
+	local dialog      = wx.wxDialog(topFrame, wxID_ANY, caption)
 	local sizerDialog = wx.wxBoxSizer(wxVERTICAL)
 
 	on(dialog, "CHAR_HOOK", function(e, kc)
@@ -478,43 +508,28 @@ function showButtonDialog(window, caption, message, labels, icon)
 	return indexOf(buttonIds, id)
 end
 
--- showMessage( [ window, ] caption, message )
-function showMessage(window, caption, message)
-	if type(window) == "string" then
-		window, caption, message = nil, window, caption
-		wx.wxMessageBox(message, caption, wxOK + wxICON_INFORMATION + wxCENTRE)
-	else
-		wx.wxMessageBox(message, caption, wxOK + wxICON_INFORMATION + wxCENTRE, window)
-	end
+-- showMessage( caption, message )
+function showMessage(caption, message)
+	wx.wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_INFORMATION, topFrame)
 end
 
--- showWarning( [ window, ] caption, message )
-function showWarning(window, caption, message)
-	if type(window) == "string" then
-		window, caption, message = nil, window, caption
-		wx.wxMessageBox(message, caption, wxOK + wxICON_WARNING + wxCENTRE)
-	else
-		wx.wxMessageBox(message, caption, wxOK + wxICON_WARNING + wxCENTRE, window)
-	end
+-- showWarning( caption, message )
+function showWarning(caption, message)
+	wx.wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_WARNING, topFrame)
 end
 
--- showError( [ window, ] caption, message )
-function showError(window, caption, message)
-	if type(window) == "string" then
-		window, caption, message = nil, window, caption
-		wx.wxMessageBox(message, caption, wxOK + wxICON_ERROR + wxCENTRE)
-	else
-		wx.wxMessageBox(message, caption, wxOK + wxICON_ERROR + wxCENTRE, window)
-	end
+-- showError( caption, message )
+function showError(caption, message)
+	wx.wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_ERROR, topFrame)
 end
 
--- bool = confirm( frame, caption, message [, okLabel="OK", cancelLabel="Cancel", icon=wxICON_QUESTION ] )
-function confirm(frame, caption, message, okLabel, cancelLabel, icon)
+-- bool = confirm( caption, message [, okLabel="OK", cancelLabel="Cancel", icon=wxICON_QUESTION ] )
+function confirm(caption, message, okLabel, cancelLabel, icon)
 	okLabel     = okLabel     or "OK"
 	cancelLabel = cancelLabel or "Cancel"
 	icon        = icon        or wxICON_QUESTION
 
-	local i = showButtonDialog(frame, caption, message, {okLabel, cancelLabel}, icon)
+	local i = showButtonDialog(caption, message, {okLabel, cancelLabel}, icon)
 	return i == 1
 end
 
@@ -631,8 +646,11 @@ end
 
 
 -- Warning: The menu is expected to NOT be reused!
-function popupMenu(obj, menu, ...)
-	local bool = obj:PopupMenu(menu, ...)
+function popupMenu(eHandler, menu, ...)
+	local bool = eHandler:PopupMenu(menu, ...)
+
+	-- Clean up event callbacks. Not sure if this is needed, but let's make sure memory is freed.
+	off(eHandler, "COMMAND_MENU_SELECTED", menu)
 
 	-- Fix crash when using submenus in popups.
 	-- http://docs.wxwidgets.org/trunk/classwx_menu.html#menu_allocation

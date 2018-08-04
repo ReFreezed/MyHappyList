@@ -22,6 +22,8 @@
 	getColumn
 	getKeys
 	getLineNumber
+	getStored, store, storeItem, getStorage
+	getStoredEventCallback, getStoredEventCallbackAll, storeEventCallbacks
 	getTime
 	getTimezone, getTimezoneOffsetString, getTimezoneOffset
 	gsub2
@@ -47,6 +49,7 @@
 	sort
 	sortNatural, compareNatural
 	splitString
+	tablePathGet, tablePathSet
 	trim, trimNewlines
 
 --============================================================]]
@@ -1023,6 +1026,103 @@ function getColumn(t, k)
 	end
 
 	return values
+end
+
+
+
+do
+	local allStorage = setmetatable({}, {__mode="k"})
+
+	-- storage = getStorage( object [, doNotCreate=false ] )
+	function getStorage(obj, doNotCreate)
+		local storage = allStorage[obj]
+
+		if not (storage or doNotCreate) then
+			storage = {}
+			allStorage[obj] = storage
+		end
+
+		return storage
+	end
+
+	function getStored(obj, k)
+		local storage = allStorage[obj]
+		return storage and storage[k]
+	end
+
+	function store(obj, k, v)
+		getStorage(obj)[k] = v
+	end
+
+	-- storeItem( object, item )      -- Store directly in storage.
+	-- storeItem( object, key, item ) -- Store in an array field.
+	function storeItem(obj, kOrItem, item)
+		local storage = getStorage(obj)
+
+		if item ~= nil then
+			local k = kOrItem
+			local t = storage[k]
+
+			if not t then
+				storage[k] = {item}
+			else
+				table.insert(t, item)
+			end
+
+		else
+			item = kOrItem
+			assert(item ~= nil)
+			table.insert(storage, item)
+		end
+	end
+end
+
+
+
+function getStoredEventCallback(eHolder, eType, id)
+	local storage = getStorage(eHolder, true)
+	return storage and tablePathGet(storage, "events", eType, id)
+end
+
+-- callbacks = getStoredEventCallbackAll( eventHolder, eventType )
+-- callbacks = { [id1]=callback1, ... }
+function getStoredEventCallbackAll(eHolder, eType)
+	local storage = getStorage(eHolder, true)
+	return storage and tablePathGet(storage, "events", eType)
+end
+
+function storeEventCallbacks(eHolder, eType, id, cb)
+	tablePathSet(getStorage(eHolder), "events", eType, id, cb)
+end
+
+
+
+-- value = tablePathGet( table, key1, ... )
+function tablePathGet(t, k, ...)
+	for i = 1, select("#", ...) do
+		if not t[k] then  return nil  end
+
+		t = t[k]
+		k = select(i, ...)
+	end
+
+	return t[k]
+end
+
+-- tablePathSet( table, key1, ..., value )
+function tablePathSet(t, k, ...)
+	local argCount = select("#", ...)
+
+	for i = 1, argCount-1 do
+		if not t[k] then
+			t[k] = {}
+		end
+
+		t = t[k]
+		k = select(i, ...)
+	end
+
+	t[k] = select(argCount, ...)
 end
 
 
