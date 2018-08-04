@@ -47,14 +47,14 @@ end
 
 
 function startNewSession()
-	session = {}
+	local chars = {}
 
 	for i = 1, math.random(4, 8) do
-		local j    = math.random(1, #SESSION_CHARS)
-		session[i] = SESSION_CHARS:sub(j, j)
+		local j  = math.random(1, #SESSION_CHARS)
+		chars[i] = SESSION_CHARS:sub(j, j)
 	end
 
-	session = table.concat(session)
+	session = table.concat(chars)
 	_logprint("Started session. (%s)", session)
 end
 
@@ -242,12 +242,13 @@ function simulateServerResponse(udp, data)
 
 	-- AUTH user=str&pass=str&protover=int&client=str&clientver=int[&nat=1&comp=1&enc=str&mtu=int&imgserver=1]
 	elseif command == "AUTH" then
-		startNewSession()
-
-		local b      = newServerResponseBuilder(params)
-		local natStr = params["nat"] == BOOL_TRUE and F(" %s:%d", "192.0.2.0", port) or ""
+		session = ""
+		local b = newServerResponseBuilder(params)
 
 		if params["user"]:lower() == "myname" and params["pass"] == "abc123" then
+			startNewSession()
+
+			local natStr = params["nat"] == BOOL_TRUE and F(" %s:%d", "192.0.2.0", port) or ""
 			b("200 %s%s LOGIN ACCEPTED\n", session, natStr)
 			-- b("201 %s%s LOGIN ACCEPTED - NEW VERSION AVAILABLE\n", session, natStr)
 		else

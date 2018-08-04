@@ -27,7 +27,7 @@ function dialogs.about()
 		= "MyHappyList is made using Lua, wxLua, Alien FFI, LuaSocket and rhash. "
 		.."The executable is built using srlua, ResourceHacker and ImageMagick."
 
-	local dialog = wx.wxDialog(topFrame, wxID_ANY, "About MyHappyList")
+	local dialog = wx.wxDialog(topPanel, wxID_ANY, "About MyHappyList")
 	local sizer  = wx.wxBoxSizer(wxVERTICAL)
 
 	on(dialog, "CHAR_HOOK", function(e, kc)
@@ -103,7 +103,7 @@ function dialogs.addmylist()
 	local APPROX_BASE_MESSAGE_LENGTH = 150
 	local SAFETY_MESSAGE_LENGTH      = 20
 
-	local dialog = wx.wxDialog(topFrame, wxID_ANY, "Add to / Edit MyList")
+	local dialog = wx.wxDialog(topPanel, wxID_ANY, "Add to / Edit MyList")
 
 	on(dialog, "CHAR_HOOK", function(e, kc)
 		if kc == KC_ESCAPE then
@@ -320,7 +320,7 @@ end
 
 
 function dialogs.credentials()
-	local dialog = wx.wxDialog(topFrame, wxID_ANY, "Credentials to AniDB")
+	local dialog       = wx.wxDialog(topPanel, wxID_ANY, "Credentials to AniDB")
 	local sizerDialog  = wx.wxBoxSizer(wxVERTICAL)
 
 	on(dialog, "CHAR_HOOK", function(e, kc)
@@ -334,6 +334,8 @@ function dialogs.credentials()
 	-- Inputs.
 	----------------------------------------------------------------
 
+	local user, pass = anidb:getCredentials()
+
 	-- Username. 3-16 characters. A-Z, a-z, 0-9, - and _ only.
 	local sizerSection = wx.wxBoxSizer(wxHORIZONTAL)
 
@@ -341,7 +343,7 @@ function dialogs.credentials()
 	textObj:SetSizeHints(60, getHeight(textObj))
 	sizerSection:Add(textObj)
 
-	local userInput = wx.wxTextCtrl(dialog, wxID_ANY)
+	local userInput = wx.wxTextCtrl(dialog, wxID_ANY, (user or ""))
 	userInput:SetMaxLength(16)
 	sizerSection:Add(userInput, 1, wxGROW_ALL)
 
@@ -356,7 +358,7 @@ function dialogs.credentials()
 	textObj:SetSizeHints(60, getHeight(textObj))
 	sizerSection:Add(textObj)
 
-	local passInput = wx.wxTextCtrl(dialog, wxID_ANY, "", wxDEFAULT_POSITION, wxDEFAULT_SIZE, wxTE_PASSWORD)
+	local passInput = wx.wxTextCtrl(dialog, wxID_ANY, (pass or ""), wxDEFAULT_POSITION, wxDEFAULT_SIZE, wxTE_PASSWORD)
 	passInput:SetMaxLength(64)
 	sizerSection:Add(passInput, 1, wxGROW_ALL)
 
@@ -394,6 +396,7 @@ function dialogs.credentials()
 
 		else
 			anidb:setCredentials(user, pass)
+			hide(loginButton, topPanel)
 			e:Skip()
 		end
 	end)
@@ -425,6 +428,7 @@ function dialogs.credentials()
 	dialog:Fit()
 	dialog:Centre()
 
+	show(loginButton, topPanel)
 	dialog:ShowModal()
 end
 

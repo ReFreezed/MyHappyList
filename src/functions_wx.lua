@@ -664,3 +664,17 @@ function popupMenu(eHandler, menu, ...)
 end
 
 
+
+function show(window, containerToUpdate)
+	window:Show(true)
+	containerToUpdate:Layout()
+	containerToUpdate:Refresh()
+end
+
+function hide(window, containerToUpdate)
+	window:Show(false)
+	containerToUpdate:Layout()
+	containerToUpdate:Refresh()
+end
+
+

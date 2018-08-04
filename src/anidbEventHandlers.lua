@@ -62,9 +62,9 @@ return {
 
 	["loginbadlogin"] =
 	function()
-		anidb:clearMessageQueue()
-		-- @Incomplete: Show login form.
-		showError("Bad Login", "The username or password is incorrect.")
+		anidb.enableSending = false
+		showError("Bad Login", "The username and/or password is incorrect.")
+		anidb.enableSending = true
 	end,
 
 	["loginfail"] =

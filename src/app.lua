@@ -50,11 +50,9 @@ assert(createDirectory(CACHE_DIR))
 local logFilePath = "logs/output.log"
 logFile = assert(openFile(logFilePath, "a"))
 
-anidb = require"Anidb"()
-
+anidb     = require"Anidb"()
+appIcons  = wx.wxIconBundle("gfx/appicon.ico", wxBITMAP_TYPE_ANY)
 fontTitle = wx.wxFont(1.2*wx.wxNORMAL_FONT:GetPointSize(), wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD)
-
-appIcons = wx.wxIconBundle("gfx/appicon.ico", wxBITMAP_TYPE_ANY)
 
 
 
@@ -251,7 +249,7 @@ end
 local menuBar = wx.wxMenuBar()
 
 menuBar:Append(menuFile, "&File")
-menuBar:Append(menuEdit, "&Edit")
+-- menuBar:Append(menuEdit, "&Edit")
 if DEBUG then  menuBar:Append(menuDebug, "&Debug")  end
 menuBar:Append(menuHelp, "&Help")
 
@@ -259,13 +257,32 @@ topFrame:SetMenuBar(menuBar)
 
 
 
+topPanel        = wx.wxPanel(topFrame, wx.wxID_ANY)
+local sizerMain = wx.wxBoxSizer(wxVERTICAL)
+
+
+
+-- Bars above file list.
+--==============================================================
+
+loginButton = newButton(topPanel, wxID_ANY, "Log In", function(e)
+	dialogs.credentials()
+end)
+loginButton:SetSizeHints(getWidth(loginButton), 1.4*getHeight(loginButton))
+loginButton:SetBackgroundColour(wx.wxColour(255, 255, 0))
+loginButton:Show(false)
+sizerMain:Add(loginButton, 0, wxGROW)
+
+
+
 -- File list.
 --==============================================================
 
 fileList = wx.wxListCtrl(
-	topFrame, wxID_ANY, wxDEFAULT_POSITION, wxDEFAULT_SIZE,
+	topPanel, wxID_ANY, wxDEFAULT_POSITION, wxDEFAULT_SIZE,
 	wxLC_REPORT
 )
+sizerMain:Add(fileList, 1, wxGROW_ALL)
 
 FILE_COLUMN_FILE   = listCtrlInsertColumn(fileList, "File",    500)
 FILE_COLUMN_FOLDER = listCtrlInsertColumn(fileList, "Folder",  500)
@@ -440,12 +457,15 @@ end)
 
 
 
--- The rest.
 --==============================================================
+
+topFrame:SetDefaultItem(fileList)
+topPanel:SetAutoLayout(true)
+topPanel:SetSizer(sizerMain)
 
 loadFileInfos()
 
-local anidbUpdateTimer = newTimer(function(e)
+anidbUpdateTimer = newTimer(function(e)
 	anidb:update()
 
 	local eHandlers = require"anidbEventHandlers"
@@ -473,6 +493,11 @@ end)
 
 topFrame:Center()
 topFrame:Show(true)
+
+if anyFileInfos() then
+	fileList:SetFocus()
+	listCtrlSelectRows(fileList, {0})
+end
 
 anidbUpdateTimer:Start(1000/10)
 wx.wxGetApp():MainLoop()

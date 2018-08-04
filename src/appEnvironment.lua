@@ -29,16 +29,20 @@ STATUS_BAR_FIELD_MESSAGE_QUEUE = 1
 
 
 
-anidb      = nil
-appIcons   = nil
-fontTitle  = nil
+anidb            = nil
+appIcons         = nil
+fontTitle        = nil
 
-topFrame   = nil
-statusBar  = nil
-fileList   = nil
+topFrame         = nil
+statusBar        = nil
+topPanel         = nil
+loginButton      = nil
+fileList         = nil
 
-fileInfos  = {}
-lastFileId = 0 -- Local ID, not fid on AniDB.
+anidbUpdateTimer = nil
+
+fileInfos        = {}
+lastFileId       = 0 -- Local ID, not fid on AniDB.
 
 updateAvailableMessageReceived = false
 

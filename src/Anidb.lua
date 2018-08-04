@@ -17,7 +17,7 @@
 	clearMessageQueue
 	events
 	getCacheMylist
-	getCredentials, setCredentials
+	getCredentials, setCredentials, removeCredentials
 	hashFile
 	isLoggedIn, dropSession
 	isSendingAnyMessage, getActiveMessageCount, getQueuedMessageCount
@@ -145,6 +145,8 @@ local Anidb = {
 	cachePartial            = nil,
 
 	sessionKey              = "", -- This indicates whether we're logged in or not.
+
+	enableSending           = true,
 	canAskForCredentials    = true,
 
 	blackoutUntil           = -1, -- Note: No fractions!
@@ -649,6 +651,8 @@ do
 	end
 
 	function getNextMessageToSend(self, force)
+		if not self.enableSending then  return nil  end
+
 		local time = getTime()
 
 		if not force then
@@ -1281,6 +1285,7 @@ responseHandlers = {
 
 		-- 500 LOGIN FAILED
 		elseif statusCode == 500 then
+			self:removeCredentials()
 			addEvent(self, "loginbadlogin")
 			self.onLogin(false)
 
@@ -1710,6 +1715,7 @@ function Anidb:getCredentials()
 
 	if not (user ~= "" and pass ~= "") then
 		_logprinterror("Missing at least one of username or password lines in login file.")
+		self:removeCredentials()
 		return nil
 	end
 	return user, pass
@@ -1727,6 +1733,12 @@ function Anidb:setCredentials(user, pass)
 
 	clearEvents(self, "needcredentials")
 	self.canAskForCredentials = true
+end
+
+-- removeCredentials( )
+function Anidb:removeCredentials()
+	local path = DEBUG_LOCAL and "local/loginDebug" or "local/login"
+	deleteFile(path)
 end
 
 
