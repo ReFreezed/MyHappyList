@@ -78,9 +78,13 @@ on(topFrame, "CLOSE_WINDOW", function(e)
 		and not confirm("Exit", "The task queue is not empty. Data may get lost. Exit anyway?", "Exit")
 	then
 		e:Veto() -- Abort exit.
-	else
-		e:Skip() -- Proceed with exit.
+		return
 	end
+
+	e:Skip() -- Proceed with exit.
+
+	-- Must do this here because of callbacks that reference wxWindow objects.
+	saveSettings()
 end)
 
 on(topFrame, "DROP_FILES", function(e, paths)
@@ -91,7 +95,7 @@ on(topFrame, "DROP_FILES", function(e, paths)
 
 		if mode == "directory" then
 			traverseFiles(path, function(path, pathRel, name, ext)
-				if appSettings.movieExtensions[ext:lower()] then
+				if indexOf(appSettings.movieExtensions, ext:lower()) then
 					table.insert(pathsToAdd, path)
 				end
 
@@ -101,13 +105,13 @@ on(topFrame, "DROP_FILES", function(e, paths)
 			end)
 
 		elseif mode == "file" then
-			if appSettings.movieExtensions[getExtension(getFilename(path)):lower()] then
+			if indexOf(appSettings.movieExtensions, getExtension(getFilename(path)):lower()) then
 				table.insert(pathsToAdd, path)
 			end
 		end
 
 		if pathsToAdd[MAX_DROPPED_FILES+1] then
-			showError(topFrame, "Error", F("Too many dropped files. (Max is %d)", MAX_DROPPED_FILES))
+			showError("Error", F("Too many dropped files. (Max is %d)", MAX_DROPPED_FILES))
 			return
 		end
 	end
@@ -123,6 +127,33 @@ on(topFrame, "DROP_FILES", function(e, paths)
 	saveFileInfos()
 	listCtrlSelectRows(fileList, range(previousLastWxRow+1, fileList:GetItemCount()-1))
 	updateFileList()
+end)
+
+-- Note: The SIZE event fires even when the size hasn't changed (which is silly).
+local oldW, oldH = getSize(topFrame)
+
+on(topFrame, "SIZE", function(e, w, h)
+	e:Skip()
+	if w == oldW and h == oldH then  return  end
+
+	if topFrame:IsMaximized() then
+		setSetting("windowMaximized", true)
+	else
+		setSetting("windowMaximized", false)
+		setSetting("windowSizeX", w)
+		setSetting("windowSizeY", h)
+	end
+
+	oldW = w
+	oldH = h
+end)
+
+on(topFrame, "MOVE", function(e, x, y)
+	e:Skip()
+	if not topFrame:IsMaximized() then
+		setSetting("windowPositionX", x)
+		setSetting("windowPositionY", y)
+	end
 end)
 
 --[[
@@ -151,8 +182,8 @@ local progressGauge = wx.wxGauge(
 -- progressGauge:SetValue(50)
 
 on(statusBar, "SIZE", function(e, w, h)
-	progressGauge:Move(w-getWidth(progressGauge)-GAUGE_MARGIN, GAUGE_MARGIN)
 	e:Skip()
+	progressGauge:Move(w-getWidth(progressGauge)-GAUGE_MARGIN, GAUGE_MARGIN)
 end)
 
 
@@ -284,11 +315,11 @@ fileList = wx.wxListCtrl(
 )
 sizerMain:Add(fileList, 1, wxGROW_ALL)
 
-FILE_COLUMN_FILE   = listCtrlInsertColumn(fileList, "File",    500)
-FILE_COLUMN_FOLDER = listCtrlInsertColumn(fileList, "Folder",  500)
-FILE_COLUMN_SIZE   = listCtrlInsertColumn(fileList, "Size",    80)
-FILE_COLUMN_VIEWED = listCtrlInsertColumn(fileList, "Watched", 80)
-FILE_COLUMN_STATUS = listCtrlInsertColumn(fileList, "Status",  120)
+assert(listCtrlInsertColumn(fileList, "File",    100) == FILE_COLUMN_FILE-1)
+assert(listCtrlInsertColumn(fileList, "Folder",  100) == FILE_COLUMN_FOLDER-1)
+assert(listCtrlInsertColumn(fileList, "Size",    100) == FILE_COLUMN_SIZE-1)
+assert(listCtrlInsertColumn(fileList, "Watched", 100) == FILE_COLUMN_VIEWED-1)
+assert(listCtrlInsertColumn(fileList, "Status",  100) == FILE_COLUMN_STATUS-1)
 
 listCtrlInsertRow(fileList, DROP_FILES_TO_ADD_MESSAGE)
 fileList:Enable(false)
@@ -296,6 +327,24 @@ fileList:Enable(false)
 on(fileList, "COMMAND_LIST_ITEM_ACTIVATED", function(e, wxRow)
 	local fileInfo = getFileInfoByRow(wxRow)
 	if fileInfo then  openFileExternally(fileInfo.path)  end
+end)
+
+local saveColumnWidthsTimer = newTimer(function(e)
+	scheduleSaveSettings()
+end)
+
+on(fileList, "COMMAND_LIST_COL_END_DRAG", function(e, wxCol, w)
+	e:Skip()
+
+	-- No event detects double clicks on column separators, so we have to do some silliness.
+	setSetting(
+		"fileColumnWidth"..(wxCol+1),
+		function()
+			return fileList:GetColumnWidth(wxCol)
+		end,
+		false
+	)
+	saveColumnWidthsTimer:Start(1000, true)
 end)
 
 on(fileList, "KEY_DOWN", function(e, kc)
@@ -401,7 +450,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 	end):Enable(anyIsHashed)
 
 	newMenuItem(popupMenu, fileList, "&Delete from MyList", "Delete file from MyList", function(e)
-		if not confirm(topFrame, "Delete from MyList", "Delete the selected files from MyList?", "Delete") then  return  end
+		if not confirm("Delete from MyList", "Delete the selected files from MyList?", "Delete") then  return  end
 
 		for _, fileInfo in ipairs(fileInfosSelected) do
 			if fileInfo.lid ~= -1 then
@@ -463,8 +512,6 @@ topFrame:SetDefaultItem(fileList)
 topPanel:SetAutoLayout(true)
 topPanel:SetSizer(sizerMain)
 
-loadFileInfos()
-
 anidbUpdateTimer = newTimer(function(e)
 	anidb:update()
 
@@ -488,18 +535,45 @@ end)
 
 
 --==============================================================
---= Show GUI ===================================================
+--= Load Stuff =================================================
 --==============================================================
 
-topFrame:Center()
-topFrame:Show(true)
+loadSettings()
+loadFileInfos()
+
+fileList:SetColumnWidth(FILE_COLUMN_FILE-1,   appSettings["fileColumnWidth"..FILE_COLUMN_FILE])
+fileList:SetColumnWidth(FILE_COLUMN_FOLDER-1, appSettings["fileColumnWidth"..FILE_COLUMN_FOLDER])
+fileList:SetColumnWidth(FILE_COLUMN_SIZE-1,   appSettings["fileColumnWidth"..FILE_COLUMN_SIZE])
+fileList:SetColumnWidth(FILE_COLUMN_VIEWED-1, appSettings["fileColumnWidth"..FILE_COLUMN_VIEWED])
+fileList:SetColumnWidth(FILE_COLUMN_STATUS-1, appSettings["fileColumnWidth"..FILE_COLUMN_STATUS])
+
+if not (appSettings.windowSizeX == -1 and appSettings.windowSizeY == -1) then
+	topFrame:SetSize(appSettings.windowSizeX, appSettings.windowSizeY)
+end
+if appSettings.windowPositionX == -1 and appSettings.windowPositionY == -1 then
+	topFrame:Center()
+else
+	topFrame:Move(appSettings.windowPositionX, appSettings.windowPositionY)
+end
+topFrame:Maximize(appSettings.windowMaximized)
 
 if anyFileInfos() then
 	fileList:SetFocus()
 	listCtrlSelectRows(fileList, {0})
 end
 
+
+
+--==============================================================
+--= Show GUI ===================================================
+--==============================================================
+
+topFrame:Show(true)
+
 anidbUpdateTimer:Start(1000/10)
+
+settingsAreFrozen = false
+
 wx.wxGetApp():MainLoop()
 
 
@@ -507,6 +581,8 @@ wx.wxGetApp():MainLoop()
 --==============================================================
 --= Exit =======================================================
 --==============================================================
+
+-- saveSettings() -- No, do this in CLOSE_WINDOW instead.
 
 -- AniDB wants us to log out.
 if anidb:isLoggedIn() and not DEBUG then

@@ -302,23 +302,27 @@ end
 -- callbackWrapper = on( eventHandler, [ id, ] eventType, callback )  -- @Cleanup: Move id to after eventType.
 -- callback( event, eventSpecificArgument1, ... )
 do
-	local eventExpanders = {
-		["CHAR_HOOK"] = function(e)
-			return e:GetKeyCode()
-		end,
-		["COMMAND_LIST_ITEM_ACTIVATED"] = function(e)
-			return e:GetIndex()--, e:GetColumn()
-		end,
-		["DROP_FILES"] = function(e)
-			return e:GetFiles()
-		end,
-		["KEY_DOWN"] = function(e)
-			return e:GetKeyCode()
-		end,
-		["SIZE"] = function(e)
-			local size = e:GetSize()
-			return size:GetWidth(), size:GetHeight()
-		end,
+	local EVENT_EXPANDERS = {
+		["CHAR_HOOK"] -- keycode
+		= function(e)  return e:GetKeyCode()  end,
+		["COMMAND_LIST_COL_END_DRAG"] -- wxColumn, width
+		= function(e)  return e:GetColumn(), e:GetItem():GetWidth()  end,
+		["COMMAND_LIST_ITEM_ACTIVATED"] -- wxRow
+		= function(e)  return e:GetIndex()  end,
+		["DROP_FILES"] -- filePaths
+		= function(e)  return e:GetFiles()  end,
+		["GRID_COL_SIZE"] -- wxColumn, x
+		= function(e)  return e:GetRowOrCol(), e:GetPosition():GetX()  end,
+		["GRID_ROW_SIZE"] -- wxRow, y
+		= function(e)  return e:GetRowOrCol(), e:GetPosition():GetY()  end,
+		["KEY_DOWN"] -- keycode
+		= function(e)  return e:GetKeyCode()  end,
+		["MOVE"] -- x, y
+		= function(e)  return e:GetPosition():GetXY()  end,
+		["MOVING"] -- x, y
+		= function(e)  return e:GetPosition():GetXY()  end,
+		["SIZE"] -- width, height
+		= function(e)  local size = e:GetSize()  return size:GetWidth(), size:GetHeight()  end,
 	}
 
 	function on(eHandler, id, eType, cb)
@@ -329,7 +333,7 @@ do
 		local k     = "wxEVT_"..eType
 		local eCode = wx[k] or wxlua[k] or wxaui[k] or wxstc[k] or errorf(2, "Unknown event type '%s'.", eType)
 
-		local expander = eventExpanders[eType] or NOOP
+		local expander = EVENT_EXPANDERS[eType] or NOOP
 
 		local cbWrapper = wrapCall(function(e)
 			return cb(e, expander(e))

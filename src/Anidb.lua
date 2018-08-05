@@ -954,15 +954,7 @@ do
 		----------------------------------------------------------------
 
 		local path = F("%s/%s%d%s", CACHE_DIR, pageName, id, (isPartial and ".part" or ""))
-
-		backupFileIfExists(path)
-		local file = assert(openFile(path, "w"))
-
-		for k, v in pairsSorted(entry) do
-			writeSimpleKv(file, k, v, path)
-		end
-
-		file:close()
+		assert(writeSimpleEntryFile(path, entry))
 
 		----------------------------------------------------------------
 		return entry
@@ -983,27 +975,8 @@ do
 		end
 
 		local path = F("%s/%s%d%s", CACHE_DIR, pageName, id, (isPartial and ".part" or ""))
-
-		local file, err = openFile(path, "r")
-		if not file then  return nil, err  end
-
-		entry    = {}
-		local ln = 0
-
-		for line in file:lines() do
-			ln = ln+1
-
-			local k, v = parseSimpleKv(line, path, ln)
-
-			if k then
-				if entry[k] ~= nil then
-					_logprinterror("%s:%d: Duplicate key '%s'. Overwriting.", path, ln, k)
-				end
-				entry[k] = v
-			end
-		end
-
-		file:close()
+		entry = readSimpleEntryFile(path)
+		if not entry then  return nil, err  end
 
 		page.byId[id] = entry
 		table.insert(page, entry)

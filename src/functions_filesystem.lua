@@ -20,9 +20,9 @@
 	isFile, isFileWritable, isDirectory
 	mkdir
 	openFile, deleteFile
-	toNormalPath, toWindowsPath
-	toShortPath
-	writef, writeLine, writeSimpleKv, parseSimpleKv
+	parseSimpleKv, writeSimpleKv, readSimpleEntryFile, writeSimpleEntryFile
+	toNormalPath, toWindowsPath, toShortPath
+	writef, writeLine
 
 --============================================================]]
 
@@ -461,7 +461,7 @@ do
 			-- file:setvbuf( mode [, size ] )
 			setvbuf = function(fileWrapper, _bufMode, size)
 				checkOpen()
-				logprintOnce(nil, "Warning: file:setvbuf() is not fully implemented.") -- @Incomplete
+				logprintOnce("FS", "Warning: file:setvbuf() is not fully implemented.") -- @Incomplete
 
 				if _bufMode == "no" then
 					bufferingMode = _bufMode
@@ -568,8 +568,6 @@ function toWindowsPath(path)
 	return winPath
 end
 
-
-
 -- path = toShortPath( path [, asWindowsPath=false ] )
 -- Note: May return the path as-is if the file doesn't exist.
 function toShortPath(path, asWindowsPath)
@@ -591,33 +589,7 @@ function writeLine(file, ...)
 	file:write("\n")
 end
 
--- everythingWentOk = writeSimpleKv( file, k, v, path )
-function writeSimpleKv(file, k, v, path)
-	local vType = type(v)
-	local allOk = true
 
-	if vType == "number" then
-		if not isInt(v) then
-			allOk = false
-			_logprinterror("%s: Non-integer number disabled. Skipping. (%s, entry.%s)", path, tostring(v), k)
-		else
-			writef(file, "%s %.0f\n", k, v) -- "%d" messes up large ints, thus the "%.0f".
-		end
-
-	elseif vType == "string" then
-		local s = F("%q", v) :gsub("\\\n", "\\n")
-		writeLine(file, k, " ", s)
-
-	elseif vType == "boolean" then
-		writeLine(file, k, " ", tostring(v))
-
-	else
-		allOk = false
-		_logprinterror("%s: Cannot write type '%s'. Skipping. (entry.%s)", path, vType, k)
-	end
-
-	return allOk
-end
 
 -- key, value = parseSimpleKv( line, path, lineNumber )
 function parseSimpleKv(line, path, ln)
@@ -626,7 +598,7 @@ function parseSimpleKv(line, path, ln)
 	local k, v = line:match"^(%S+) +(%S.*)$"
 
 	if not k then
-		_logprinterror("%s:%d: Bad line format: %s", path, ln, line)
+		logprinterror("FS", "%s:%d: Bad line format: %s", path, ln, line)
 		return nil
 	end
 
@@ -636,7 +608,7 @@ function parseSimpleKv(line, path, ln)
 	if ("0123456789-"):find(c, 1, true) then
 		local n = tonumber(v)
 		if not isInt(n) then
-			_logprinterror("%s:%d: Malformed (integer) number: %s", path, ln, v)
+			logprinterror("FS", "%s:%d: Malformed (integer) number: %s", path, ln, v)
 			return nil
 		end
 		return k, n
@@ -645,27 +617,150 @@ function parseSimpleKv(line, path, ln)
 	elseif c == '"' then
 		local chunk, err = loadstring("return"..v)
 		if not chunk then
-			_logprinterror("%s:%d: Malformed string: %s: %s", path, ln, err, v)
+			logprinterror("FS", "%s:%d: Malformed string: %s: %s", path, ln, err, v)
 			return nil
 		end
 
 		local s = chunk()
 		if type(s) ~= "string" then
-			_logprinterror("%s:%d: Malformed string: %s", path, ln, v)
+			logprinterror("FS", "%s:%d: Malformed string: %s", path, ln, v)
 			return nil
 		end
 		return k, s
 
-	-- Boolean.
+	-- Boolean/nil.
 	elseif v == "true" then
 		return k, true
 	elseif v == "false" then
 		return k, false
+	elseif v == "nil" then
+		return k, nil
+
+	-- Array.
+	elseif c == "{" then
+		local chunk, err = loadstring("return"..v)
+		if not chunk then
+			logprinterror("FS", "%s:%d: Malformed array: %s: %s", path, ln, err, v)
+			return nil
+		end
+
+		local s = chunk()
+		if type(s) ~= "table" then
+			logprinterror("FS", "%s:%d: Malformed array: %s", path, ln, v)
+			return nil
+		end
+		return k, s
+
 
 	else
-		_logprinterror("%s:%d: Unknown value type: %s", path, ln, v)
+		logprinterror("FS", "%s:%d: Unknown value type: %s", path, ln, v)
 		return nil
 	end
+end
+
+-- everythingWentOk = writeSimpleKv( file, k, v, path )
+function writeSimpleKv(file, k, v, path, _partOfValue)
+	local vType = type(v)
+	local allOk = true
+
+	-- Number.
+	if vType == "number" then
+		if not isInt(v) then
+			allOk = false
+			logprinterror("FS", "%s: Non-integer number disabled. Skipping. (%s, '%s')", path, k, tostring(v))
+		else
+			if not _partOfValue then  file:write(k, " ")  end
+			writef(file, "%.0f", v) -- "%d" messes up large ints, thus the "%.0f".
+			if not _partOfValue then  file:write("\n")  end
+		end
+
+	-- String.
+	elseif vType == "string" then
+		local s = F("%q", v) :gsub("\\\n", "\\n")
+
+		if not _partOfValue then  file:write(k, " ")  end
+		file:write(s)
+		if not _partOfValue then  file:write("\n")  end
+
+	-- Boolean/nil.
+	elseif vType == "boolean" or v == nil then
+		if not _partOfValue then  file:write(k, " ")  end
+		file:write(tostring(v))
+		if not _partOfValue then  file:write("\n")  end
+
+	-- Array.
+	elseif vType == "table" and not _partOfValue then
+		for i in pairs(v) do
+			if not isInt(i) or i < 1 or i > #v then
+				allOk = false
+				logprinterror("FS", "%s: Table is not a sequence. Skipping. (%s, '%s')", path, k, tostring(v))
+				break
+			end
+		end
+
+		if allOk then
+			file:write(k, " {") -- Note: _partOfValue is false.
+
+			for i, item in ipairs(v) do
+				if i > 1 then  file:write(",")  end
+
+				if not writeSimpleKv(file, k.."["..i.."]", item, path, true) then
+					file:write("nil")
+				end
+			end
+
+			file:write("}\n")
+		end
+
+	else
+		allOk = false
+		logprinterror("FS", "%s: Cannot write type '%s'. Skipping. (%s)", path, vType, k)
+	end
+
+	return allOk
+end
+
+-- entry, errorMessage = readSimpleEntryFile( path [, entry={}, onlyUpdateExistingFields=false ] )
+function readSimpleEntryFile(path, t, onlyUpdateExistingFields)
+	local file, err = openFile(path, "r")
+	if not file then  return nil, err  end
+
+	t = t or {}
+	local ln = 0
+
+	for line in file:lines() do
+		ln = ln+1
+		local k, v = parseSimpleKv(line, path, ln)
+
+		if k and not (onlyUpdateExistingFields and type(v) ~= type(t[k])) then
+			if t[k] ~= nil and not onlyUpdateExistingFields then
+				logprinterror("FS", "%s:%d: Duplicate key '%s'. Overwriting.", path, ln, k)
+			end
+			t[k] = v
+		end
+	end
+
+	file:close()
+	return t
+end
+
+-- success, errorMessage = writeSimpleEntryFile( path, entry [, backup=true ] )
+function writeSimpleEntryFile(path, t, backup)
+	assertarg(1, path,   "string")
+	assertarg(2, t,      "table")
+	assertarg(3, backup, "boolean","nil")
+
+	if backup ~= false then  backupFileIfExists(path)  end
+
+	local file, err = openFile(path, "w")
+	if not file then  return false, err  end
+
+	for k, v in pairsSorted(t) do
+		writeSimpleKv(file, k, v, path)
+	end
+
+	file:close()
+	return true
 end
 
 

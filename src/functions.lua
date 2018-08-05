@@ -15,6 +15,7 @@
 	clamp
 	cleanupPath
 	cmdAsync, cmdCapture, scriptCaptureAsync, cmdEscapeArgs
+	eatSpaces
 	encodeHtmlEntities
 	errorf, fileerror
 	F, formatBytes
@@ -1123,6 +1124,13 @@ function tablePathSet(t, k, ...)
 	end
 
 	t[k] = select(argCount, ...)
+end
+
+
+
+function eatSpaces(s, ptr)
+	local _, to = s:find(" *", ptr)
+	return to+1
 end
 
 

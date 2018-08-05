@@ -8,15 +8,30 @@
 --=  - Written by Marcus 'ReFreezed' Thunström
 --=  - MIT License (See main.lua)
 --=
+--==============================================================
+
+	setSetting, loadSettings, saveSettings, scheduleSaveSettings, setSettingsChanged
+	setStatusText
+
+	addFileInfo, removeFileInfo, removeSelectedFileInfos
+	anyFileInfos, noFileInfos
+	eachFileInfoByRow, getFileInfosByRows, getSelectedFileInfos
+	getFileInfoByRow, getFileRow
+	getFileStatus, getFileViewed
+	saveFileInfos, loadFileInfos
+	setFileInfo
+	updateFileList
+
 --============================================================]]
 
 FILE_INFO_DONT_SERIALIZE       = newSet{"name","folder","isHashing"}
 
-FILE_COLUMN_FILE               = nil -- Set in 'app'.
-FILE_COLUMN_FOLDER             = nil
-FILE_COLUMN_SIZE               = nil
-FILE_COLUMN_VIEWED             = nil
-FILE_COLUMN_STATUS             = nil
+FILE_COLUMN_FILE               = 1
+FILE_COLUMN_FOLDER             = 2
+FILE_COLUMN_SIZE               = 3
+FILE_COLUMN_VIEWED             = 4
+FILE_COLUMN_STATUS             = 5
+FILE_COLUMN_LAST               = 5
 
 MYLIST_STATUS_UNKNOWN          = 0
 MYLIST_STATUS_NO               = 1
@@ -50,8 +65,20 @@ appSettings = {
 	autoHash        = true,
 	autoAddToMylist = false, -- @Incomplete
 
-	movieExtensions = newSet{"avi","flv","mkv","mov","mp4","mpeg","mpg","ogm","ogv","swf","webm","wmv"},
+	movieExtensions = {"avi","flv","mkv","mov","mp4","mpeg","mpg","ogm","ogv","swf","webm","wmv"},
 	trunkateFolders = true,
+
+	windowSizeX     = -1,
+	windowSizeY     = -1,
+	windowPositionX = -1,
+	windowPositionY = -1,
+	windowMaximized = false,
+
+	["fileColumnWidth"..FILE_COLUMN_FILE]   = 500,
+	["fileColumnWidth"..FILE_COLUMN_FOLDER] = 500,
+	["fileColumnWidth"..FILE_COLUMN_SIZE]   = 80,
+	["fileColumnWidth"..FILE_COLUMN_VIEWED] = 80,
+	["fileColumnWidth"..FILE_COLUMN_STATUS] = 120,
 }
 
 dialogs = require"dialogs"
@@ -61,17 +88,6 @@ dialogs = require"dialogs"
 --==============================================================
 --= Functions ==================================================
 --==============================================================
-
--- setStatusText
-
--- addFileInfo, removeFileInfo, removeSelectedFileInfos
--- anyFileInfos, noFileInfos
--- eachFileInfoByRow, getFileInfosByRows, getSelectedFileInfos
--- getFileInfoByRow, getFileRow
--- getFileStatus, getFileViewed
--- saveFileInfos, loadFileInfos
--- setFileInfo
--- updateFileList
 
 
 
@@ -225,7 +241,7 @@ function updateFileList()
 		listCtrlSetItem(
 			fileList,
 			getFileRow(fileInfo),
-			FILE_COLUMN_FOLDER,
+			FILE_COLUMN_FOLDER-1,
 			usePrefix and "..."..fileInfo.folder:sub(#prefix+1) or fileInfo.folder
 		)
 	end
@@ -292,7 +308,7 @@ do
 				addFileInfo(fileInfo)
 				lastFileId = math.max(fileInfo.id, lastFileId)
 			else
-				logprinterror(nil, "%s:%d: Missing ID for previous entry. Skipping.", path, ln)
+				logprinterror("App", "%s:%d: Missing ID for previous entry. Skipping.", path, ln)
 			end
 
 			fileInfo = nil
@@ -318,7 +334,7 @@ do
 				if k then
 					fileInfo = fileInfo or {}
 					if fileInfo[k] ~= nil then
-						logprinterror(nil, "%s:%d: Duplicate key '%s'. Overwriting.", path, ln, k)
+						logprinterror("App", "%s:%d: Duplicate key '%s'. Overwriting.", path, ln, k)
 					end
 					fileInfo[k] = v
 				end
@@ -344,13 +360,13 @@ function setFileInfo(fileInfo, k, v, force)
 
 	local wxRow = fileList:FindItem(-1, fileInfo.id)
 	if wxRow == -1 then
-		logprinterror(nil, "File %d is not in list.", fileInfo.id)
+		logprinterror("App", "File %d is not in list.", fileInfo.id)
 		return
 	end
 
 	if isAny(k, "lid","fid","ed2k","isHashing","mylistStatus") then
-		fileList:SetItem(wxRow, FILE_COLUMN_VIEWED, getFileViewed(fileInfo))
-		fileList:SetItem(wxRow, FILE_COLUMN_STATUS, getFileStatus(fileInfo))
+		fileList:SetItem(wxRow, FILE_COLUMN_VIEWED-1, getFileViewed(fileInfo))
+		fileList:SetItem(wxRow, FILE_COLUMN_STATUS-1, getFileStatus(fileInfo))
 	end
 end
 
@@ -442,6 +458,74 @@ function setStatusText(s, ...)
 		s = s:format(...)
 	end
 	topFrame:SetStatusText(s)
+end
+
+
+
+do
+	local PATH_SETTINGS = "local/settings"
+
+	local saveScheduled = false
+	local saveTimer     = nil
+
+	local callbacks     = {}
+
+	-- setSetting( key, value    [, startSaveTimer=true ] )
+	-- setSetting( key, callback [, startSaveTimer=true ] )
+	-- Note: The callback is called twice - immediately and before saving.
+	function setSetting(k, vOrCb, startSaveTimer)
+		if settingsAreFrozen       then  return  end
+		if appSettings[k] == vOrCb then  return  end
+
+		if type(vOrCb) == "function" then
+			callbacks[k]   = vOrCb
+			appSettings[k] = vOrCb()
+		else
+			callbacks[k]   = nil
+			appSettings[k] = vOrCb
+		end
+
+		if startSaveTimer == false then
+			saveScheduled = true
+		else
+			scheduleSaveSettings()
+		end
+	end
+
+	function loadSettings()
+		readSimpleEntryFile(PATH_SETTINGS, appSettings, true)
+	end
+
+	function saveSettings()
+		if not saveScheduled then  return  end
+
+		local _callbacks = callbacks
+		callbacks = {}
+		for k, cb in pairs(_callbacks) do
+			appSettings[k] = cb()
+		end
+
+		if saveTimer then  saveTimer:Stop()  end
+
+		logprint("App", "Saving settings.")
+
+		assert(writeSimpleEntryFile(PATH_SETTINGS, appSettings))
+		saveScheduled = false
+	end
+
+	-- scheduleSaveSettings( [ delay=SAVE_DELAY ] )
+	function scheduleSaveSettings(delay)
+		delay = delay or SAVE_DELAY
+
+		saveScheduled = true
+
+		saveTimer = saveTimer or newTimer(function(e)  saveSettings()  end)
+		saveTimer:Start(delay, true)
+	end
+
+	function setSettingsChanged()
+		saveScheduled = true
+	end
 end
 
 
