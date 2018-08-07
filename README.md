@@ -1,13 +1,16 @@
 # MyHappyList
-Simple [AniDB](https://anidb.net/) *MyList* manager.
+Very simple [AniDB](https://anidb.net/) *MyList* manager.
 
 ## Features
 - Add files to *MyList*.
 - Mark files as watched.
 - Calculate [ed2k hashes](https://wiki.anidb.info/w/Ed2k-hash).
 
-## Download
-For the latest hottest (in-development) version, press the green *Clone or download* button near the top of this page and then *Download ZIP*.
+And that's about it! If you're looking for something different,
+have a look at [alternative software](https://anidb.net/perl-bin/animedb.pl?show=software).
 
-## Installation
-No installation required - just unzip, and run **MyHappyList.exe** !
+## Download
+No download available yet, but there will be quite Soon™!
+
+<!-- ## Installation
+No installation required - just unzip, and run **MyHappyList.exe** ! -->
