@@ -563,7 +563,7 @@ end
 -- path = toShortPath( path [, asWindowsPath=false ] )
 -- Note: May return the path as-is if the file doesn't exist.
 function toShortPath(path, asWindowsPath)
-	local path = wx.wxFileName(path):GetShortPath()
+	path = wx.wxFileName(path):GetShortPath()
 
 	if not asWindowsPath then  path = toNormalPath(path)  end
 

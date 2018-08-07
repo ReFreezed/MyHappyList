@@ -417,9 +417,13 @@ on(fileList, "CONTEXT_MENU", function(e)
 		newMenuItemSeparator(popupMenu)
 	end
 
-	local helpText = fileInfosSelected[2] and "Open the first selected file" or "Open the file"
-	newMenuItem(popupMenu, fileList, "&Play\tEnter", helpText, function(e)
-		openFileExternally(fileInfosSelected[1].path)
+	newMenuItem(popupMenu, fileList, "&Play\tEnter", "Open the file", function(e)
+		local path = fileInfosSelected[1].path
+		if isFile(path) then
+			openFileExternally(path)
+		else
+			showError("Error", F("File does not exist.\n\n%s", path))
+		end
 	end)
 
 	newMenuItem(popupMenu, fileList, "Mark as &Watched", "Mark selected files as watched", function(e)
@@ -436,8 +440,12 @@ on(fileList, "CONTEXT_MENU", function(e)
 	end):Enable(anyIsHashed)
 
 	newMenuItem(popupMenu, fileList, "Open &Containing Folder", "Open the folder containing the file", function(e)
-		local fileInfo = fileInfosSelected[1]
-		showFileInExplorer(fileInfo.path)
+		local path = getDirectory(fileInfosSelected[1].path)
+		if isDirectory(path) then
+			showFileInExplorer(path)
+		else
+			showError("Error", F("Folder does not exist.\n\n%s", path))
+		end
 	end)
 
 	newMenuItem(popupMenu, fileList, "&Remove from List\tDelete", "Remove selected files from the list", function(e)
