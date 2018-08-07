@@ -24,7 +24,7 @@ function dialogs.about()
 	local title     = "MyHappyList "..APP_VERSION
 	local copyright = "Copyright © 2018 Marcus 'ReFreezed' Thunström. MIT license."
 	local desciption
-		= "MyHappyList is made using Lua, wxLua, Alien FFI, LuaSocket and rhash. "
+		= "MyHappyList is made using Lua, wxLua, LuaSocket and rhash. "
 		.."The executable is built using srlua, ResourceHacker and ImageMagick."
 
 	local dialog = wx.wxDialog(topPanel, wxID_ANY, "About MyHappyList")

@@ -66,8 +66,12 @@ FLOOD_PROTECTION_WINDOW             = 10   -- Saved amount of lastResponseTimes.
 require(... .."_keys") -- Extra stuff that WX don't add.
 require(... .."_wx")
 
-EMPTY_TABLE = {}
-NOOP        = function()end
+EMPTY_TABLE             = {}
+NOOP                    = function()end
+
+PROCESS_METHOD_ASYNC    = 1
+PROCESS_METHOD_SYNC     = 2
+PROCESS_METHOD_DETACHED = 3
 
 -- AniDB.
 
@@ -93,16 +97,16 @@ MYLIST_FILESTATE_OTHER                = 100 -- normal
 
 -- Modules.
 
-lfs     = require"lfs"
-socket  = require"socket"
+socket = require"socket"
 
-_print  = print
+_print = print -- We define our own print().
 
 
 
 -- Variables and objects.
 
 logFile           = nil
+processes         = {}
 settingsAreFrozen = true
 
 

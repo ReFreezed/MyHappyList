@@ -785,97 +785,33 @@ end
 
 
 
--- success = cmdAsync( cmd )
--- @Robustness: Make sure other processes don't continue running after we exit.
-do
-	local execute = nil
-
-	function cmdAsync(cmd)
-		if not execute then
-			-- Instead of using io.popen() which pops up an ugly console window we use ShellExecuteA().
-			-- We may have to fall back to io.popen() if we're adding support for *nix in the future. 2018-07-24
-			-- https://stackoverflow.com/a/29678230
-			--
-			-- HINSTANCE ShellExecuteA(
-			--    HWND hwnd, LPCSTR lpOperation, LPCSTR lpFile, LPCSTR lpParameters, LPCSTR lpDirectory, INT nShowCmd
-			-- )
-			--
-			-- Note: HINSTANCE is actually an int - reason being backwards compatability.
-			-- https://docs.microsoft.com/en-us/windows/desktop/api/shellapi/nf-shellapi-shellexecutea
-
-			execute = require"alien".load"Shell32.dll".ShellExecuteA
-			execute:types("pointer","pointer","pointer","pointer","pointer","pointer","int")
-		end
-
-		-- Note: The returned value is actually an int disguised as a pointer.
-		local int    = execute(0, "open", "cmd.exe", "/W /C "..cmd, 0, 0)
-		local status = tonumber(tostring(int):match"(0[%dA-F]*)", 16) -- @Hack: Not sure if this is 100% reliable.
-
-		return status > 32
-	end
+-- processStarted = cmdAsync( cmd )
+function cmdAsync(cmd)
+	return (processStart(cmd, PROCESS_METHOD_ASYNC))
 end
 
--- output, errorMessage = cmdCapture( cmd [, timeoutInSeconds=600 ] )
-function cmdCapture(cmd, timeout)
-	timeout = timeout or 600
+-- output, errorMessage = cmdCapture( cmd )
+function cmdCapture(cmd)
+	local output
 
-	local outputPath = getTempFilePath()
+	local ok = processStart(cmd, PROCESS_METHOD_SYNC, function(process, exitCode)
+		output = processReadEnded(process, exitCode, true)
+	end)
 
-	if not cmdAsync(cmd.." > "..cmdEscapeArgs(toWindowsPath(outputPath))) then
-		return nil, "Could not execute command: "..cmd
-	end
+	if not ok then  return nil, "Could not start a new process."  end
 
-	-- Dunno how long cmdAsync() takes to execute, so let's
-	-- start the timeout timer afterwards instead of before.
-	local timeStart   = getTime()
-	local timeoutTime = timeStart+timeout
-
-	-- Wait until the output file exists and is done writing.
-	while true do
-		local time = getTime()
-		socket.sleep(
-			time    < timeStart+5  and 1/30
-			or time < timeStart+10 and 1/5
-			or 1
-		)
-
-		if isFileWritable(outputPath) then
-			break
-		end
-
-		if time > timeoutTime then
-			return nil, "Timeout while capturing output: "..cmd
-		end
-	end
-
-	local output = assert(getFileContents(outputPath, true))
-
-	deleteFile(outputPath) -- Could fail, but we'll cleanup later.
 	return output
 end
 
--- scriptCaptureAsync( scriptName, callback, arg1, ... )
--- callback( output )
+-- processStarted = scriptCaptureAsync( scriptName, callback, arg1, ... )
+-- callback = function( output )
 function scriptCaptureAsync(scriptName, cb, ...)
 	local scriptPath = "src/scripts/"..scriptName..".lua"
-	local cmd        = cmdEscapeArgs([[wlua5.1.exe]], scriptPath, ...)
+	local cmd        = cmdEscapeArgs("wlua5.1.exe", scriptPath, ...)
 
-	local outputPath = getTempFilePath()
-
-	if not cmdAsync(cmd.." > "..cmdEscapeArgs(toWindowsPath(outputPath))) then
-		return nil, "Could not execute command: "..cmd
-	end
-
-	local timer; timer = newTimer(1000/10, function(e)
-		if not isFileWritable(outputPath) then  return  end
-
-		timer:Stop()
-
-		local output = assert(getFileContents(outputPath, true))
-
-		deleteFile(outputPath) -- Could fail, but we'll cleanup later.
-		cb(output)
-	end)
+	return (processStart(cmd, PROCESS_METHOD_ASYNC, function(process, exitCode)
+		cb(processReadEnded(process, exitCode, true))
+	end))
 end
 
 function cmdEscapeArgs(...)
@@ -983,18 +919,18 @@ end
 
 
 function openFileExternally(path)
-	path = toShortPath(path, true)
-	cmdAsync(cmdEscapeArgs("start", "", path))
+	local cmd = cmdEscapeArgs("explorer", toShortPath(path, true))
+	processStart(cmd, PROCESS_METHOD_DETACHED)
 end
 
 function openFileInNotepad(path)
-	path = toShortPath(path, true)
-	cmdAsync(cmdEscapeArgs("start", "", "notepad", path))
+	local cmd = cmdEscapeArgs("notepad", toShortPath(path, true))
+	processStart(cmd, PROCESS_METHOD_DETACHED)
 end
 
 function showFileInExplorer(path)
-	path = toShortPath(path, true)
-	cmdAsync(cmdEscapeArgs("start", "explorer", "/select,"..path))
+	local cmd = cmdEscapeArgs("explorer", "/select,"..toShortPath(path, true))
+	processStart(cmd, PROCESS_METHOD_DETACHED)
 end
 
 

@@ -15,7 +15,7 @@
 	directoryItems, traverseDirectory, traverseFiles
 	getDirectory, getFilename, getExtension, getBasename
 	getFileContents, writeFile
-	getFileMode, getFileSize
+	getFileSize
 	getTempFilePath
 	isFile, isFileWritable, isDirectory
 	mkdir
@@ -108,14 +108,13 @@ function traverseDirectory(dirPath, cb, _pathRelStart)
 
 	for name in directoryItems(dirPath) do
 		local path = dirPath.."/"..name
-		local mode = getFileMode(path)
 
-		if mode == "file" then
+		if isFile(path) then
 			local pathRel = path:sub(_pathRelStart)
 			local abort   = cb(path, pathRel, name, "file")
 			if abort then  return true  end
 
-		elseif mode == "directory" then
+		elseif isDirectory(path) then
 			local pathRel = path:sub(_pathRelStart)
 			local abort   = cb(path, pathRel, name, "directory")
 			if abort then  return true  end
@@ -132,15 +131,14 @@ function traverseFiles(dirPath, cb, _pathRelStart)
 
 	for name in directoryItems(dirPath) do
 		local path = dirPath.."/"..name
-		local mode = getFileMode(path)
 
-		if mode == "file" then
+		if isFile(path) then
 			local pathRel  = path:sub(_pathRelStart)
 			local ext      = getExtension(name)
 			local abort    = cb(path, pathRel, name, ext)
 			if abort then  return true  end
 
-		elseif mode == "directory" then
+		elseif isDirectory(path) then
 			local abort = traverseFiles(path, cb, _pathRelStart)
 			if abort then  return true  end
 		end
@@ -151,11 +149,11 @@ end
 
 
 function getDirectory(genericPath)
-	return (genericPath:gsub("/?[^/]+$", ""))
+	return (genericPath:gsub("[/\\]?[^/\\]+$", ""))
 end
 
 function getFilename(genericPath)
-	return genericPath:match"[^/]+$"
+	return genericPath:match"[^/\\]+$"
 end
 
 function getExtension(filename)
@@ -199,12 +197,8 @@ end
 
 
 
-function getFileMode(path)
-	return lfs.attributes(toShortPath(path), "mode") -- lfs usage accepted.
-end
-
 function getFileSize(path)
-	return lfs.attributes(toShortPath(path), "size") -- lfs usage accepted.
+	return wx.wxFileSize(path)
 end
 
 
@@ -212,7 +206,7 @@ end
 -- path = getTempFilePath( [ asWindowsPath=false ] )
 function getTempFilePath(asWindowsPath)
 	local path = "temp/"..os.tmpname():gsub("[\\/]+", ""):gsub("%.$", "")
-	-- writeFile(path, "") -- Bad! The program may want to wait for this file to exist from calling cmdAsync().
+	-- writeFile(path, "") -- May want to do this.
 
 	if asWindowsPath then  path = toWindowsPath(path)  end
 
@@ -223,7 +217,6 @@ end
 
 function isFile(path)
 	return wx.wxFileName.FileExists(path)
-	-- return getFileMode(path) == "file"
 end
 
 function isFileWritable(path)
@@ -232,7 +225,6 @@ end
 
 function isDirectory(path)
 	return wx.wxFileName.DirExists(path)
-	-- return getFileMode(path) == "directory"
 end
 
 

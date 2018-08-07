@@ -32,8 +32,13 @@
 	listCtrlSetItem
 	listCtrlSort
 
+	processReadEnded
+	processStart, processStop, processStopAll
+
 	statusBarInitFields
 	statusBarSetField
+
+	streamRead
 
 	textCtrlSelectAll
 
@@ -117,7 +122,7 @@ function listCtrlInsertRow(listCtrl, wxRow, ...)
 		local item = select(i, ...)
 
 		if listCtrl:SetItem(wxRow, i-1, item) == 0 then
-			logprinterror("WX", "ListCtrl: Trying to add more items than there are columns.")
+			logprinterror("Gui", "ListCtrl: Trying to add more items than there are columns.")
 			break
 		end
 	end
@@ -311,6 +316,8 @@ do
 		= function(e)  return e:GetIndex()  end,
 		["DROP_FILES"] -- filePaths
 		= function(e)  return e:GetFiles()  end,
+		["END_PROCESS"] -- exitCode, pid
+		= function(e)  return e:GetExitCode(), e:GetPid()  end,
 		["GRID_COL_SIZE"] -- wxColumn, x
 		= function(e)  return e:GetRowOrCol(), e:GetPosition():GetX()  end,
 		["GRID_ROW_SIZE"] -- wxRow, y
@@ -370,17 +377,13 @@ function onAccelerator(eHandler, accelerators, modKeys, kc, onPress)
 	return id
 end
 
--- off( eventHandler, eventType, id )
+-- off( eventHandler, eventType [, id=wxID_ANY ] )
 -- off( eventHandler, eventType, eventHolder )
 function off(eHandler, eType, ...)
 	local k     = "wxEVT_"..eType
 	local eCode = wx[k] or wxlua[k] or wxaui[k] or wxstc[k] or errorf(2, "Unknown event type '%s'.", eType)
 
-	if type(...) == "number" then
-		local id = ...
-		eHandler:Disconnect(id, eCode)
-
-	else
+	if type((...)) == "userdata" then
 		local eHolder = ...
 		local cbs     = getStoredEventCallbackAll(eHolder, eType)
 		if not cbs then return end
@@ -389,6 +392,10 @@ function off(eHandler, eType, ...)
 			eHandler:Disconnect(id, eCode)
 			cbs[id] = nil
 		end
+
+	else
+		local id = ... or wxID_ANY
+		eHandler:Disconnect(id, eCode)
 	end
 end
 
@@ -679,6 +686,172 @@ function hide(window, containerToUpdate)
 	window:Show(false)
 	containerToUpdate:Layout()
 	containerToUpdate:Refresh()
+end
+
+
+
+-- string = streamRead( stream [, isText=false ] )
+function streamRead(stream, isText)
+	assertarg(1, stream, "userdata")
+	assertarg(2, isText, "boolean","nil")
+
+	if not stream:CanRead() then  return ""  end
+
+	local len = stream:GetLength()
+	if len ~= wxSEEK_MODE_INVALID_OFFSET then
+		local s = stream:Read(len)
+		if isText then
+			s = s:gsub("\r\n", "\n")
+		end
+		return s
+	end
+
+	local chars = {}
+	local i     = 0
+	local c     = ""
+	local cLast = ""
+
+	repeat
+		local c = stream:Read(1)
+
+		if not (isText and c == "\n" and cLast == "\r") then
+			i = i+1
+		end
+
+		chars[i] = c
+		cLast    = c
+	until not stream:CanRead()
+
+	return table.concat(chars)
+end
+
+
+
+-- processStarted = processStart( cmd, method [, callback ] )
+-- callback       = function( process, exitCode )
+-- method         = PROCESS_METHOD_ASYNC|PROCESS_METHOD_SYNC|PROCESS_METHOD_DETACHED
+-- Note: PROCESS_METHOD_ASYNC does not use the callback in any way.
+function processStart(cmd, method, cb)
+	assertarg(1, cmd,    "string")
+	assertarg(2, method, "number")
+	assertarg(3, cb,     "function","nil")
+
+	-- Async.
+	if method == PROCESS_METHOD_ASYNC then
+		local process = wx.wxProcess(topFrame or wxNULL)
+		process:Redirect()
+
+		local pid = wx.wxExecute(cmd, wxEXEC_ASYNC, process)
+		if pid == 0  then  return false  end
+
+		if cb then
+			on(process, "END_PROCESS", function(e, exitCode, pid)
+				processes[pid] = nil
+				process:Detach()
+				off(process, "END_PROCESS")
+
+				cb(process, exitCode)
+			end)
+
+			-- pid being able to be -1 is unfortunate, but will probably not happen for this app I think.
+			-- http://docs.wxwidgets.org/2.9/group__group__funcmacro__procctrl.html#gaa276e9e676e26bafeec3141b73399b33
+			if pid ~= -1 then
+				processes[pid] = process
+			end
+
+		else
+			process:Detach()
+		end
+
+		return true
+
+	-- Sync.
+	elseif method == PROCESS_METHOD_SYNC then
+		local process = wx.wxProcess(topFrame or wxNULL)
+		process:Redirect()
+
+		local exitCode = wx.wxExecute(cmd, wxEXEC_SYNC, process)
+
+		if cb then  cb(process, exitCode, nil)  end
+
+		return exitCode ~= -1
+
+	-- Detached.
+	elseif method == PROCESS_METHOD_DETACHED then
+		local pid = wx.wxExecute(cmd, wxEXEC_ASYNC + wxEXEC_NOHIDE)
+		return pid ~= 0
+
+	else
+		errorf("Bad process method '%d'.", method)
+	end
+end
+
+-- success = processStop( pid [, force=false ] )
+do
+	local KILL_MESSAGES = {
+		[wxKILL_OK]            = "OK",
+		[wxKILL_BAD_SIGNAL]    = "BAD_SIGNAL",
+		[wxKILL_ACCESS_DENIED] = "ACCESS_DENIED",
+		[wxKILL_NO_PROCESS]    = "NO_PROCESS",
+		[wxKILL_ERROR]         = "ERROR",
+	}
+	function processStop(pid, force)
+		if pid == 0                     then  return true   end
+		if pid == -1                    then  return false  end -- Don't allow harakiri. This is so silly.
+		if not wx.wxProcess.Exists(pid) then  return true   end
+
+		local process = processes[pid]
+		if process then
+			processes[pid] = nil
+			process:Detach()
+			off(process, "END_PROCESS")
+		end
+
+		local errCode = wx.wxProcess.Kill(pid, wxSIGTERM, wxKILL_CHILDREN)
+		if isAny(errCode, wxKILL_OK, wxKILL_NO_PROCESS) then  return true   end
+
+		if not force or not isAny(errCode, wxKILL_ERROR, wxKILL_BAD_SIGNAL) then
+			logprinterror("Process", "Process %d did not end gracefully. (%s)", pid, KILL_MESSAGES[errCode])
+			return false
+		end
+
+		logprinterror("Process", "Process %d did not end gracefully. Killing. (%s)", pid, KILL_MESSAGES[errCode])
+
+		errCode = wx.wxProcess.Kill(pid, wxSIGKILL, wxKILL_CHILDREN)
+		if errCode == wxKILL_OK then
+			return true
+		else
+			logprinterror("Process", "Process %d could not get killed. (%s)", pid, KILL_MESSAGES[errCode])
+			return false
+		end
+	end
+end
+
+-- processStopAll( [ force=false ] )
+function processStopAll(force)
+	for pid, process in pairs(processes) do
+		process:Detach()
+		off(process, "END_PROCESS")
+	end
+
+	for pid in pairs(processes) do
+		processes[pid] = nil
+		processStop(pid, force)
+	end
+end
+
+
+
+-- string = processReadEnded( process, exitCode [, isText=false ] )
+function processReadEnded(process, exitCode, isText)
+	assertarg(1, process,  "userdata")
+	assertarg(2, exitCode, "number")
+	assertarg(3, isText,   "boolean","nil")
+
+	local stream = exitCode == 0 and process:IsErrorAvailable() and process:GetErrorStream() or process:GetInputStream()
+	local s      = streamRead(stream, isText)
+
+	return s
 end
 
 

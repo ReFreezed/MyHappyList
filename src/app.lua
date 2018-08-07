@@ -42,15 +42,19 @@ end
 
 local wxPleaseJustStop = wx.wxLogNull()
 
+-- Creating folders should be done first, in case they get used right away.
 assert(createDirectory("local"))
 assert(createDirectory("logs"))
 assert(createDirectory("temp"))
 assert(createDirectory(CACHE_DIR))
 
+-- Prepare AniDB connection before opening the log file, in case the socket cannot open.
+-- Don't wanna risk having multiple MyHappyLists running and appending to the same file.
+anidb = require"Anidb"()
+
 local logFilePath = "logs/output.log"
 logFile = assert(openFile(logFilePath, "a"))
 
-anidb     = require"Anidb"()
 appIcons  = wx.wxIconBundle("gfx/appicon.ico", wxBITMAP_TYPE_ANY)
 fontTitle = wx.wxFont(1.2*wx.wxNORMAL_FONT:GetPointSize(), wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD)
 
@@ -91,9 +95,7 @@ on(topFrame, "DROP_FILES", function(e, paths)
 	local pathsToAdd = {}
 
 	for _, path in ipairs(paths) do
-		local mode = getFileMode(path)
-
-		if mode == "directory" then
+		if isDirectory(path) then
 			traverseFiles(path, function(path, pathRel, name, ext)
 				if indexOf(appSettings.movieExtensions, ext:lower()) then
 					table.insert(pathsToAdd, path)
@@ -104,7 +106,7 @@ on(topFrame, "DROP_FILES", function(e, paths)
 				end
 			end)
 
-		elseif mode == "file" then
+		elseif isFile(path) then
 			if indexOf(appSettings.movieExtensions, getExtension(getFilename(path)):lower()) then
 				table.insert(pathsToAdd, path)
 			end
@@ -433,7 +435,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 		end
 	end):Enable(anyIsHashed)
 
-	newMenuItem(popupMenu, fileList, "Open &Contaning Folder", "Open the folder contaning the file", function(e)
+	newMenuItem(popupMenu, fileList, "Open &Containing Folder", "Open the folder containing the file", function(e)
 		local fileInfo = fileInfosSelected[1]
 		showFileInExplorer(fileInfo.path)
 	end)
@@ -584,20 +586,16 @@ wx.wxGetApp():MainLoop()
 
 -- saveSettings() -- No, do this in CLOSE_WINDOW instead.
 
--- AniDB wants us to log out.
-if anidb:isLoggedIn() and not DEBUG then
-	anidb:clearMessageQueue()
-	anidb:logout()
-	anidb:update(true)
-	-- We don't have time to wait for a reply to logout(), so just remove the session info right away.
-	anidb:dropSession()
-end
+processStopAll(true) -- May take some time as we try to end the processes gracefully.
+
+anidb:destroy()
+anidb = nil
 
 -- Cleanup.
 if isDirectory"temp" then
 	traverseFiles("temp", function(path)
 		if not deleteFile(path) then
-			logprinterror(nil, "Could not delete file '%s'.", path)
+			logprinterror("App", "Could not delete file '%s'.", path)
 		end
 	end)
 end

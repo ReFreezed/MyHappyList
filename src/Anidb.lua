@@ -15,6 +15,7 @@
 	--------------------------------
 
 	clearMessageQueue
+	destroy
 	events
 	getCacheMylist
 	getCredentials, setCredentials, removeCredentials
@@ -651,12 +652,10 @@ do
 	end
 
 	function getNextMessageToSend(self, force)
-		if not self.enableSending then  return nil  end
-
 		local time = getTime()
 
 		if not force then
-			if self.isInBlackout then  return nil  end
+			if not self.enableSending or self.isInBlackout then  return nil  end
 
 			-- Don't send requests too frequently.
 			local timeLast = self.responseTimeLast
@@ -1665,6 +1664,20 @@ function Anidb:init()
 			end
 		end
 	end
+end
+
+function Anidb:destroy()
+
+	-- AniDB wants us to log out.
+	if self:isLoggedIn() and not DEBUG then
+		self:clearMessageQueue()
+		self:logout()
+		self:update(true)
+		-- We don't have time to wait for a reply to logout(), so just remove the session info right away.
+		self:dropSession()
+	end
+
+	self.udp:close()
 end
 
 
