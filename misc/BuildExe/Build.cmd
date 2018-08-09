@@ -11,3 +11,7 @@ utils\ResourceHacker\ResourceHacker.exe -open "misc\BuildExe\AppInfo.rc" -save "
 utils\ResourceHacker\ResourceHacker.exe -script "misc\BuildExe\UpdateExe.rhs" -log CONSOLE
 utils\srlua\glue.exe "temp\App.exe" "misc\BuildExe\exe.lua" "MyHappyList.exe"
 ECHO Making exe... done!
+
+ECHO Making zip...
+lua5.1.exe misc\BuildExe\CreateRelease.lua
+ECHO Making zip... done!

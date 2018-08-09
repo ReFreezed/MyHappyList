@@ -816,7 +816,7 @@ function processStart(cmd, method, cb)
 
 		local exitCode = wx.wxExecute(cmd, wxEXEC_SYNC, process)
 
-		if cb then  cb(process, exitCode, nil)  end
+		if cb then  cb(process, exitCode)  end
 
 		return exitCode ~= -1
 

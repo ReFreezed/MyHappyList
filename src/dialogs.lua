@@ -104,7 +104,7 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent)
 
 	local sourceCheckbox = wx.wxCheckBox(panel, wxID_ANY, "Source:")
 	sourceCheckbox:SetSizeHints(60, getHeight(sourceCheckbox))
-	sourceCheckbox:SetToolTip("Source: i.e. ed2k, DC, FTP or IRC")
+	sourceCheckbox:SetToolTip("I.e. ed2k, DC, FTP or IRC")
 	sourceCheckbox:SetValue(valuesCurrent ~= nil and valuesCurrent.source ~= nil)
 	sizerPanel:Add(sourceCheckbox, 0, wxGROW_ALL)
 
@@ -142,7 +142,7 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent)
 
 	local storageCheckbox = wx.wxCheckBox(panel, wxID_ANY, "Storage:")
 	storageCheckbox:SetSizeHints(60, getHeight(storageCheckbox))
-	storageCheckbox:SetToolTip("Storage: i.e. the label of the CD with this file")
+	storageCheckbox:SetToolTip("I.e. the label of the CD with this file")
 	storageCheckbox:SetValue(valuesCurrent ~= nil and valuesCurrent.storage ~= nil)
 	sizerPanel:Add(storageCheckbox, 0, wxGROW_ALL)
 
@@ -529,13 +529,13 @@ function dialogs.settings()
 	autoHashCheckbox:SetValue(appSettings.autoHash)
 	sizerBox:Add(autoHashCheckbox)
 
-	local autoRemoveDeletedFilesCheckbox = wx.wxCheckBox(dialog, wxID_ANY, "Automatically remove moved/deleted files from list")
-	autoRemoveDeletedFilesCheckbox:SetValue(appSettings.autoRemoveDeletedFiles)
-	sizerBox:Add(autoRemoveDeletedFilesCheckbox, 0, wxTOP, MARGIN_S)
-
 	local autoAddToMylistCheckbox = wx.wxCheckBox(dialog, wxID_ANY, "Automatically add files to MyList")
 	autoAddToMylistCheckbox:SetValue(appSettings.autoAddToMylist)
 	sizerBox:Add(autoAddToMylistCheckbox, 0, wxTOP, MARGIN_S)
+
+	local autoRemoveDeletedFilesCheckbox = wx.wxCheckBox(dialog, wxID_ANY, "Automatically remove moved/deleted files from list")
+	autoRemoveDeletedFilesCheckbox:SetValue(appSettings.autoRemoveDeletedFiles)
+	sizerBox:Add(autoRemoveDeletedFilesCheckbox, 0, wxTOP, MARGIN_S)
 
 	local truncateFoldersCheckbox = wx.wxCheckBox(dialog, wxID_ANY, "Show truncated folder paths")
 	truncateFoldersCheckbox:SetValue(appSettings.truncateFolders)

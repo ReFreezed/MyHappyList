@@ -41,6 +41,8 @@ end
 
 -- success, errorMessage = createDirectory( path )
 function createDirectory(path)
+	if path == "" then  return  end
+
 	if path:find"^/" or path:find"^%a:" then
 		return false, F("[internal] Absolute paths are disabled. (%s)", path)
 	end
@@ -99,11 +101,19 @@ function directoryItems(dirPath)
 		ok, nameNext = dirObj:GetNext()
 		if not ok then  nameNext = nil  end
 
+		collectgarbage() -- Fixes directories not being removable.
 		if name then  return name  end
 	end
 end
 
-function traverseDirectory(dirPath, cb, _pathRelStart)
+-- traverseDirectory( directoryPath, [ bottomUp=false, ] callback )
+-- callback = function( path, relativePath, name, mode )
+-- mode     = "file"|"directory"
+function traverseDirectory(dirPath, bottomUp, cb, _pathRelStart)
+	if type(bottomUp) == "function" then
+		bottomUp, cb = false, bottomUp
+	end
+
 	_pathRelStart = _pathRelStart or #dirPath+2
 
 	for name in directoryItems(dirPath) do
@@ -115,17 +125,26 @@ function traverseDirectory(dirPath, cb, _pathRelStart)
 			if abort then  return true  end
 
 		elseif isDirectory(path) then
+			if bottomUp then
+				local abort = traverseDirectory(path, bottomUp, cb, _pathRelStart)
+				if abort then  return true  end
+			end
+
 			local pathRel = path:sub(_pathRelStart)
 			local abort   = cb(path, pathRel, name, "directory")
 			if abort then  return true  end
 
-			local abort = traverseDirectory(path, cb, _pathRelStart)
-			if abort then  return true  end
+			if not bottomUp then
+				local abort = traverseDirectory(path, bottomUp, cb, _pathRelStart)
+				if abort then  return true  end
+			end
 		end
 	end
 
 end
 
+-- traverseFiles( directoryPath, callback )
+-- callback = function( path, relativePath, filename, extension )
 function traverseFiles(dirPath, cb, _pathRelStart)
 	_pathRelStart = _pathRelStart or #dirPath+2
 

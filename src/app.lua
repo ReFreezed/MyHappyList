@@ -40,8 +40,6 @@ for _, t in ipairs{wx, wxlua} do
 end
 --]]
 
-local wxPleaseJustStop = wx.wxLogNull()
-
 -- Creating folders should be done first, in case they get used right away.
 assert(createDirectory("local"))
 assert(createDirectory("logs"))
@@ -213,9 +211,12 @@ end)
 -- Help.
 --------------------------------
 
--- newMenuItem(menuHelp, topFrame, "&Forum Thread", "Go to MyHappyList's forum thread on AniDB", function(e)
--- 	-- @Incomplete
--- end)
+newMenuItem(menuHelp, topFrame, "&Forum Thread", "Go to MyHappyList's forum thread on AniDB", function(e)
+	local url = "https://anidb.net/perl-bin/animedb.pl?show=cmt&id=83307"
+	if not wx.wxLaunchDefaultBrowser(url) then
+		showError("Error", "Could not launch default browser.\n\n"..url)
+	end
+end)
 
 -- newMenuItem(menuHelp, topFrame, "&Changes", "View the changelog", function(e)
 -- 	-- @Incomplete

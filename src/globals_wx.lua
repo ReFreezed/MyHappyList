@@ -24,6 +24,8 @@ print     = print_lua
 bit       = nil
 print_lua = nil
 
+wxPleaseJustStop = wx.wxLogNull() -- Ugh.
+
 -- Things that look like constants.
 for _, t in ipairs{wx, wxlua} do
 	for k, v in pairs(t) do

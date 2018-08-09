@@ -29,7 +29,7 @@ if chunk then  chunk()  end
 
 -- Settings, app/general.
 
-APP_VERSION       = "1.0.0"
+APP_VERSION       = require"version"
 CACHE_DIR         = DEBUG_LOCAL and "cacheDebug" or "cache"
 MAX_DROPPED_FILES = 1000
 SAVE_DELAY        = DEBUG and 1000 or 2000 -- Affects saving of settings, etc.
