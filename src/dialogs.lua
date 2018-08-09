@@ -479,9 +479,7 @@ function dialogs.credentials()
 	end)
 	sizerButtons:SetAffirmativeButton(button)
 
-	local button = newButton(dialog, wxID_CANCEL, "Cancel", function(e)
-		e:Skip()
-	end)
+	local button = newButton(dialog, wxID_CANCEL, "Cancel")
 	sizerButtons:SetCancelButton(button)
 
 	sizerButtons:Realize()
@@ -499,7 +497,10 @@ function dialogs.credentials()
 	dialog:Centre()
 
 	show(loginButton, topPanel)
+
+	pause("credentials")
 	dialog:ShowModal()
+	unpause("credentials")
 end
 
 
@@ -707,7 +708,9 @@ function dialogs.missingFile(path)
 			wxDEFAULT_DIALOG_STYLE + wxRESIZE_BORDER + wxFILE_MUST_EXIST
 		)
 
+		pause("wxFileDialog")
 		local id = dialog:ShowModal()
+		unpause("wxFileDialog")
 
 		if id == wxID_CANCEL then
 			cast(e:GetEventObject()):SetFocus(true) -- Fixes the dialog not getting back focus.

@@ -248,8 +248,9 @@ do
 	}
 
 	function openFile(path, modeFull)
+		-- Extra protection against wxFileDialog() (and maybe others) changing CWD however they want. Ugh.
 		if not (path:find"^[/\\]" or path:find"^%a:[/\\]") then
-			path = APPDIR.."/"..path -- Fixes wxFileDialog() changing CWD however it wants. Ugh.
+			path = APPDIR.."/"..path
 		end
 
 		local mode, access, update, binary = modeFull:match"^(([rwa]+)(%+?))(b?)$"

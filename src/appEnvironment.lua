@@ -10,7 +10,8 @@
 --=
 --==============================================================
 
-	setSetting, loadSettings, saveSettings, scheduleSaveSettings, setSettingsChanged
+	pause, unpause, isPaused
+	setSetting, loadSettings, saveSettings, scheduleSaveSettings, scheduleSaveSettingsIfNeeded, setSettingsChanged
 	setStatusText
 
 	addFileInfo, removeFileInfo, removeSelectedFileInfos
@@ -539,6 +540,7 @@ do
 
 	function saveSettings()
 		if not saveScheduled then  return  end
+		if isPaused()        then  return  end
 
 		local _callbacks = callbacks
 		callbacks = {}
@@ -564,6 +566,14 @@ do
 
 		saveTimer = saveTimer or newTimer(function(e)  saveSettings()  end)
 		saveTimer:Start(delay, true)
+	end
+
+	-- scheduleSaveSettingsIfNeeded( )
+	function scheduleSaveSettingsIfNeeded()
+		if not saveScheduled                   then  return  end
+		if saveTimer and saveTimer:IsRunning() then  return  end
+
+		scheduleSaveSettings()
 	end
 
 	function setSettingsChanged()
@@ -642,6 +652,44 @@ do
 			saveFileInfos()
 			updateFileList()
 		end
+	end
+end
+
+
+
+do
+	local pauseKeys = {}
+
+	function pause(k)
+		if pauseKeys[k] then
+			pauseKeys[k] = pauseKeys[k]+1
+
+		else
+			if not isPaused() then
+				logprint(nil, "Paused by '%s'.", k)
+			end
+			pauseKeys[k] = 1
+		end
+	end
+
+	function unpause(k)
+		if not pauseKeys[k] then
+			logprinterror(nil, "Tried to remove non-existent pause key '%s'.", k)
+
+		elseif pauseKeys[k] > 1 then
+			pauseKeys[k] = pauseKeys[k]-1
+
+		else
+			pauseKeys[k] = nil
+			if not isPaused() then
+				logprint(nil, "Unpaused by '%s'.", k)
+				scheduleSaveSettingsIfNeeded()
+			end
+		end
+	end
+
+	function isPaused()
+		return next(pauseKeys) ~= nil
 	end
 end
 

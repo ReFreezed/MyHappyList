@@ -68,9 +68,12 @@ return {
 
 	["loginbadlogin"] =
 	function()
-		anidb.enableSending = false
+		pause("badlogin")
 		showError("Bad Login", "The username and/or password is incorrect.")
-		anidb.enableSending = true
+		unpause("badlogin")
+
+		anidb.canAskForCredentials = false -- Prevent a needcredentials event.
+		dialogs.credentials()
 	end,
 
 	["loginfail"] =

@@ -18,7 +18,7 @@
 	destroy
 	events
 	getCacheMylist
-	getCredentials, setCredentials, removeCredentials
+	getCredentials, loadCredentials, setCredentials, removeCredentials
 	hashFile
 	isLoggedIn, dropSession
 	isSendingAnyMessage, getActiveMessageCount, getQueuedMessageCount
@@ -141,11 +141,14 @@ local ED2K_STATE_ERROR                = 3
 local Anidb = {
 	udp                     = nil,
 
+	responses               = nil,
 	messages                = nil,
 	theEvents               = nil,
 	cache                   = nil,
 	cachePartial            = nil,
 
+	username                = "",
+	password                = "",
 	sessionKey              = "", -- This indicates whether we're logged in or not.
 
 	enableSending           = true,
@@ -654,7 +657,7 @@ do
 		local time = getTime()
 
 		if not force then
-			if not self.enableSending or self.isInBlackout then  return nil  end
+			if isPaused() or not self.enableSending or self.isInBlackout then  return nil  end
 
 			-- Don't send requests too frequently.
 			local timeLast = self.responseTimeLast
@@ -1274,6 +1277,7 @@ responseHandlers = {
 		-- 500 LOGIN FAILED
 		elseif statusCode == 500 then
 			self:removeCredentials()
+			self.canAskForCredentials = true
 			addEvent(self, "loginbadlogin")
 			self.onLogin(false)
 
@@ -1629,6 +1633,7 @@ responseHandlers = {
 
 
 function Anidb:init()
+	self.responses = {}
 	self.messages  = {}
 	self.theEvents = {}
 
@@ -1659,6 +1664,8 @@ function Anidb:init()
 	loadBlackout(self)
 	loadNatInfo(self)
 	loadSession(self)
+
+	self:loadCredentials()
 
 	for name in directoryItems(CACHE_DIR) do
 		local pageName, id = name:match"^(%l)(%d+)$"
@@ -1691,14 +1698,22 @@ end
 
 
 -- username, password = getCredentials( )
+-- May return nil.
 function Anidb:getCredentials()
+	if self.username == "" then  return nil  end
+
+	return self.username, self.password
+end
+
+-- success = loadCredentials( )
+function Anidb:loadCredentials()
 	local path = DEBUG_LOCAL and "local/loginDebug" or "local/login"
 
 	-- @Speed: Don't read this from disc every time. Sigh.
 	local file, err = openFile(path, "r")
 	if not file then
 		-- _logprinterror("Could not open file '%s': %s", path, err)
-		return nil
+		return false
 	end
 
 	local iter = file:lines()
@@ -1710,13 +1725,20 @@ function Anidb:getCredentials()
 	if not (user ~= "" and pass ~= "") then
 		_logprinterror("Missing at least one of username or password lines in login file.")
 		self:removeCredentials()
-		return nil
+		return false
 	end
-	return user, pass
+
+	self.username = user
+	self.password = pass
+
+	return true
 end
 
 -- setCredentials( username, password )
 function Anidb:setCredentials(user, pass)
+	self.username = user
+	self.password = pass
+
 	local path = DEBUG_LOCAL and "local/loginDebug" or "local/login"
 	local file = assert(openFile(path, "w"))
 
@@ -1731,6 +1753,9 @@ end
 
 -- removeCredentials( )
 function Anidb:removeCredentials()
+	self.username = ""
+	self.password = ""
+
 	local path = DEBUG_LOCAL and "local/loginDebug" or "local/login"
 	deleteFile(path)
 end
@@ -1993,8 +2018,16 @@ function Anidb:update(force)
 		addEvent(self, "blackoutstop")
 	end
 
-	-- Handle responses.
+	-- Get responses.
 	for data in receive(self) do
+		table.insert(self.responses, data)
+	end
+
+	-- Handle responses.
+	while not isPaused() or force do
+		local data = table.remove(self.responses, 1)
+		if not data then  break  end
+
 		if data:find"^%z%z" then
 			data = decompress(data)
 		end
@@ -2009,15 +2042,17 @@ function Anidb:update(force)
 	end
 
 	-- Time-out old messages.
-	for _, msg in ipairsr(self.messages) do
-		if msg.stage == MESSAGE_STAGE_SENT and time-msg.timeSent > SERVER_RESPONSE_TIMEOUT then
-			_logprinterror("%s message timed out.", msg.command)
+	if not isPaused() then
+		for _, msg in ipairsr(self.messages) do
+			if msg.stage == MESSAGE_STAGE_SENT and time-msg.timeSent > SERVER_RESPONSE_TIMEOUT then
+				_logprinterror("%s message timed out.", msg.command)
 
-			msg.stage = MESSAGE_STAGE_RESPONSE_TIMEOUT
-			removeMessage(self, msg)
+				msg.stage = MESSAGE_STAGE_RESPONSE_TIMEOUT
+				removeMessage(self, msg)
 
-			addEvent(self, "errorresponsetimeout", msg.command)
-			msg:callback(self, false)
+				addEvent(self, "errorresponsetimeout", msg.command)
+				msg:callback(self, false)
+			end
 		end
 	end
 
@@ -2088,11 +2123,12 @@ end
 
 
 
--- for eventName, value1, ... in events( anidb ) do
+-- for eventName, value1, ... in events( ) do
 function Anidb:events()
 	local es = self.theEvents
 	return function()
-		if es[1] then  return unpack(table.remove(es, 1))  end
+		if isPaused() then  return  end
+		if es[1]      then  return unpack(table.remove(es, 1))  end
 	end
 end
 
