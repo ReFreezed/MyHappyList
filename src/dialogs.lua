@@ -79,7 +79,7 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent)
 	-- MyList state.
 	----------------------------------------------------------------
 
-	sizerParent:AddSpacer(4)
+	sizerParent:AddSpacer(MARGIN_S)
 
 	local labels = getColumn(MYLIST_STATES, "title")
 	labels[1] = valuesCurrent and "(default)" or "(don't change)"
@@ -97,7 +97,7 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent)
 	-- Source.
 	----------------------------------------------------------------
 
-	sizerParent:AddSpacer(4)
+	sizerParent:AddSpacer(MARGIN_S)
 
 	local panel      = wx.wxPanel(parent, wx.wxID_ANY)
 	local sizerPanel = wx.wxBoxSizer(wxHORIZONTAL)
@@ -135,7 +135,7 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent)
 	-- Storage.
 	----------------------------------------------------------------
 
-	sizerParent:AddSpacer(4)
+	sizerParent:AddSpacer(MARGIN_S)
 
 	local panel      = wx.wxPanel(parent, wx.wxID_ANY)
 	local sizerPanel = wx.wxBoxSizer(wxHORIZONTAL)
@@ -173,7 +173,7 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent)
 	-- Other.
 	----------------------------------------------------------------
 
-	sizerParent:AddSpacer(8)
+	sizerParent:AddSpacer(MARGIN_M)
 
 	local panel      = wx.wxPanel(parent, wx.wxID_ANY)
 	local sizerPanel = wx.wxBoxSizer(wxHORIZONTAL)
@@ -252,27 +252,27 @@ function dialogs.about()
 	local bmObj = wx.wxStaticBitmap(dialog, wxID_ANY, bm)
 	sizer:Add(bmObj, 0, wxALIGN_CENTRE_HORIZONTAL)
 
-	sizer:AddSpacer(8)
+	sizer:AddSpacer(MARGIN_M)
 
 	-- Title.
 	local textObj = wx.wxStaticText(dialog, wxID_ANY, title, wxDEFAULT_POSITION, wxDEFAULT_SIZE, wxALIGN_CENTRE_HORIZONTAL)
 	textObj:SetFont(fontTitle)
 	sizer:Add(textObj, 0, wxGROW_ALL)
 
-	sizer:AddSpacer(8)
+	sizer:AddSpacer(MARGIN_M)
 
 	-- Copyright.
 	local textObj = wx.wxStaticText(dialog, wxID_ANY, copyright, wxDEFAULT_POSITION, wxDEFAULT_SIZE, wxALIGN_CENTRE_HORIZONTAL)
 	sizer:Add(textObj, 0, wxGROW_ALL)
 
-	sizer:AddSpacer(8)
+	sizer:AddSpacer(MARGIN_M)
 
 	-- Description.
 	local textObj = wx.wxStaticText(dialog, wxID_ANY, desciption)
 	textObj:Wrap(400)
 	sizer:Add(textObj, 0, wxGROW_ALL)
 
-	sizer:AddSpacer(20)
+	sizer:AddSpacer(MARGIN_L)
 
 	-- Close button.
 	local button = newButton(dialog, wxID_OK, "Close")
@@ -280,7 +280,7 @@ function dialogs.about()
 	sizer:Add(button, 0, wxALIGN_CENTRE_HORIZONTAL)
 
 	local sizerWrapper = wx.wxBoxSizer(wxHORIZONTAL)
-	sizerWrapper:Add(sizer, 0, wxGROW_ALL, 20)
+	sizerWrapper:Add(sizer, 0, wxGROW_ALL, MARGIN_L)
 
 	dialog:SetAutoLayout(true)
 	dialog:SetSizer(sizerWrapper)
@@ -309,7 +309,7 @@ function dialogs.addmylist()
 	))
 	sizerDialog:Add(textObj)
 
-	sizerDialog:AddSpacer(4)
+	sizerDialog:AddSpacer(MARGIN_S)
 
 	local line = wx.wxStaticLine(dialog, wxID_ANY)
 	sizerDialog:Add(line, 0, wxGROW_ALL)
@@ -317,7 +317,7 @@ function dialogs.addmylist()
 	-- Mylist fields.
 	----------------------------------------------------------------
 
-	sizerDialog:AddSpacer(4)
+	sizerDialog:AddSpacer(MARGIN_S)
 
 	local
 		viewedRadio,
@@ -330,12 +330,12 @@ function dialogs.addmylist()
 	-- Buttons.
 	----------------------------------------------------------------
 
-	sizerDialog:AddSpacer(4)
+	sizerDialog:AddSpacer(MARGIN_S)
 
 	local line = wx.wxStaticLine(dialog, wxID_ANY)
 	sizerDialog:Add(line, 0, wxGROW_ALL)
 
-	sizerDialog:AddSpacer(4)
+	sizerDialog:AddSpacer(MARGIN_S)
 
 	local sizerButtons = wx.wxStdDialogButtonSizer()
 
@@ -392,7 +392,7 @@ function dialogs.addmylist()
 	----------------------------------------------------------------
 
 	local sizerWrapper = wx.wxBoxSizer(wxHORIZONTAL)
-	sizerWrapper:Add(sizerDialog, 0, wxGROW_ALL, 10)
+	sizerWrapper:Add(sizerDialog, 0, wxGROW_ALL, MARGIN_M)
 
 	dialog:SetAutoLayout(true)
 	dialog:SetSizer(sizerWrapper)
@@ -427,7 +427,7 @@ function dialogs.credentials()
 
 	sizerDialog:Add(sizerSection, 1, wxGROW_ALL)
 
-	sizerDialog:AddSpacer(2)
+	sizerDialog:AddSpacer(MARGIN_XS)
 
 	-- Password. 4-64 characters. ASCII only.
 	local sizerSection = wx.wxBoxSizer(wxHORIZONTAL)
@@ -445,7 +445,7 @@ function dialogs.credentials()
 	-- Text.
 	----------------------------------------------------------------
 
-	sizerDialog:AddSpacer(8)
+	sizerDialog:AddSpacer(MARGIN_M)
 
 	local textObj = wx.wxStaticText(dialog, wxID_ANY, "Note: These credentials will be saved in 'local/login'.")
 	sizerDialog:Add(textObj, 0, wxGROW_ALL)
@@ -453,7 +453,7 @@ function dialogs.credentials()
 	-- Buttons.
 	----------------------------------------------------------------
 
-	sizerDialog:AddSpacer(8)
+	sizerDialog:AddSpacer(MARGIN_M)
 
 	local sizerButtons = wx.wxStdDialogButtonSizer()
 
@@ -488,7 +488,7 @@ function dialogs.credentials()
 	----------------------------------------------------------------
 
 	local sizerWrapper = wx.wxBoxSizer(wxHORIZONTAL)
-	sizerWrapper:Add(sizerDialog, 0, wxGROW_ALL, 8)
+	sizerWrapper:Add(sizerDialog, 0, wxGROW_ALL, MARGIN_M)
 
 	dialog:SetAutoLayout(true)
 	dialog:SetSizer(sizerWrapper)
@@ -508,7 +508,7 @@ end
 function dialogs.settings()
 	local dialog       = wx.wxDialog(topPanel, wxID_ANY, "Settings")
 	local sizerDialog  = wx.wxBoxSizer(wxVERTICAL)
-	local sizerGrid    = wx.wxGridBagSizer(20, 20) -- 2x2
+	local sizerGrid    = wx.wxGridBagSizer(MARGIN_L, MARGIN_L) -- 2x2
 
 	on(dialog, "CHAR_HOOK", function(e, kc)
 		if kc == KC_ESCAPE then
@@ -529,17 +529,17 @@ function dialogs.settings()
 	autoHashCheckbox:SetValue(appSettings.autoHash)
 	sizerBox:Add(autoHashCheckbox)
 
-	local autoRemoveDeletedFilesCheckbox = wx.wxCheckBox(dialog, wxID_ANY, "Automatically remove deleted files from list")
+	local autoRemoveDeletedFilesCheckbox = wx.wxCheckBox(dialog, wxID_ANY, "Automatically remove moved/deleted files from list")
 	autoRemoveDeletedFilesCheckbox:SetValue(appSettings.autoRemoveDeletedFiles)
-	sizerBox:Add(autoRemoveDeletedFilesCheckbox, 0, wxTOP, 4)
+	sizerBox:Add(autoRemoveDeletedFilesCheckbox, 0, wxTOP, MARGIN_S)
 
 	local autoAddToMylistCheckbox = wx.wxCheckBox(dialog, wxID_ANY, "Automatically add files to MyList")
 	autoAddToMylistCheckbox:SetValue(appSettings.autoAddToMylist)
-	sizerBox:Add(autoAddToMylistCheckbox, 0, wxTOP, 4)
+	sizerBox:Add(autoAddToMylistCheckbox, 0, wxTOP, MARGIN_S)
 
 	local truncateFoldersCheckbox = wx.wxCheckBox(dialog, wxID_ANY, "Show truncated folder paths")
 	truncateFoldersCheckbox:SetValue(appSettings.truncateFolders)
-	sizerBox:Add(truncateFoldersCheckbox, 0, wxTOP, 8)
+	sizerBox:Add(truncateFoldersCheckbox, 0, wxTOP, MARGIN_M)
 
 	sizerGrid:Add(sizerBox, wx.wxGBPosition(0, 0), wx.wxGBSpan(1, 1), wxGROW_ALL)
 
@@ -554,11 +554,11 @@ function dialogs.settings()
 		"Only files with these extensions will get added when you drag files or folders into the window."
 	)
 	textObj:Wrap(250)
-	sizerBox:Add(textObj, 0, wxGROW_ALL, 4)
+	sizerBox:Add(textObj, 0, wxGROW_ALL, MARGIN_S)
 
 	local textObj = wx.wxStaticText(dialog, wxID_ANY, "One extension per line.")
 	textObj:Wrap(250)
-	sizerBox:Add(textObj, 0, wxGROW_ALL, 4)
+	sizerBox:Add(textObj, 0, wxGROW_ALL, MARGIN_S)
 
 	local extensionsInput = wx.wxTextCtrl(
 		dialog, wxID_ANY, table.concat(appSettings.movieExtensions, "\n"),
@@ -591,7 +591,7 @@ function dialogs.settings()
 	-- Buttons.
 	----------------------------------------------------------------
 
-	sizerDialog:AddSpacer(20)
+	sizerDialog:AddSpacer(MARGIN_L)
 
 	local sizerButtons = wx.wxStdDialogButtonSizer()
 
@@ -661,7 +661,7 @@ function dialogs.settings()
 	----------------------------------------------------------------
 
 	local sizerWrapper = wx.wxBoxSizer(wxHORIZONTAL)
-	sizerWrapper:Add(sizerDialog, 0, wxGROW_ALL, 20)
+	sizerWrapper:Add(sizerDialog, 0, wxGROW_ALL, MARGIN_L)
 
 	dialog:SetAutoLayout(true)
 	dialog:SetSizer(sizerWrapper)

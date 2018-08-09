@@ -17,7 +17,7 @@
 	newTimer
 	on, onAccelerator, off
 	setAccelerators
-	setBoxSizer, setBoxSizerWithSpace
+	setBoxSizer, setBoxSizerWithSpace, getSizerSpace
 	showButtonDialog, showMessage, showWarning, showError, confirm
 
 	checkBoxClick
@@ -485,7 +485,7 @@ function showButtonDialog(caption, message, infos, icon)
 	if iconName ~= "" then
 		local bm    = wx.wxArtProvider.GetBitmap(iconName)
 		local bmObj = wx.wxStaticBitmap(panel, wxID_ANY, bm)
-		sizer:Add(bmObj, 0, wxRIGHT, 8) -- wxALIGN_CENTRE_VERTICAL
+		sizer:Add(bmObj, 0, wxRIGHT, MARGIN_M) -- wxALIGN_CENTRE_VERTICAL
 	end
 
 	-- Message.
@@ -547,7 +547,7 @@ function showButtonDialog(caption, message, infos, icon)
 		sizer:Add(button, 0, wxLEFT + wxRIGHT, 3)
 	end
 
-	sizerDialog:Add(sizer, 0, wxGROW_ALL, 8)
+	sizerDialog:Add(sizer, 0, wxGROW_ALL, MARGIN_M)
 
 	----------------------------------------------------------------
 
@@ -629,6 +629,7 @@ end
 
 
 
+--[[
 -- sizer = setBoxSizer( wxWindow, direction [, proportion=0, flags, border=0 ] )
 -- direction = wxHORIZONTAL|wxVERTICAL
 function setBoxSizer(window, direction, ...)
@@ -667,6 +668,7 @@ end
 function getSizerSpace(spaceOutside, spaceBetween)
 	return spaceBetween-2*spaceOutside, spaceOutside
 end
+--]]
 
 
 

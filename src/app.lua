@@ -448,8 +448,8 @@ on(fileList, "CONTEXT_MENU", function(e)
 	end):Enable(anyIsHashed)
 
 	newMenuItem(popupMenu, fileList, "Open &Containing Folder", "Open the folder containing the file", function(e)
-		local path = getDirectory(fileInfosSelected[1].path)
-		if isDirectory(path) then
+		local path = fileInfosSelected[1].path
+		if isDirectory(getDirectory(path)) then
 			showFileInExplorer(path)
 		else
 			showError("Error", F("Folder does not exist.\n\n%s", path))
