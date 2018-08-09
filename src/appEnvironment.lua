@@ -15,6 +15,7 @@
 
 	addFileInfo, removeFileInfo, removeSelectedFileInfos
 	anyFileInfos, noFileInfos
+	checkFileInfos
 	eachFileInfoByRow, getFileInfosByRows, getSelectedFileInfos
 	getFileInfoByRow, getFileRow
 	getFileStatus, getFileViewed
@@ -62,11 +63,20 @@ lastFileId       = 0 -- Local ID, not fid on AniDB.
 updateAvailableMessageReceived = false
 
 appSettings = {
-	autoHash        = true,
-	autoAddToMylist = false, -- @Incomplete
+	autoAddToMylist        = true,
+	autoHash               = true,
+	autoRemoveDeletedFiles = false,
+	truncateFolders        = true,
 
 	movieExtensions = {"avi","flv","mkv","mov","mp4","mpeg","mpg","ogm","ogv","swf","webm","wmv"},
-	trunkateFolders = true,
+
+	mylistDefaults = {
+		state   = MYLIST_STATE_INTERNAL_STORAGE,
+		viewed  = nil, -- bool
+		source  = nil, -- string
+		storage = nil, -- string
+		other   = nil, -- string (newlines allowed)
+	},
 
 	windowSizeX     = -1,
 	windowSizeY     = -1,
@@ -142,12 +152,19 @@ function addFileInfo(path)
 	)
 	fileList:SetItemData(wxRow, fileInfo.id)
 
-	if fileInfo.ed2k == "" and appSettings.autoHash then
+	if not isFile(path) then
+		-- Do nothing here. checkFileInfos() should be called at some point after this function.
+
+	elseif fileInfo.ed2k == "" and appSettings.autoHash then
 		setFileInfo(fileInfo, "isHashing", true)
 		anidb:hashFile(path)
 
-	elseif fileInfo.lid == -1 and fileInfo.ed2k ~= "" and fileInfo.mylistStatus == MYLIST_STATUS_UNKNOWN then
+	elseif fileInfo.lid == -1 and fileInfo.ed2k ~= "" and not appSettings.autoAddToMylist and fileInfo.mylistStatus == MYLIST_STATUS_UNKNOWN then
 		anidb:getMylistByEd2k(fileInfo.ed2k, fileInfo.size)
+
+	elseif fileInfo.lid == -1 and fileInfo.ed2k ~= "" and appSettings.autoAddToMylist then
+		-- This will act as getMylistByEd2k() if an entry already exist.
+		anidb:addMylistByEd2k(fileInfo.ed2k, fileInfo.size)
 
 	elseif fileInfo.lid ~= -1 and fileInfo.fid == -1 then
 		-- The app probably stopped before getting this info last session.
@@ -235,7 +252,7 @@ function updateFileList()
 
 	if #prefix <= 5 then  prefix = ""  end
 
-	local usePrefix = (appSettings.trunkateFolders and prefix ~= "")
+	local usePrefix = (appSettings.truncateFolders and prefix ~= "")
 
 	for _, fileInfo in ipairs(fileInfos) do
 		listCtrlSetItem(
@@ -272,6 +289,10 @@ do
 	local FILE_INFO_VERSION = 1
 
 	function saveFileInfos()
+		logprint("App", "Saving file info.")
+
+		if DEBUG_DISABLE_VARIOUS_FILE_SAVING then  return  end
+
 		local path = CACHE_DIR.."/files"
 
 		backupFileIfExists(path)
@@ -356,10 +377,26 @@ function setFileInfo(fileInfo, k, v, force)
 		return
 	end
 
-	fileInfo[k] = v
+	if k == "path" then
+		local pathOld = fileInfo.path
+		local pathNew = v
 
-	local wxRow = fileList:FindItem(-1, fileInfo.id)
-	if wxRow == -1 then
+		fileInfo.path   = pathNew
+		fileInfo.name   = getFilename(pathNew)
+		fileInfo.folder = getDirectory(pathNew)
+
+		-- @Robustness: Check if fileInfos[pathNew] is already occupied.
+		fileInfos[pathOld] = nil
+		fileInfos[pathNew] = fileInfo
+
+		anidb:reportLocalFileMoved(pathOld, pathNew)
+
+	else
+		fileInfo[k] = v
+	end
+
+	local wxRow = getFileRow(fileInfo)
+	if not wxRow then
 		logprinterror("App", "File %d is not in list.", fileInfo.id)
 		return
 	end
@@ -367,6 +404,10 @@ function setFileInfo(fileInfo, k, v, force)
 	if isAny(k, "lid","fid","ed2k","isHashing","mylistStatus") then
 		fileList:SetItem(wxRow, FILE_COLUMN_VIEWED-1, getFileViewed(fileInfo))
 		fileList:SetItem(wxRow, FILE_COLUMN_STATUS-1, getFileStatus(fileInfo))
+
+	elseif isAny(k, "path") then
+		fileList:SetItem(wxRow, FILE_COLUMN_FILE-1,   fileInfo.name)
+		fileList:SetItem(wxRow, FILE_COLUMN_FOLDER-1, fileInfo.folder)
 	end
 end
 
@@ -509,7 +550,9 @@ do
 
 		logprint("App", "Saving settings.")
 
-		assert(writeSimpleEntryFile(PATH_SETTINGS, appSettings))
+		if not DEBUG_DISABLE_VARIOUS_FILE_SAVING then
+			assert(writeSimpleEntryFile(PATH_SETTINGS, appSettings))
+		end
 		saveScheduled = false
 	end
 
@@ -525,6 +568,80 @@ do
 
 	function setSettingsChanged()
 		saveScheduled = true
+	end
+end
+
+
+
+
+do
+	local function silentlyCheckFileAndMaybeRegisterMove(fileInfo, dirNew)
+		local pathOld = fileInfo.path
+		if isFile(pathOld) then  return  end
+
+		local pathNew = F("%s/%s", dirNew, fileInfo.name)
+
+		if not fileInfos[pathNew] and isFile(pathNew) and getFileSize(pathNew) == fileInfo.size then
+			setFileInfo(fileInfo, "path", pathNew)
+		end
+	end
+
+	local function checkFile(fileInfo, i)
+		local pathOld = fileInfo.path
+		if isFile(pathOld) then  return  end
+
+		if appSettings.autoRemoveDeletedFiles then
+			removeFileInfo(fileInfo)
+			anidb:reportLocalFileDeleted(pathOld)
+			return true
+		end
+
+		local pathNew = dialogs.missingFile(pathOld)
+		if not pathNew then
+			-- Leave fileInfo as-is. (Should we mark it so we don't ask for a new path again?)
+			return false
+		end
+
+		if pathNew == "" then
+			removeFileInfo(fileInfo)
+			anidb:reportLocalFileDeleted(pathOld)
+			return true
+		end
+
+		local fileSize = getFileSize(pathNew)
+
+		if fileSize ~= fileInfo.size then
+			showError("Different File", F(
+				"The size of the file on the old path was different than the file on the new path.\n\n"
+				.."%.0f bytes (old)\n%.0f bytes (new)\n\n%s", fileInfo.size, fileSize, pathNew
+			))
+
+			return checkFile(fileInfo, i)
+		end
+
+		setFileInfo(fileInfo, "path", pathNew)
+
+		for j = 1, i-1 do
+			silentlyCheckFileAndMaybeRegisterMove(fileInfos[j], getDirectory(pathNew))
+		end
+
+		return true
+	end
+
+	function checkFileInfos()
+		local anyFileInfoChanged = false
+
+		-- Check deleted/moved files.
+		for i, fileInfo in ipairsr(fileInfos) do
+			anyFileInfoChanged = checkFile(fileInfo, i) or anyFileInfoChanged
+		end
+
+		-- @@ Do autoHash etc.
+
+		if anyFileInfoChanged then
+			saveFileInfos()
+			updateFileList()
+		end
 	end
 end
 

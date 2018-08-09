@@ -248,6 +248,10 @@ do
 	}
 
 	function openFile(path, modeFull)
+		if not (path:find"^[/\\]" or path:find"^%a:[/\\]") then
+			path = APPDIR.."/"..path -- Fixes wxFileDialog() changing CWD however it wants. Ugh.
+		end
+
 		local mode, access, update, binary = modeFull:match"^(([rwa]+)(%+?))(b?)$"
 		if not mode then
 			mode, access, binary, update = modeFull:match"^(([rwa]+)(b?)(%+?))$"
@@ -594,60 +598,14 @@ function parseSimpleKv(line, path, ln)
 		return nil
 	end
 
-	local c = v:sub(1, 1)
-
-	-- Number.
-	if ("0123456789-"):find(c, 1, true) then
-		local n = tonumber(v)
-		if not isInt(n) then
-			logprinterror("FS", "%s:%d: Malformed (integer) number: %s", path, ln, v)
-			return nil
-		end
-		return k, n
-
-	-- String.
-	elseif c == '"' then
-		local chunk, err = loadstring("return"..v)
-		if not chunk then
-			logprinterror("FS", "%s:%d: Malformed string: %s: %s", path, ln, err, v)
-			return nil
-		end
-
-		local s = chunk()
-		if type(s) ~= "string" then
-			logprinterror("FS", "%s:%d: Malformed string: %s", path, ln, v)
-			return nil
-		end
-		return k, s
-
-	-- Boolean/nil.
-	elseif v == "true" then
-		return k, true
-	elseif v == "false" then
-		return k, false
-	elseif v == "nil" then
-		return k, nil
-
-	-- Array.
-	elseif c == "{" then
-		local chunk, err = loadstring("return"..v)
-		if not chunk then
-			logprinterror("FS", "%s:%d: Malformed array: %s: %s", path, ln, err, v)
-			return nil
-		end
-
-		local s = chunk()
-		if type(s) ~= "table" then
-			logprinterror("FS", "%s:%d: Malformed array: %s", path, ln, v)
-			return nil
-		end
-		return k, s
-
-
-	else
-		logprinterror("FS", "%s:%d: Unknown value type: %s", path, ln, v)
+	local chunk, err = loadstring("return "..v, "")
+	if not chunk then
+		err = err :gsub('^%[string ""%]:1: ', "") :gsub("<eof>", "<eol>")
+		logprinterror("FS", "%s:%d: Malformed value: %s. ('%s')", path, ln, err, line)
 		return nil
 	end
+
+	return k, (chunk())
 end
 
 -- everythingWentOk = writeSimpleKv( file, k, v, path )
@@ -680,24 +638,54 @@ function writeSimpleKv(file, k, v, path, _partOfValue)
 		file:write(tostring(v))
 		if not _partOfValue then  file:write("\n")  end
 
-	-- Array.
+	-- Table (flat).
 	elseif vType == "table" and not _partOfValue then
-		for i in pairs(v) do
-			if not isInt(i) or i < 1 or i > #v then
-				allOk = false
-				logprinterror("FS", "%s: Table is not a sequence. Skipping. (%s, '%s')", path, k, tostring(v))
-				break
+		local isKvTable = (type(next(v)) == "string")
+
+		if isKvTable then
+			for k in pairs(v) do
+				if type(k) ~= "string" then
+					allOk = false
+					logprinterror("FS", "%s: Table is not a sequence or simple. Skipping. (%s, '%s')", path, k, tostring(v))
+					break
+				end
+			end
+		else
+			for i in pairs(v) do
+				if not isInt(i) or i < 1 or i > #v then
+					allOk = false
+					logprinterror("FS", "%s: Table is not a sequence or simple. Skipping. (%s, '%s')", path, k, tostring(v))
+					break
+				end
 			end
 		end
 
 		if allOk then
-			file:write(k, " {") -- Note: _partOfValue is false.
+			file:write(k, " {") -- Note: _partOfValue is always false here.
 
-			for i, item in ipairs(v) do
-				if i > 1 then  file:write(",")  end
+			if isKvTable then
+				for itemKey, item, i in pairsSorted(v) do
+					if i > 1 then  file:write(",")  end
 
-				if not writeSimpleKv(file, k.."["..i.."]", item, path, true) then
-					file:write("nil")
+					if itemKey:find"^[%a_][%w_]*$" then
+						file:write(itemKey, "=")
+					else
+						local s = F("[%q]=", itemKey) :gsub("\\\n", "\\n")
+						file:write(s)
+					end
+
+					if not writeSimpleKv(file, k.."["..itemKey.."]", item, path, true) then
+						file:write("nil")
+					end
+				end
+
+			else
+				for i, item in ipairs(v) do
+					if i > 1 then  file:write(",")  end
+
+					if not writeSimpleKv(file, k.."["..i.."]", item, path, true) then
+						file:write("nil")
+					end
 				end
 			end
 

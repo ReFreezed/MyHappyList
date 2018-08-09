@@ -22,6 +22,7 @@
 	hashFile
 	isLoggedIn, dropSession
 	isSendingAnyMessage, getActiveMessageCount, getQueuedMessageCount
+	reportFileDeleted, reportFileMoved
 	update
 
 	-- Server communication.
@@ -164,8 +165,6 @@ local Anidb = {
 	responseTimePrevious    = 0.00,
 	previousResponseTimes   = nil,
 
-	mylistDefaults          = nil,
-
 	-- Internal events:
 	onLogin                 = NOOP,
 }
@@ -187,7 +186,7 @@ local cacheSave, cacheLoad, cacheDelete
 local compress, decompress
 local createData
 local generateTag
-local getEd2k, getPathByEd2k
+local ed2kGet, ed2kGetPath, ed2kChangePath
 local getMessage, addMessage, removeMessage
 local getNextMessageToSend
 local handleServerResponse
@@ -1011,6 +1010,8 @@ do
 	local isProcessing = false
 
 	local function saveEd2ks()
+		if DEBUG_DISABLE_VARIOUS_FILE_SAVING then  return  end
+
 		local file = assert(openFile(CACHE_DIR.."/ed2ks", "w"))
 
 		for path, ed2kHash in pairsSorted(pathEd2ks) do
@@ -1104,7 +1105,7 @@ do
 		end, toShortPath(path))
 	end
 
-	function getEd2k(self, path, cb)
+	function ed2kGet(self, path, cb)
 		if not isLoaded then  loadEd2ks()  end
 
 		local fileSize, err = getFileSize(path)
@@ -1151,10 +1152,25 @@ do
 		if not isProcessing then  processNextQueueItem()  end
 	end
 
-	function getPathByEd2k(ed2kHash)
+	function ed2kGetPath(ed2kHash)
 		if not isLoaded then  loadEd2ks()  end
 
 		return ed2kPaths[ed2kHash]
+	end
+
+	function ed2kChangePath(pathOld, pathNew)
+		local ed2kHash = pathEd2ks[pathOld]
+		local fileSize = pathSizes[pathOld]
+		if not ed2kHash then  return  end
+
+		pathEd2ks[pathOld]  = nil
+		pathSizes[pathOld]  = nil
+
+		-- @Robustness: Check if pathEd2ks[pathNew] is already occupied.
+		pathEd2ks[pathNew]  = ed2kHash
+		pathSizes[pathNew]  = fileSize
+
+		ed2kPaths[ed2kHash] = pathNew
 	end
 end
 
@@ -1167,7 +1183,7 @@ function applyMylistaddValues(params, values)
 	end
 	if values.viewed ~= nil then
 		params.viewed   = values.viewed
-		params.viewdate = values.viewed and os.time() or nil
+		params.viewdate = values.viewed and (values.viewdate or os.time()) or nil
 	end
 	if values.source ~= nil then
 		params.source = values.source
@@ -1332,7 +1348,7 @@ responseHandlers = {
 				filestate = paramNumberDecode(nextField()),
 				ed2k      = msg.params.ed2k, -- Extra.
 				size      = msg.params.size, -- Extra.
-				path      = getPathByEd2k(msg.params.ed2k), -- Extra.
+				path      = ed2kGetPath(msg.params.ed2k), -- Extra.
 			}
 			mylistEntry = cacheSave(self, "l", mylistEntry, false)
 
@@ -1414,7 +1430,7 @@ responseHandlers = {
 				filestate = MYLIST_FILESTATE_NORMAL_ORIGINAL,
 				ed2k      = msg.params.ed2k, -- Extra. May be nil.
 				size      = msg.params.size, -- Extra. May be nil.
-				path      = getPathByEd2k(msg.params.ed2k), -- Extra. May be nil.
+				path      = ed2kGetPath(msg.params.ed2k), -- Extra. May be nil.
 			}
 			mylistEntryPartial = cacheSave(self, "l", mylistEntryPartial, true)
 
@@ -1442,7 +1458,7 @@ responseHandlers = {
 				filestate = paramNumberDecode(nextField()),
 				ed2k      = msg.params.ed2k, -- Extra.
 				size      = msg.params.size, -- Extra.
-				path      = getPathByEd2k(msg.params.ed2k), -- Extra.
+				path      = ed2kGetPath(msg.params.ed2k), -- Extra.
 			}
 			mylistEntry = cacheSave(self, "l", mylistEntry, false)
 
@@ -1633,14 +1649,6 @@ function Anidb:init()
 		g = {byId={}},
 	}
 
-	self.mylistDefaults = {
-		state   = MYLIST_STATE_INTERNAL_STORAGE,
-		viewed  = nil, -- bool
-		source  = nil, -- string
-		storage = nil, -- string
-		other   = nil, -- string (newlines allowed)
-	}
-
 	self.udp = assert(socket.udp())
 
 	assert(self.udp:setsockname("*", LOCAL_PORT))
@@ -1822,7 +1830,7 @@ function Anidb:getMylistByFile(pathOrFileId)
 	if type(pathOrFileId) == "string" then
 		local path = pathOrFileId
 
-		getEd2k(self, path, function(ed2kState, ed2kHash, fileSize)
+		ed2kGet(self, path, function(ed2kState, ed2kHash, fileSize)
 			if ed2kState == ED2K_STATE_SUCCESS then
 				self:getMylistByEd2k(ed2kHash, fileSize)
 			end
@@ -1873,7 +1881,7 @@ function Anidb:addMylistByFile(pathOrFileId, values)
 	if type(pathOrFileId) == "string" then
 		local path = pathOrFileId
 
-		getEd2k(self, path, function(ed2kState, ed2kHash, fileSize)
+		ed2kGet(self, path, function(ed2kState, ed2kHash, fileSize)
 			if ed2kState == ED2K_STATE_SUCCESS then
 				self:addMylistByEd2k(ed2kHash, fileSize, values)
 			end
@@ -1886,7 +1894,7 @@ function Anidb:addMylistByFile(pathOrFileId, values)
 end
 
 -- addMylistByEd2k( ed2kHash, fileSize [, values ] )
--- values = { [ state=state, viewed=isViewed, source=source, storage=storage, other=other ] }
+-- values = { [ state=state, viewed=isViewed, viewdate=viewTime, source=source, storage=storage, other=other ] }
 function Anidb:addMylistByEd2k(ed2kHash, fileSize, values)
 	assertarg(1, ed2kHash, "string")
 	assertarg(2, fileSize, "number")
@@ -1914,7 +1922,7 @@ function Anidb:addMylistByEd2k(ed2kHash, fileSize, values)
 		["s"]    = "",
 	}
 
-	applyMylistaddValues(params, self.mylistDefaults)
+	applyMylistaddValues(params, appSettings.mylistDefaults)
 	if values then  applyMylistaddValues(params, values)  end
 
 	self:login()
@@ -2140,7 +2148,7 @@ end
 
 function Anidb:hashFile(path)
 	assertarg(1, path, "string")
-	getEd2k(self, path, NOOP)
+	ed2kGet(self, path, NOOP)
 end
 
 
@@ -2151,6 +2159,27 @@ function Anidb:getCacheMylist(lid, acceptPartial)
 		self.cache.l.byId[lid]
 		or acceptPartial and self.cachePartial.l.byId[lid]
 		or nil
+end
+
+
+
+function Anidb:reportLocalFileDeleted(path)
+	-- @Incomplete: Maybe change some stuff. I don't think reacting to deletions is too important. [LOW]
+
+	-- Note: Don't remove ed2ks, in case files are moved back.
+end
+
+function Anidb:reportLocalFileMoved(pathOld, pathNew)
+	for _, entries in ipairs{ self.cache.l, self.cachePartial.l } do
+		for _, mylistEntryMaybePartial in ipairs(entries) do
+			if mylistEntryMaybePartial.path == pathOld then
+				-- Note: We don't protect against existing entries' paths possibly being pathNew.
+				mylistEntryMaybePartial.path = pathNew
+			end
+		end
+	end
+
+	ed2kChangePath(pathOld, pathNew)
 end
 
 

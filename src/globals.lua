@@ -14,11 +14,12 @@
 
 -- Settings, debug.
 
-DEBUG                               = false
-DEBUG_LOCAL                         = false and DEBUG
-DEBUG_FORCE_NAT_OFF                 = false and DEBUG_LOCAL
-DEBUG_EXPIRATION_TIME_PORT          = 30
-DEBUG_EXPIRATION_TIME_SESSION       = 3*60 -- Only useful is NAT is off.
+DEBUG                             = false
+DEBUG_LOCAL                       = false and DEBUG
+DEBUG_FORCE_NAT_OFF               = false and DEBUG_LOCAL
+DEBUG_DISABLE_VARIOUS_FILE_SAVING = false and DEBUG_LOCAL
+DEBUG_EXPIRATION_TIME_PORT        = 30
+DEBUG_EXPIRATION_TIME_SESSION     = 3*60 -- Only useful is NAT is off.
 
 -- Allow overriding DEBUG settings through a local file.
 local chunk = loadfile"local/debug.lua"
@@ -72,6 +73,8 @@ NOOP                    = function()end
 PROCESS_METHOD_ASYNC    = 1
 PROCESS_METHOD_SYNC     = 2
 PROCESS_METHOD_DETACHED = 3
+
+APPDIR                  = wx.wxGetCwd() -- Hopefully the program isn't launched from another folder...
 
 -- AniDB.
 

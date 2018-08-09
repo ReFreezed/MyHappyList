@@ -30,7 +30,7 @@
 	gsub2
 	handleError, wrapCall
 	iff
-	indexOf, itemWith, itemWithAll
+	indexOf, itemWith, itemWithAll, indexWith
 	ipairsr, iprev
 	isAny
 	isInt
@@ -465,6 +465,12 @@ function itemWithAll(t, ...)
 	return items
 end
 
+-- index = indexWith( array, key1, value1, ...)
+function indexWith(t, ...)
+	local _, i = itemWith(t, ...)
+	return i
+end
+
 
 
 -- html = encodeHtmlEntities( string [, excludeApostrophe=false ] )
@@ -644,6 +650,7 @@ end
 
 
 
+-- for key, value, index in pairsSorted( table ) do
 function pairsSorted(t)
 	local keys = sortNatural(getKeys(t))
 	local i    = 0
@@ -651,7 +658,7 @@ function pairsSorted(t)
 	return function()
 		i = i+1
 		local k = keys[i]
-		if k ~= nil then  return k, t[k]  end
+		if k ~= nil then  return k, t[k], i  end
 	end
 end
 

@@ -37,7 +37,13 @@ return {
 				setFileInfo(fileInfo, "isHashing", false)
 				saveFileInfos()
 
-				anidb:getMylistByEd2k(fileInfo.ed2k, fileInfo.size)
+				if appSettings.autoAddToMylist then
+					-- addMylistByEd2k() will act as getMylistByEd2k() if an entry already exist.
+					anidb:addMylistByEd2k(fileInfo.ed2k, fileInfo.size)
+				else
+					anidb:getMylistByEd2k(fileInfo.ed2k, fileInfo.size)
+				end
+
 				break
 			end
 		end

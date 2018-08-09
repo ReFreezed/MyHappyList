@@ -194,22 +194,20 @@ end)
 --==============================================================
 
 local menuFile  = wx.wxMenu()
-local menuEdit  = wx.wxMenu()
 local menuHelp  = wx.wxMenu()
 local menuDebug = DEBUG and wx.wxMenu() or nil
 
 -- File.
 --------------------------------
 
-newMenuItem(menuFile, topFrame, wxID_EXIT, "E&xit\tCtrl+Q", "Quit the program", function(e)
-	topFrame:Close()
+newMenuItem(menuFile, topFrame, "&Settings"..(DEBUG and "\tAlt+S" or ""), "Change settings", function(e)
+	dialogs.settings()
 end)
 
--- Edit.
---------------------------------
+newMenuItemSeparator(menuFile)
 
-newMenuItem(menuEdit, topFrame, "&Settings", "Change settings", function(e)
-	showMessage("Settings", "@Incomplete")
+newMenuItem(menuFile, topFrame, wxID_EXIT, "E&xit\tCtrl+Q", "Quit the program", function(e)
+	topFrame:Close()
 end)
 
 -- Help.
@@ -236,6 +234,12 @@ end)
 --------------------------------
 
 if DEBUG then
+	newMenuItem(menuDebug, topFrame, "checkFileInfos\tF5", function(e)
+		checkFileInfos()
+	end)
+
+	newMenuItemSeparator(menuDebug)
+
 	newMenuItem(menuDebug, topFrame, "ping", function(e)
 		anidb:ping()
 	end)
@@ -282,7 +286,6 @@ end
 local menuBar = wx.wxMenuBar()
 
 menuBar:Append(menuFile, "&File")
--- menuBar:Append(menuEdit, "&Edit")
 if DEBUG then  menuBar:Append(menuDebug, "&Debug")  end
 menuBar:Append(menuHelp, "&Help")
 
@@ -328,7 +331,12 @@ fileList:Enable(false)
 
 on(fileList, "COMMAND_LIST_ITEM_ACTIVATED", function(e, wxRow)
 	local fileInfo = getFileInfoByRow(wxRow)
-	if fileInfo then  openFileExternally(fileInfo.path)  end
+	local path     = fileInfo and fileInfo.path
+	if isFile(path) then
+		openFileExternally(path)
+	else
+		showError("Error", F("File does not exist.\n\n%s", path))
+	end
 end)
 
 local saveColumnWidthsTimer = newTimer(function(e)
@@ -571,6 +579,11 @@ if anyFileInfos() then
 	fileList:SetFocus()
 	listCtrlSelectRows(fileList, {0})
 end
+
+-- Right when topFrame is visible.
+newTimer(0, true, function()
+	checkFileInfos()
+end)
 
 
 

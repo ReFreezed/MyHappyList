@@ -430,8 +430,21 @@ end
 
 
 
--- index = showButtonDialog( caption, message, buttonLabels [, icon=wxART_INFORMATION ] )
+-- showButtonDialog
+--
+-- Method 1:
+--    index = showButtonDialog( caption, message, buttonInfo [, icon=wxART_INFORMATION ] )
+--    buttonInfo = { label1, [ onPress1, ] ... }
+--
+-- Method 2:
+--    id    = showButtonDialog( caption, message, buttonInfo [, icon=wxART_INFORMATION ] )
+--    buttonInfo = { id1, label1, [ onPress1, ] ... }
+--
+-- onPress = function( event )
+-- Call event:Skip() to prevent the dialog from closing.
+--
 -- Returns nil if no button was pressed.
+--
 local ICONS = {
 	[wxICON_NONE]        = "",
 	[wxICON_ERROR]       = wxART_ERROR,
@@ -442,7 +455,13 @@ local ICONS = {
 	[wxICON_HAND]        = wxART_ERROR,
 	-- [wxICON_AUTH_NEEDED] = ?,
 }
-function showButtonDialog(caption, message, labels, icon)
+function showButtonDialog(caption, message, infos, icon)
+	assertarg(1, caption, "string")
+	assertarg(2, message, "string")
+	assertarg(3, infos,   "table")
+	assertarg(4, icon,    "number","nil")
+	assert(infos[1])
+
 	local dialog      = wx.wxDialog(topFrame, wxID_ANY, caption)
 	local sizerDialog = wx.wxBoxSizer(wxVERTICAL)
 
@@ -466,15 +485,13 @@ function showButtonDialog(caption, message, labels, icon)
 	if iconName ~= "" then
 		local bm    = wx.wxArtProvider.GetBitmap(iconName)
 		local bmObj = wx.wxStaticBitmap(panel, wxID_ANY, bm)
-		sizer:Add(bmObj, 0, wxALIGN_CENTRE_VERTICAL)
-
-		sizer:AddSpacer(8)
+		sizer:Add(bmObj, 0, wxRIGHT, 8) -- wxALIGN_CENTRE_VERTICAL
 	end
 
 	-- Message.
 	local textObj = wx.wxStaticText(panel, wxID_ANY, message)
 	textObj:Wrap(300)
-	sizer:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL)
+	sizer:Add(textObj)--, 0, wxALIGN_CENTRE_VERTICAL)
 
 	local sizerWrapper = wx.wxBoxSizer(wxHORIZONTAL)
 	sizerWrapper:Add(sizer, 0, wxGROW_ALL, 24)
@@ -486,23 +503,48 @@ function showButtonDialog(caption, message, labels, icon)
 
 	----------------------------------------------------------------
 
-	local sizer = wx.wxBoxSizer(wxHORIZONTAL)
+	local sizer = wx.wxBoxSizer(wxHORIZONTAL) -- @Incomplete: Use wxStdDialogButtonSizer(). [LOW]
 	sizer:AddStretchSpacer()
 
-	local buttonIds = {}
+	local createIds    = type(infos[1]) == "string"
+	local i            = 1
+	local buttonIndex  = 0
+	local returnValues = {}
 
 	-- Buttons.
-	for i, label in ipairs(labels) do
-		if i > 1 then  sizer:AddSpacer(8)  end
+	while infos[i] do
+		buttonIndex = buttonIndex+1
+		local id, label
+		local cb = nil
 
-		local id = wx.wxNewId()
-		table.insert(buttonIds, id)
+		if createIds then
+			id               = wx.wxNewId()
+			label            = infos[i]
+			returnValues[id] = buttonIndex
+			i                = i+1
+		else
+			id               = infos[i]
+			label            = infos[i+1] or "{NO_BUTTON_LABEL}"
+			returnValues[id] = id
+			i                = i+2
+		end
+
+		if type(infos[i]) == "function" then
+			cb = infos[i]
+			i  = i+1
+		end
 
 		local button = newButton(dialog, id, label, function(e)
-			dialog:EndModal(id)
+			if cb then cb(e) end
+
+			if not cb or e:GetSkipped() then
+				dialog:EndModal(id)
+			end
+
+			e:Skip(false)
 		end)
 
-		sizer:Add(button)
+		sizer:Add(button, 0, wxLEFT + wxRIGHT, 3)
 	end
 
 	sizerDialog:Add(sizer, 0, wxGROW_ALL, 8)
@@ -516,7 +558,7 @@ function showButtonDialog(caption, message, labels, icon)
 	dialog:Centre()
 
 	local id = dialog:ShowModal()
-	return indexOf(buttonIds, id)
+	return returnValues[id]
 end
 
 -- showMessage( caption, message )
