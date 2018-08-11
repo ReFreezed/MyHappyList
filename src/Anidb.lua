@@ -983,7 +983,7 @@ do
 		table.insert(page, entry)
 
 		if DEBUG then
-			_logprint("Loaded %s '%s' entry %d.", (isPartial and "partial" or "full"), pageName, id)
+			-- _logprint("Loaded %s '%s' entry %d.", (isPartial and "partial" or "full"), pageName, id)
 		end
 
 		return entry
