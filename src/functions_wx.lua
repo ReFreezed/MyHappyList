@@ -61,7 +61,7 @@ do
 	local windowClassInfo = nil
 
 	function is(a, b)
-		windowClassInfo = windowClassInfo or wx.wxClassInfo.FindClass"wxWindow"
+		windowClassInfo = windowClassInfo or wxClassInfo.FindClass"wxWindow"
 
 		return
 			wxlua.istrackedobject(a) and
@@ -72,7 +72,7 @@ do
 	end
 
 	function isClass(v, className)
-		return wxlua.istrackedobject(v) and v:IsKindOf(wx.wxClassInfo.FindClass(className))
+		return wxlua.istrackedobject(v) and v:IsKindOf(wxClassInfo.FindClass(className))
 	end
 end
 
@@ -171,7 +171,7 @@ function listCtrlPopupMenu(listCtrl, menu, wxRow, x, y)
 		return
 	end
 
-	local rect = wx.wxRect()
+	local rect = wxRect()
 	if listCtrl:GetItemRect(wxRow, rect) then
 		x = rect:GetLeft()
 		y = rect:GetBottom()
@@ -227,24 +227,24 @@ function newMenuItem(menu, eHandler, id, caption, helpText, onPressOrSubmenu)
 		helpText, onPressOrSubmenu = nil, helpText
 	end
 
-	id       = id or wx.wxNewId()
+	id       = id or wxNewId()
 	helpText = helpText or ""
 
 	local item
 
 	if type(onPressOrSubmenu) == "function" then
 		local onPress = onPressOrSubmenu
-		item = wx.wxMenuItem(menu, id, caption, helpText)
+		item = wxMenuItem(menu, id, caption, helpText)
 
 		local cb = on(eHandler, id, "COMMAND_MENU_SELECTED", onPress)
 		storeEventCallbacks(menu, "COMMAND_MENU_SELECTED", id, cb)
 
 	elseif type(onPressOrSubmenu) == "userdata" then
 		local submenu = onPressOrSubmenu
-		item = wx.wxMenuItem(menu, id, caption, helpText, wxITEM_NORMAL, submenu)
+		item = wxMenuItem(menu, id, caption, helpText, wxITEM_NORMAL, submenu)
 
 	else
-		item = wx.wxMenuItem(menu, id, caption, helpText)
+		item = wxMenuItem(menu, id, caption, helpText)
 	end
 
 	item = menu:Append(item)
@@ -254,7 +254,7 @@ end
 
 -- item = newMenuItemLabel( menu, caption )
 function newMenuItemLabel(menu, caption)
-	local item = menu:Append(wx.wxMenuItem(menu, wx.wxNewId(), caption))
+	local item = menu:Append(wxMenuItem(menu, wxNewId(), caption))
 	item:Enable(false)
 	return item
 end
@@ -279,7 +279,7 @@ function newButton(parent, id, caption, pos, size, onPress)
 	pos  = pos  or wxDEFAULT_POSITION
 	size = size or wxDEFAULT_SIZE
 
-	local button = wx.wxButton(parent, id, caption, pos, size)
+	local button = wxButton(parent, id, caption, pos, size)
 
 	if onPress then
 		on(button, "COMMAND_BUTTON_CLICKED", onPress)
@@ -298,7 +298,7 @@ function newText(parent, id, label, pos, size)
 	pos  = pos  or wxDEFAULT_POSITION
 	size = size or wxDEFAULT_SIZE
 
-	local textObj = wx.wxStaticText(parent, id, label, pos, size)
+	local textObj = wxStaticText(parent, id, label, pos, size)
 	return textObj
 end
 
@@ -364,7 +364,7 @@ function onAccelerator(eHandler, accelerators, modKeys, kc, onPress)
 	assertarg(4, kc,           "number")
 	assertarg(5, onPress,      "function")
 
-	local id    = wx.wxNewId()
+	local id    = wxNewId()
 	local flags = 0
 
 	if modKeys:find("a", 1, true) then  flags = flags+wxACCEL_ALT    end
@@ -402,7 +402,7 @@ end
 
 
 function setAccelerators(window, accelerators)
-	window:SetAcceleratorTable(wx.wxAcceleratorTable(accelerators))
+	window:SetAcceleratorTable(wxAcceleratorTable(accelerators))
 end
 
 
@@ -416,7 +416,7 @@ function newTimer(milliseconds, oneShot, cb)
 		oneShot, cb = false, oneShot
 	end
 
-	local timer = wx.wxTimer(topFrame)
+	local timer = wxTimer(topFrame)
 	timer:SetOwner(timer)
 
 	on(timer, "TIMER", cb)
@@ -462,8 +462,8 @@ function showButtonDialog(caption, message, infos, icon)
 	assertarg(4, icon,    "number","nil")
 	assert(infos[1])
 
-	local dialog      = wx.wxDialog(topFrame, wxID_ANY, caption)
-	local sizerDialog = wx.wxBoxSizer(wxVERTICAL)
+	local dialog      = wxDialog(topFrame, wxID_ANY, caption)
+	local sizerDialog = wxBoxSizer(wxVERTICAL)
 
 	on(dialog, "CHAR_HOOK", function(e, kc)
 		if kc == KC_ESCAPE then
@@ -475,35 +475,35 @@ function showButtonDialog(caption, message, infos, icon)
 
 	----------------------------------------------------------------
 
-	local panel = wx.wxPanel(dialog, wx.wxID_ANY)
-	panel:SetBackgroundColour(wx.wxColour(255, 255, 255))
+	local panel = wxPanel(dialog, wxID_ANY)
+	panel:SetBackgroundColour(wxColour(255, 255, 255))
 
-	local sizer = wx.wxBoxSizer(wxHORIZONTAL)
+	local sizer = wxBoxSizer(wxHORIZONTAL)
 
 	-- Icon.
 	local iconName = ICONS[icon] or ICONS[wxICON_INFORMATION]
 	if iconName ~= "" then
-		local bm    = wx.wxArtProvider.GetBitmap(iconName)
-		local bmObj = wx.wxStaticBitmap(panel, wxID_ANY, bm)
+		local bm    = wxArtProvider.GetBitmap(iconName)
+		local bmObj = wxStaticBitmap(panel, wxID_ANY, bm)
 		sizer:Add(bmObj, 0, wxRIGHT, MARGIN_M) -- wxALIGN_CENTRE_VERTICAL
 	end
 
 	-- Message.
-	local textObj = wx.wxStaticText(panel, wxID_ANY, message)
+	local textObj = wxStaticText(panel, wxID_ANY, message)
 	textObj:Wrap(300)
 	sizer:Add(textObj)--, 0, wxALIGN_CENTRE_VERTICAL)
 
-	local sizerWrapper = wx.wxBoxSizer(wxHORIZONTAL)
+	local sizerWrapper = wxBoxSizer(wxHORIZONTAL)
 	sizerWrapper:Add(sizer, 0, wxGROW_ALL, 24)
 
 	panel:SetAutoLayout(true)
 	panel:SetSizer(sizerWrapper)
 
-	sizerDialog:Add(panel, 0, wxGROW_ALL)
+	sizerDialog:Add(panel, 0, wxGROW)
 
 	----------------------------------------------------------------
 
-	local sizer = wx.wxBoxSizer(wxHORIZONTAL) -- @Incomplete: Use wxStdDialogButtonSizer(). [LOW]
+	local sizer = wxBoxSizer(wxHORIZONTAL) -- @Incomplete: Use wxStdDialogButtonSizer(). [LOW]
 	sizer:AddStretchSpacer()
 
 	local createIds    = type(infos[1]) == "string"
@@ -518,7 +518,7 @@ function showButtonDialog(caption, message, infos, icon)
 		local cb = nil
 
 		if createIds then
-			id               = wx.wxNewId()
+			id               = wxNewId()
 			label            = infos[i]
 			returnValues[id] = buttonIndex
 			i                = i+1
@@ -563,17 +563,17 @@ end
 
 -- showMessage( caption, message )
 function showMessage(caption, message)
-	wx.wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_INFORMATION, topFrame)
+	wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_INFORMATION, topFrame)
 end
 
 -- showWarning( caption, message )
 function showWarning(caption, message)
-	wx.wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_WARNING, topFrame)
+	wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_WARNING, topFrame)
 end
 
 -- showError( caption, message )
 function showError(caption, message)
-	wx.wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_ERROR, topFrame)
+	wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_ERROR, topFrame)
 end
 
 -- bool = confirm( caption, message [, okLabel="OK", cancelLabel="Cancel", icon=wxICON_QUESTION ] )
@@ -633,7 +633,7 @@ end
 -- sizer = setBoxSizer( wxWindow, direction [, proportion=0, flags, border=0 ] )
 -- direction = wxHORIZONTAL|wxVERTICAL
 function setBoxSizer(window, direction, ...)
-	local sizer = wx.wxBoxSizer(direction)
+	local sizer = wxBoxSizer(direction)
 
 	for _, child in eachChild(window) do
 		sizer:Add(child, ...)
@@ -649,7 +649,7 @@ end
 -- direction = wxHORIZONTAL|wxVERTICAL
 -- Note: wxALL gets added to the flags automatically.
 function setBoxSizerWithSpace(window, direction, spaceOutside, spaceBetween, proportion, flags)
-	local sizer = wx.wxBoxSizer(direction)
+	local sizer = wxBoxSizer(direction)
 
 	for i, child in eachChild(window) do
 		if i > 1 then
@@ -677,7 +677,7 @@ function checkBoxClick(checkbox)
 
 	checkbox:SetValue(state)
 
-	local e = wx.wxCommandEvent(wx.wxEVT_COMMAND_CHECKBOX_CLICKED, checkbox:GetId())
+	local e = wxCommandEvent(wxEVT_COMMAND_CHECKBOX_CLICKED, checkbox:GetId())
 	e:SetEventObject(checkbox)
 	e:SetInt(state and 1 or 0)
 
@@ -693,8 +693,8 @@ end
 
 
 function clipboardSetText(s)
-	local data      = wx.wxTextDataObject(s)
-	local clipboard = wx.wxClipboard.Get()
+	local data      = wxTextDataObject(s)
+	local clipboard = wxClipboard.Get()
 	clipboard:SetData(data)
 end
 
@@ -782,10 +782,10 @@ function processStart(cmd, method, cb)
 
 	-- Async.
 	if method == PROCESS_METHOD_ASYNC then
-		local process = wx.wxProcess(topFrame or wxNULL)
+		local process = wxProcess(topFrame or wxNULL)
 		process:Redirect()
 
-		local pid = wx.wxExecute(cmd, wxEXEC_ASYNC, process)
+		local pid = wxExecute(cmd, wxEXEC_ASYNC, process)
 		if pid == 0  then  return false  end
 
 		if cb then
@@ -811,10 +811,10 @@ function processStart(cmd, method, cb)
 
 	-- Sync.
 	elseif method == PROCESS_METHOD_SYNC then
-		local process = wx.wxProcess(topFrame or wxNULL)
+		local process = wxProcess(topFrame or wxNULL)
 		process:Redirect()
 
-		local exitCode = wx.wxExecute(cmd, wxEXEC_SYNC, process)
+		local exitCode = wxExecute(cmd, wxEXEC_SYNC, process)
 
 		if cb then  cb(process, exitCode)  end
 
@@ -822,7 +822,7 @@ function processStart(cmd, method, cb)
 
 	-- Detached.
 	elseif method == PROCESS_METHOD_DETACHED then
-		local pid = wx.wxExecute(cmd, wxEXEC_ASYNC + wxEXEC_NOHIDE)
+		local pid = wxExecute(cmd, wxEXEC_ASYNC + wxEXEC_NOHIDE)
 		return pid ~= 0
 
 	else
@@ -842,7 +842,7 @@ do
 	function processStop(pid, force)
 		if pid == 0                     then  return true   end
 		if pid == -1                    then  return false  end -- Don't allow harakiri. This is so silly.
-		if not wx.wxProcess.Exists(pid) then  return true   end
+		if not wxProcess.Exists(pid) then  return true   end
 
 		local process = processes[pid]
 		if process then
@@ -851,7 +851,7 @@ do
 			off(process, "END_PROCESS")
 		end
 
-		local errCode = wx.wxProcess.Kill(pid, wxSIGTERM, wxKILL_CHILDREN)
+		local errCode = wxProcess.Kill(pid, wxSIGTERM, wxKILL_CHILDREN)
 		if isAny(errCode, wxKILL_OK, wxKILL_NO_PROCESS) then  return true   end
 
 		if not force or not isAny(errCode, wxKILL_ERROR, wxKILL_BAD_SIGNAL) then
@@ -861,7 +861,7 @@ do
 
 		logprinterror("Process", "Process %d did not end gracefully. Killing. (%s)", pid, KILL_MESSAGES[errCode])
 
-		errCode = wx.wxProcess.Kill(pid, wxSIGKILL, wxKILL_CHILDREN)
+		errCode = wxProcess.Kill(pid, wxSIGKILL, wxKILL_CHILDREN)
 		if errCode == wxKILL_OK then
 			return true
 		else

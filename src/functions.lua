@@ -101,7 +101,7 @@ function handleError(err)
 	end
 
 	if not DEBUG then
-	 	wx.wxTextEntryDialog(
+	 	wxTextEntryDialog(
 	 		wxNULL,
 	 		"An error ocurred and the program crashed! Sorry about that.\n"
 	 			.."The log file may have more information.\n\nMessage:",

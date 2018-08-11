@@ -90,7 +90,7 @@ end
 
 -- for name in directoryItems( directoryPath ) do
 function directoryItems(dirPath)
-	local dirObj = wx.wxDir(dirPath)
+	local dirObj = wxDir(dirPath)
 
 	local ok, nameNext = dirObj:GetFirst()
 	if not ok then  nameNext = nil  end
@@ -217,7 +217,7 @@ end
 
 
 function getFileSize(path)
-	return wx.wxFileSize(path)
+	return wxFileSize(path)
 end
 
 
@@ -235,15 +235,15 @@ end
 
 
 function isFile(path)
-	return wx.wxFileName.FileExists(path)
+	return wxFileName.FileExists(path)
 end
 
 function isFileWritable(path)
-	return wx.wxFileName.IsFileWritable(path)
+	return wxFileName.IsFileWritable(path)
 end
 
 function isDirectory(path)
-	return wx.wxFileName.DirExists(path)
+	return wxFileName.DirExists(path)
 end
 
 
@@ -251,19 +251,19 @@ end
 -- success = mkdir( path [, full=false ] )
 function mkdir(path, full)
 	local flags = (full and wxPATH_MKDIR_FULL or 0)
-	return wx.wxFileName.Mkdir(path, 4095, flags)
+	return wxFileName.Mkdir(path, 4095, flags)
 end
 
 
 
 do
 	local modes = {
-		["r"]  = wx.wxFile.read,
-		["w"]  = wx.wxFile.write,
-		["a"]  = wx.wxFile.write_append,
-		["r+"] = wx.wxFile.read_write,
-		["w+"] = wx.wxFile.read_write,
-		["a+"] = wx.wxFile.read_write,
+		["r"]  = wxFile.read,
+		["w"]  = wxFile.write,
+		["a"]  = wxFile.write_append,
+		["r+"] = wxFile.read_write,
+		["w+"] = wxFile.read_write,
+		["a+"] = wxFile.read_write,
 	}
 
 	function openFile(path, modeFull)
@@ -281,7 +281,7 @@ do
 		end
 
 		update = (update == "+")
-		binary = (binary == "b" or not wx.wxGetOsDescription():find"Windows")
+		binary = (binary == "b" or not wxGetOsDescription():find"Windows")
 
 		if mode == "r" and not isFile(path) then
 			return nil, path..": File does not exist"
@@ -297,18 +297,18 @@ do
 
 		-- read: Open file for input operations. The file must exist.
 		if     mode == "r"  then
-			file = wx.wxFile(path, wx.wxFile.read)
+			file = wxFile(path, wxFile.read)
 
 		-- write: Create an empty file for output operations. If a file with the same name already
 		-- exists, its contents are discarded and the file is treated as a new empty file.
 		elseif mode == "w"  then
-			file = wx.wxFile(path, wx.wxFile.write)
+			file = wxFile(path, wxFile.write)
 
 		-- append: Open file for output at the end of a file. Output operations always write data
 		-- at the end of the file, expanding it. Repositioning operations (fseek, fsetpos, rewind)
 		-- are ignored. The file is created if it does not exist.
 		elseif mode == "a"  then
-			file = wx.wxFile(path, wx.wxFile.write_append)
+			file = wxFile(path, wxFile.write_append)
 
 		-- read/update: Open a file for update (both for input and output). The file must exist.
 		elseif mode == "r+" then
@@ -325,7 +325,7 @@ do
 		-- rewind) affects the next input operations, but output operations move the position back
 		-- to the end of file. The file is created if it does not exist.
 		elseif mode == "a+" then
-			file = wx.wxFile(path, wx.wxFile.read_write)
+			file = wxFile(path, wxFile.read_write)
 		end
 
 		if not file:IsOpened() then
@@ -458,16 +458,16 @@ do
 
 				local pos
 				if whence == "set" then
-					pos = file:Seek(offset, wx.wxFromStart)
+					pos = file:Seek(offset, wxSEEK_MODE_FROM_START)
 				elseif whence == "cur" then
-					pos = file:Seek(offset, wx.wxFromCurrent)
+					pos = file:Seek(offset, wxSEEK_MODE_FROM_CURRENT)
 				elseif whence == "end" then
-					pos = file:Seek(offset, wx.wxFromEnd)
+					pos = file:Seek(offset, wxSEEK_MODE_FROM_END)
 				else
 					return nil, F("bad whence value '%s'.", whence)
 				end
 
-				if pos == wx.wxInvalidOffset then
+				if pos == wxSEEK_MODE_INVALID_OFFSET then
 					return nil, F("bad offset %d", offset)
 				end
 
@@ -524,7 +524,7 @@ do
 		return fileWrapper
 
 		--[[ Having the file objects being userdata would be good, but these operations are a bit... questionable.
-		local file = wx.wxObject()
+		local file = wxObject()
 
 		local mt = {__index={
 			read = function(file, ...)
@@ -569,7 +569,7 @@ do
 end
 
 function deleteFile(path)
-	return wx.wxRemoveFile(path)
+	return wxRemoveFile(path)
 end
 
 
@@ -587,7 +587,7 @@ end
 -- path = toShortPath( path [, asWindowsPath=false ] )
 -- Note: May return the path as-is if the file doesn't exist.
 function toShortPath(path, asWindowsPath)
-	path = wx.wxFileName(path):GetShortPath()
+	path = wxFileName(path):GetShortPath()
 
 	if not asWindowsPath then  path = toNormalPath(path)  end
 

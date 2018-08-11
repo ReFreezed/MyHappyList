@@ -27,3 +27,5 @@ io.stderr:setvbuf("no")
 
 require"globals"
 require"functions"
+
+wxPleaseJustStop = wxLogNull() -- Ugh.

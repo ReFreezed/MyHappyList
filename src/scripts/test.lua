@@ -17,5 +17,5 @@ print("...Testing...")
 assert(loadfile"src/load.lua")()
 
 io.stdout:write("Hello,")
-wx.wxSleep(10)
+wxSleep(10)
 io.stdout:write(" world!\n")

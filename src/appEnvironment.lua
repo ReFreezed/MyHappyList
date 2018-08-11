@@ -276,8 +276,8 @@ function updateFileList()
 		return 0 -- Should never happen.
 	end)
 
-	local colorStripe1 = wx.wxWHITE
-	local colorStripe2 = wx.wxColour(245, 245, 245)
+	local colorStripe1 = wxCOLOUR_WHITE
+	local colorStripe2 = wxColour(245, 245, 245)
 
 	for wxRow = 0, fileList:GetItemCount()-1 do
 		local color = (wxRow%2 == 0 and colorStripe1 or colorStripe2)

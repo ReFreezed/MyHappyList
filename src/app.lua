@@ -53,20 +53,20 @@ anidb = require"Anidb"()
 local logFilePath = "logs/output.log"
 logFile = assert(openFile(logFilePath, "a"))
 
-appIcons  = wx.wxIconBundle("gfx/appicon.ico", wxBITMAP_TYPE_ANY)
-fontTitle = wx.wxFont(1.2*wx.wxNORMAL_FONT:GetPointSize(), wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD)
+appIcons  = wxIconBundle("gfx/appicon.ico", wxBITMAP_TYPE_ANY)
+fontTitle = wxFont(1.2*wxFONT_NORMAL:GetPointSize(), wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD)
 
 
 
 -- Top frame.
 --==============================================================
 
-topFrame = wx.wxFrame(
+topFrame = wxFrame(
 	wxNULL,
 	wxID_ANY,
 	"MyHappyList"..(DEBUG_LOCAL and " [OFFLINE]" or ""),
 	wxDEFAULT_POSITION,
-	WxSize(1300, 400),
+	wxSize(1300, 400),
 	wxDEFAULT_FRAME_STYLE
 )
 
@@ -176,8 +176,8 @@ statusBar = topFrame:CreateStatusBar()
 statusBarInitFields(statusBar, {-1, 120, GAUGE_WIDTH+2*GAUGE_MARGIN})
 statusBarSetField(statusBar, STATUS_BAR_FIELD_MESSAGE_QUEUE, "")
 
-local progressGauge = wx.wxGauge(
-	statusBar, wxID_ANY, 100, wxDEFAULT_POSITION, WxSize(GAUGE_WIDTH, getHeight(statusBar)-2*GAUGE_MARGIN), wxGA_SMOOTH
+local progressGauge = wxGauge(
+	statusBar, wxID_ANY, 100, wxDEFAULT_POSITION, wxSize(GAUGE_WIDTH, getHeight(statusBar)-2*GAUGE_MARGIN), wxGA_SMOOTH
 )
 -- progressGauge:SetValue(50)
 
@@ -191,9 +191,9 @@ end)
 -- Menus.
 --==============================================================
 
-local menuFile  = wx.wxMenu()
-local menuHelp  = wx.wxMenu()
-local menuDebug = DEBUG and wx.wxMenu() or nil
+local menuFile  = wxMenu()
+local menuHelp  = wxMenu()
+local menuDebug = DEBUG and wxMenu() or nil
 
 -- File.
 --------------------------------
@@ -213,7 +213,7 @@ end)
 
 newMenuItem(menuHelp, topFrame, "&Forum Thread", "Go to MyHappyList's forum thread on AniDB", function(e)
 	local url = "https://anidb.net/perl-bin/animedb.pl?show=cmt&id=83307"
-	if not wx.wxLaunchDefaultBrowser(url) then
+	if not wxLaunchDefaultBrowser(url) then
 		showError("Error", "Could not launch default browser.\n\n"..url)
 	end
 end)
@@ -284,7 +284,7 @@ end
 
 --------------------------------
 
-local menuBar = wx.wxMenuBar()
+local menuBar = wxMenuBar()
 
 menuBar:Append(menuFile, "&File")
 if DEBUG then  menuBar:Append(menuDebug, "&Debug")  end
@@ -294,8 +294,8 @@ topFrame:SetMenuBar(menuBar)
 
 
 
-topPanel        = wx.wxPanel(topFrame, wx.wxID_ANY)
-local sizerMain = wx.wxBoxSizer(wxVERTICAL)
+topPanel        = wxPanel(topFrame, wxID_ANY)
+local sizerMain = wxBoxSizer(wxVERTICAL)
 
 
 
@@ -306,7 +306,7 @@ loginButton = newButton(topPanel, wxID_ANY, "Log In", function(e)
 	dialogs.credentials()
 end)
 loginButton:SetSizeHints(getWidth(loginButton), 1.4*getHeight(loginButton))
-loginButton:SetBackgroundColour(wx.wxColour(255, 255, 0))
+loginButton:SetBackgroundColour(wxColour(255, 255, 0))
 loginButton:Show(false)
 sizerMain:Add(loginButton, 0, wxGROW)
 
@@ -315,11 +315,11 @@ sizerMain:Add(loginButton, 0, wxGROW)
 -- File list.
 --==============================================================
 
-fileList = wx.wxListCtrl(
+fileList = wxListCtrl(
 	topPanel, wxID_ANY, wxDEFAULT_POSITION, wxDEFAULT_SIZE,
 	wxLC_REPORT
 )
-sizerMain:Add(fileList, 1, wxGROW_ALL)
+sizerMain:Add(fileList, 1, wxGROW)
 
 assert(listCtrlInsertColumn(fileList, "File",    100) == FILE_COLUMN_FILE-1)
 assert(listCtrlInsertColumn(fileList, "Folder",  100) == FILE_COLUMN_FOLDER-1)
@@ -370,7 +370,7 @@ on(fileList, "KEY_DOWN", function(e, kc)
 			listCtrlSelectRows(fileList, range(0, fileList:GetItemCount()-1))
 
 		elseif kc == KC_F2 then
-			dialogs.addmylist()
+			dialogs.addmylist(getSelectedFileInfos(true))
 
 		else
 			e:Skip()
@@ -418,7 +418,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 		-- end
 	end
 
-	local popupMenu = wx.wxMenu()
+	local popupMenu = wxMenu()
 	----------------------------------------------------------------
 
 	if fileInfosSelected[2] then
@@ -465,7 +465,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 	newMenuItemSeparator(popupMenu)
 
 	newMenuItem(popupMenu, fileList, "Add to / &Edit MyList\tF2", "Add file to, or edit, MyList", function(e)
-		dialogs.addmylist()
+		dialogs.addmylist(getSelectedFileInfos(true))
 	end):Enable(anyIsHashed)
 
 	newMenuItem(popupMenu, fileList, "&Delete from MyList", "Delete file from MyList", function(e)
@@ -481,7 +481,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 	----------------------------------------------------------------
 	newMenuItemSeparator(popupMenu)
 
-	local submenu = wx.wxMenu()
+	local submenu = wxMenu()
 
 	newMenuItem(
 		submenu, topFrame, "Copy ed2k to Clipboard", "Copy ed2k hash to clipboard",
@@ -598,7 +598,7 @@ anidbUpdateTimer:Start(1000/10)
 
 settingsAreFrozen = false
 
-wx.wxGetApp():MainLoop()
+wxGetApp():MainLoop()
 
 
 

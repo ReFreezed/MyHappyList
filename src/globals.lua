@@ -79,7 +79,7 @@ PROCESS_METHOD_ASYNC    = 1
 PROCESS_METHOD_SYNC     = 2
 PROCESS_METHOD_DETACHED = 3
 
-APPDIR                  = wx.wxGetCwd() -- Hopefully the program isn't launched from another folder...
+APPDIR                  = wxGetCwd() -- Hopefully the program isn't launched from another folder...
 
 -- AniDB.
 
