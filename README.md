@@ -1,6 +1,6 @@
 <h1 align="center"><img src="misc/AppIcon/AppIcon0128.png" width="128" height="128" alt="MyHappyList" title="MyHappyList"></h1>
 
-![version 1.0.1](https://img.shields.io/badge/version-1.0.1-green.svg)
+![version 1.0.2](https://img.shields.io/badge/version-1.0.2-green.svg)
 
 **<big>MyHappyList</big>** - a very simple [AniDB](https://anidb.net/) *MyList* manager for Windows.
 

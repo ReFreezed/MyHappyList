@@ -117,6 +117,13 @@ add   ("wxTREE_ITEM_ICON_NORMAL",            wx, "wxTreeItemIcon_Normal")
 add   ("wxTREE_ITEM_ICON_SELECTED",          wx, "wxTreeItemIcon_Selected")
 add   ("wxTREE_ITEM_ICON_SELECTED_EXPANDED", wx, "wxTreeItemIcon_SelectedExpanded")
 
+-- Strings.
+add   ("wxDIR_DIALOG_DEFAULT_FOLDER_STR",    wx, "wxDirDialogDefaultFolderStr")
+add   ("wxDIR_SELECTOR_PROMPT_STR",          wx, "wxDirSelectorPromptStr")
+add   ("wxFILE_SELECTOR_PROMPT_STR",         wx, "wxFileSelectorPromptStr")
+add   ("wxFILE_SELECTOR_DEFAULT_WILDCARD_STR",wx,"wxFileSelectorDefaultWildcardStr")
+add   ("wxGET_PASSWORD_FROM_USER_PROMPT_STR",wx, "wxGetPasswordFromUserPromptStr")
+
 -- wxBrush
 add   ("wxBRUSH_NULL",                       wx, "wxNullBrush")
 rename("wxBRUSH_BLACK",                      "wxBLACK_BRUSH")

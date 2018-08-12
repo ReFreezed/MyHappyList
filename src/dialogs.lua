@@ -718,7 +718,7 @@ function dialogs.missingFile(path)
 
 		local dialog = wxFileDialog(
 			topFrame,
-			wxFileSelectorPromptStr,
+			wxFILE_SELECTOR_PROMPT_STRING,
 			topmostExistingDir,
 			getFilename(path),
 			F("*.%s|*.%s|Movie files (%s)|%s|All files (*.*)|*.*", ext, ext, movieExtensionList, movieExtensionList),

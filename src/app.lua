@@ -337,6 +337,7 @@ on(fileList, "COMMAND_LIST_ITEM_ACTIVATED", function(e, wxRow)
 		openFileExternally(path)
 	else
 		showError("Error", F("File does not exist.\n\n%s", path))
+		checkFileInfos()
 	end
 end)
 
@@ -432,6 +433,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 			openFileExternally(path)
 		else
 			showError("Error", F("File does not exist.\n\n%s", path))
+			checkFileInfos()
 		end
 	end)
 
@@ -454,6 +456,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 			showFileInExplorer(path)
 		else
 			showError("Error", F("Folder does not exist.\n\n%s", path))
+			checkFileInfos()
 		end
 	end)
 
