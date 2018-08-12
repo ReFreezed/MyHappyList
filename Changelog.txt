@@ -1,0 +1,13 @@
+v1.0.3 (2018-08-12)
+- Fixed large files (4+ GB) not hashing correctly.
+- Fixed crash when choosing the new location for moved files... again.
+- Fixed keyboard focus being stolen when hashing.
+
+v1.0.2 (2018-08-12)
+- Fixed crash when choosing the new location for moved files.
+
+v1.0.1 (2018-08-11)
+- Super tiny general update.
+
+v1.0.0 (2018-08-09)
+- Initial release.

@@ -814,7 +814,7 @@ function processStart(cmd, method, cb)
 		local process = wxProcess(topFrame or wxNULL)
 		process:Redirect()
 
-		local exitCode = wxExecute(cmd, wxEXEC_SYNC, process)
+		local exitCode = wxExecute(cmd, wxEXEC_SYNC + (topFrame and 0 or wxEXEC_NODISABLE), process)
 
 		if cb then  cb(process, exitCode)  end
 

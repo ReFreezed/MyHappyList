@@ -217,7 +217,15 @@ end
 
 
 function getFileSize(path)
-	return wxFileSize(path)
+	-- Note: We can't use wxFileSize() because it returns an int32, which is just unbelievable. Why, people, why? Sigh!
+
+	local file = wxFile(path)
+	if not file:IsOpened() then  return nil  end
+
+	local size = file:Length()
+	file:Close()
+
+	return size
 end
 
 

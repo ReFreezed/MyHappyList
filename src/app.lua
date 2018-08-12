@@ -235,6 +235,13 @@ end)
 --------------------------------
 
 if DEBUG then
+	newMenuItem(menuDebug, topFrame, "scriptCaptureAsync\tF7", function(e)
+		local n = math.random(1000, 9999)
+		print(n, "start")
+		scriptCaptureAsync("test", function(output)
+			print(n, "end", makePrintable(output))
+		end)
+	end)
 	newMenuItem(menuDebug, topFrame, "checkFileInfos\tF5", function(e)
 		checkFileInfos()
 	end)

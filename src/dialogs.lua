@@ -719,7 +719,7 @@ function dialogs.missingFile(path)
 
 		local dialog = wxFileDialog(
 			topFrame,
-			wxFILE_SELECTOR_PROMPT_STRING,
+			wxFILE_SELECTOR_PROMPT_STR,
 			topmostExistingDir,
 			getFilename(path),
 			F("*.%s|*.%s|Movie files (%s)|%s|All files (*.*)|*.*", ext, ext, movieExtensionList, movieExtensionList),
@@ -763,7 +763,7 @@ function dialogs.changelog()
 	local dialog = wxDialog(topPanel, wxID_ANY, "Changelog")
 	local sizer  = wxBoxSizer(wxVERTICAL)
 
-	local changelog = getFileContents"data/changelog.txt":gsub("\r", "")
+	local changelog = getFileContents"Changelog.txt":gsub("\r", "")
 
 	local textCtrl = wxTextCtrl(
 		dialog, wxID_ANY, changelog, wxDEFAULT_POSITION, wxSize(500, 300),
