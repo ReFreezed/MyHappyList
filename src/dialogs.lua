@@ -12,6 +12,7 @@
 
 	about
 	addmylist
+	changelog
 	credentials
 	missingFile
 	settings
@@ -754,6 +755,33 @@ function dialogs.missingFile(path)
 	else
 		return nil
 	end
+end
+
+
+
+function dialogs.changelog()
+	local dialog = wxDialog(topPanel, wxID_ANY, "Changelog")
+	local sizer  = wxBoxSizer(wxVERTICAL)
+
+	local changelog = getFileContents"data/changelog.txt":gsub("\r", "")
+
+	local textCtrl = wxTextCtrl(
+		dialog, wxID_ANY, changelog, wxDEFAULT_POSITION, wxSize(500, 300),
+		wxTE_MULTILINE + wxTE_READONLY
+	)
+	sizer:Add(textCtrl, 0, wxGROW)
+
+	local button = newButton(dialog, wxID_OK, "Close")
+	button:SetSizeHints(100, getHeight(button)+2*3)
+	sizer:Add(button, 0, wxALIGN_CENTRE_HORIZONTAL + wxALL, MARGIN_M)
+
+	dialog:SetAutoLayout(true)
+	dialog:SetSizer(sizer)
+
+	dialog:Fit()
+	dialog:Centre()
+
+	dialog:ShowModal()
 end
 
 

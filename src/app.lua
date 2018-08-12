@@ -218,9 +218,9 @@ newMenuItem(menuHelp, topFrame, "&Forum Thread", "Go to MyHappyList's forum thre
 	end
 end)
 
--- newMenuItem(menuHelp, topFrame, "&Changes", "View the changelog", function(e)
--- 	-- @Incomplete
--- end)
+newMenuItem(menuHelp, topFrame, "&Changes", "View the changelog", function(e)
+	dialogs.changelog()
+end)
 
 newMenuItem(menuHelp, topFrame, "&Log", "Open the text log in Notepad", function(e)
 	-- @UX: Show a window with the log instead of using Notepad.
