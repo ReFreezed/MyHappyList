@@ -892,7 +892,7 @@ function processReadEnded(process, exitCode, isText)
 	assertarg(2, exitCode, "number")
 	assertarg(3, isText,   "boolean","nil")
 
-	local stream = exitCode == 0 and process:IsErrorAvailable() and process:GetErrorStream() or process:GetInputStream()
+	local stream = exitCode ~= 0 and process:IsErrorAvailable() and process:GetErrorStream() or process:GetInputStream()
 	local s      = streamRead(stream, isText)
 
 	return s

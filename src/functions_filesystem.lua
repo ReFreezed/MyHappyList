@@ -14,7 +14,7 @@
 	createDirectory, isDirectoryEmpty, removeEmptyDirectories
 	directoryItems, traverseDirectory, traverseFiles
 	getDirectory, getFilename, getExtension, getBasename
-	getFileContents, writeFile
+	getFileContents, writeFile, copyFile
 	getFileSize
 	getTempFilePath
 	isFile, isFileWritable, isDirectory
@@ -211,6 +211,14 @@ function writeFile(path, isText, contents)
 	file:write(contents)
 	file:close()
 
+	return true
+end
+
+-- success, errorMessage = copyFile( fromPath, toPath )
+function copyFile(pathFrom, pathTo)
+	if not wxCopyFile(pathFrom, pathTo) then
+		return false, F("Could not copy '%s' to '%s'.", pathFrom, pathTo)
+	end
 	return true
 end
 

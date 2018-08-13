@@ -1,0 +1,9 @@
+[FILENAMES]
+Exe    = "temp\App.exe"
+SaveAs = "temp\App.exe"
+Log    = CONSOLE
+
+[COMMANDS]
+-delete ,,
+-add "temp\AppInfo.res", ,,
+-add "gfx\appicon.ico", ICONGROUP,MAINICON,0

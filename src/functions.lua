@@ -14,7 +14,8 @@
 	assertf, assertarg, check
 	clamp
 	cleanupPath
-	cmdAsync, cmdCapture, scriptCaptureAsync, cmdEscapeArgs
+	cmdAsync, cmdSync, cmdCapture, scriptCaptureAsync, cmdEscapeArgs, run
+	cwdPush, cwdPop
 	eatSpaces
 	encodeHtmlEntities
 	errorf, fileerror
@@ -797,7 +798,19 @@ function cmdAsync(cmd)
 	return (processStart(cmd, PROCESS_METHOD_ASYNC))
 end
 
+-- success, exitCode = cmdSync( cmd )
+function cmdSync(cmd)
+	local exitCode = -1
+
+	local ok = processStart(cmd, PROCESS_METHOD_SYNC, function(process, _exitCode)
+		exitCode = _exitCode
+	end)
+
+	return (ok and exitCode == 0), exitCode
+end
+
 -- output, errorMessage = cmdCapture( cmd )
+-- Note: output may be the contents of stderr.
 function cmdCapture(cmd)
 	local output
 
@@ -805,7 +818,7 @@ function cmdCapture(cmd)
 		output = processReadEnded(process, exitCode, true)
 	end)
 
-	if not ok then  return nil, "Could not start a new process."  end
+	if not ok then  return nil, "Could not start process."  end
 
 	return output
 end
@@ -851,6 +864,14 @@ function cmdEscapeArgs(...)
 	end
 
 	return table.concat(buffer)
+end
+
+function run(pathToApp, ...)
+	local cmd = cmdEscapeArgs(toWindowsPath(pathToApp), ...)
+	local ok, exitCode = cmdSync(cmd)
+	if not ok then
+		errorf("Command returned %d: %s", exitCode, cmd)
+	end
 end
 
 
@@ -1074,6 +1095,21 @@ end
 function eatSpaces(s, ptr)
 	local _, to = s:find(" *", ptr)
 	return to+1
+end
+
+
+
+do
+	local cwds = {}
+
+	function cwdPush(path)
+		table.insert(cwds, wxGetCwd())
+		wxSetWorkingDirectory(path)
+	end
+
+	function cwdPop()
+		wxSetWorkingDirectory(table.remove(cwds))
+	end
 end
 
 
