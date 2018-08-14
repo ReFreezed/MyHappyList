@@ -166,8 +166,10 @@ end
 function getMylistSharp(params)
 	if     tonumber(params.lid) == 252003620 or params.ed2k == "9244372db8b1e10c5882d5e0ad814a35" and tonumber(params.size) == 367902232 then
 		return getCacheSharp("l", 252003620)
-	elseif tonumber(params.lid) == 252003656 or params.ed2k == "cbce0f1101f33ef95ed87f6f986cf6b3" and tonumber(params.size) == 369066876 then
-		return getCacheSharp("l", 252003656)
+	elseif tonumber(params.lid) == 252003625 or params.ed2k == "a9666994b3b6f78c9ab515593bab92e4" and tonumber(params.size) == 368372033 then
+		return getCacheSharp("l", 252003625)
+	elseif tonumber(params.lid) == 252003636 or params.ed2k == "c467896913f3ca92bc7b6b49db8775fe" and tonumber(params.size) == 367675087 then
+		return getCacheSharp("l", 252003636)
 	end
 	return nil
 end
@@ -332,12 +334,15 @@ function simulateServerResponse(udp, data)
 					-- b("322 MULTIPLE FILES FOUND\n{int4 fid 1}|{int4 fid 2}|...|{int4 fid n}")
 				else
 					local mylistEntry = getMylistSharp(params)
-					b("210 MYLIST ENTRY ADDED\n%d", tonumber(mylistEntry and mylistEntry.lid or params.lid or 2468))
+					if mylistEntry then
+						b("210 MYLIST ENTRY ADDED\n%d", tonumber(mylistEntry.lid))
+					else
+						b("320 NO SUCH FILE\n")
+					end
 				end
 			else
 				b("311 MYLIST ENTRY EDITED\n%s", ((params.aname or params.aid) and "5" or ""))
 			end
-			-- b("320 NO SUCH FILE\n")
 			-- b("330 NO SUCH ANIME\n")
 			-- b("330 NO SUCH GROUP\n")
 		end

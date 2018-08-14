@@ -188,8 +188,9 @@ local blackout, loadBlackout
 local cacheSave, cacheLoad, cacheDelete
 local compress, decompress
 local createData
-local generateTag
 local ed2kGet, ed2kGetPath, ed2kChangePath
+local fileEntryParseState
+local generateTag
 local getMessage, addMessage, removeMessage
 local getNextMessageToSend
 local handleServerResponse
@@ -919,6 +920,7 @@ do
 
 				local entryPartial = entry
 
+				-- Update fields of full entry.
 				for k, v in pairs(entryPartial) do
 					entryFull[k] = v
 				end
@@ -1210,6 +1212,64 @@ end
 
 
 
+-- version, crcChecked, crcOk, censorChecked, isCensored = fileEntryParseState( fileEntry )
+-- version = 1..5
+-- If crcChecked is false then crcOk is nil.
+-- If censorChecked is false then isCensored is nil.
+function fileEntryParseState(fileEntry)
+	local state = fileEntry.state
+	if not state then  return nil  end -- Possibly a partial entry.
+
+	local version       = 1
+	local crcChecked    = false
+	local crcOk         = nil
+	local censorChecked = false
+	local isCensored    = nil
+
+	if state >= 128 then
+		state         = state-128
+		censorChecked = true
+		isCensored    = true
+	end
+	if state >= 64 then
+		state         = state-64
+		censorChecked = true
+		isCensored    = false
+	end
+
+	if state >= 32 then
+		state         = state-32
+		version       = 5
+	end
+	if state >= 16 then
+		state         = state-16
+		version       = 4
+	end
+	if state >= 8 then
+		state         = state-8
+		version       = 3
+	end
+	if state >= 4 then
+		state         = state-4
+		version       = 2
+	end
+
+	if state >= 2 then
+		state         = state-2
+		crcChecked    = true
+		crcOk         = false
+	end
+	if state >= 1 then
+		state         = state-1
+		crcChecked    = true
+		crcOk         = true
+	end
+
+	return version, crcChecked, crcOk, censorChecked, isCensored
+end
+
+
+
 --==============================================================
 --= Response Handlers ==========================================
 --==============================================================
@@ -1356,7 +1416,22 @@ responseHandlers = {
 			}
 			mylistEntry = cacheSave(self, "l", mylistEntry, false)
 
-			addEvent(self, "mylistgetsuccess", "entry", mylistEntry)
+			if msg.params.ed2k then
+				local fileEntryPartial = {
+					id             = mylistEntry.fid,
+					fid            = mylistEntry.fid,
+					aid            = mylistEntry.aid,
+					eid            = mylistEntry.eid,
+					gid            = mylistEntry.gid,
+					state          = nil,
+					size           = msg.params.size, -- May be nil.
+					ed2k           = msg.params.ed2k, -- May be nil.
+					anidbfilename  = nil,
+				}
+				cacheSave(self, "f", fileEntryPartial, true)
+			end
+
+			addEvent(self, "mylistgetsuccess", mylistEntry)
 
 		-- 312 MULTIPLE MYLIST ENTRIES\nstr anime title|int episodes|str eps with state unknown|str eps with state on hhd|str eps with state on cd|str eps with state deleted|str watched eps|str group 1 short name|str eps for group 1|...
 		elseif statusCode == 312 then
@@ -1386,12 +1461,12 @@ responseHandlers = {
 				})
 			end
 
-			addEvent(self, "mylistgetsuccess", "selection", mylistSelection)
+			addEvent(self, "mylistgetfoundmultipleentries", mylistSelection)
 
 		-- 321 NO SUCH ENTRY
 		elseif statusCode == 321 then
 			-- @Robustness @Check: Are ed2k and size params always set here?
-			addEvent(self, "mylistgetsuccess", "none", msg.params.ed2k, msg.params.size)
+			addEvent(self, "mylistgetmissing", msg.params.ed2k, msg.params.size)
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
@@ -1466,10 +1541,25 @@ responseHandlers = {
 			}
 			mylistEntry = cacheSave(self, "l", mylistEntry, false)
 
+			if msg.params.ed2k then
+				local fileEntryPartial = {
+					id             = mylistEntry.fid,
+					fid            = mylistEntry.fid,
+					aid            = mylistEntry.aid,
+					eid            = mylistEntry.eid,
+					gid            = mylistEntry.gid,
+					state          = nil,
+					size           = msg.params.size, -- May be nil.
+					ed2k           = msg.params.ed2k, -- May be nil.
+					anidbfilename  = nil,
+				}
+				cacheSave(self, "f", fileEntryPartial, true)
+			end
+
 			addEvent(self, "mylistaddsuccess", mylistEntry, false)
 
 			-- Also trigger a "get" event, as we may only have had a partial entry before, and now we got a full one.
-			addEvent(self, "mylistgetsuccess", "entry", mylistEntry)
+			addEvent(self, "mylistgetsuccess", mylistEntry)
 
 		-- 311 MYLIST ENTRY EDITED
 		-- 311 MYLIST ENTRY EDITED\nint number of entries edited
@@ -1520,10 +1610,10 @@ responseHandlers = {
 			addEvent(self, "mylistaddsuccess", mylistEntryMaybePartial, true)
 
 		-- 320 NO SUCH FILE
-		elseif statusCode == 320 and msg.params.ed2k then
-			addEvent(self, "mylistaddfail", "No file on AniDB with size %.0f and hash %s.", msg.params.size, msg.params.ed2k)
 		elseif statusCode == 320 and msg.params.fid then
-			addEvent(self, "mylistaddfail", "No file on AniDB with ID %d.", msg.params.fid)
+			addEvent(self, "mylistaddnofile", msg.params.fid)
+		elseif statusCode == 320 and msg.params.ed2k then
+			addEvent(self, "mylistaddnofilewithhash", msg.params.ed2k, msg.params.size)
 
 		-- 322 MULTIPLE FILES FOUND\nint fid 1|int fid 2|...|int fid n
 		elseif statusCode == 322 then
@@ -1832,7 +1922,7 @@ function Anidb:getMylist(lid, force)
 	if not force then
 		local mylistEntry = itemWith(self.cache.l, "lid",lid)
 		if mylistEntry then
-			addEvent(self, "mylistgetsuccess", "entry", mylistEntry)
+			addEvent(self, "mylistgetsuccess", mylistEntry)
 			return
 		end
 	end
@@ -1879,7 +1969,7 @@ function Anidb:getMylistByEd2k(ed2kHash, fileSize)
 
 	local mylistEntry = itemWith(self.cache.l, "ed2k",ed2kHash, "size",fileSize)
 	if mylistEntry then
-		addEvent(self, "mylistgetsuccess", "entry", mylistEntry)
+		addEvent(self, "mylistgetsuccess", mylistEntry)
 		return
 	end
 

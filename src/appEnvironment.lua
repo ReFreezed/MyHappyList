@@ -20,6 +20,7 @@
 	eachFileInfoByRow, getFileInfosByRows, getSelectedFileInfos
 	getFileInfoByRow, getFileRow
 	getFileStatus, getFileViewed
+	openContainingFolder
 	saveFileInfos, loadFileInfos
 	setFileInfo
 	updateFileList
@@ -103,21 +104,22 @@ dialogs = require"dialogs"
 
 
 -- fileInfo = addFileInfo( path )
--- fileInfo = addFileInfo( fileInfo ) -- For loading phase.
-function addFileInfo(path)
-	local fileInfo
+-- fileInfo = addFileInfo( fileInfo ) -- For the loading phase.
+function addFileInfo(pathOrFi)
+	local fi, path
 
-	if type(path) == "table" then
-		fileInfo = path
-		path     = fileInfo.path
+	if type(pathOrFi) == "table" then
+		fi   = pathOrFi
+		path = fi.path
 
 	else
-		fileInfo = fileInfos[path]
-		if fileInfo then  return fileInfo  end
+		path = pathOrFi
+		fi   = fileInfos[path]
+		if fi then  return fi  end
 
 		lastFileId = lastFileId+1
 
-		fileInfo = {
+		fi = {
 			-- Don't forget to update FILE_INFO_DONT_SERIALIZE when necessary.
 			id           = lastFileId,
 
@@ -136,43 +138,40 @@ function addFileInfo(path)
 		}
 	end
 
-	fileInfo.name      = getFilename(path)
-	fileInfo.folder    = getDirectory(path)
-	fileInfo.isHashing = false
+	fi.name      = getFilename(path)
+	fi.folder    = getDirectory(path)
+	fi.isHashing = false
 
-	setAndInsert(fileInfos, path, fileInfo)
+	setAndInsert(fileInfos, path, fi)
 
 	if #fileInfos == 1 then
 		fileList:DeleteItem(0)
 		fileList:Enable(true)
 	end
 
-	local wxRow = listCtrlInsertRow(
-		fileList, fileInfo.name, fileInfo.folder, formatBytes(fileInfo.size),
-		getFileViewed(fileInfo), getFileStatus(fileInfo)
-	)
-	fileList:SetItemData(wxRow, fileInfo.id)
+	local wxRow = listCtrlInsertRow(fileList, fi.name, fi.folder, formatBytes(fi.size), getFileViewed(fi), getFileStatus(fi))
+	fileList:SetItemData(wxRow, fi.id)
 
 	if not isFile(path) then
 		-- Do nothing here. checkFileInfos() should be called at some point after this function.
 
-	elseif fileInfo.ed2k == "" and appSettings.autoHash then
-		setFileInfo(fileInfo, "isHashing", true)
+	elseif fi.ed2k == "" and appSettings.autoHash then
+		setFileInfo(fi, "isHashing", true)
 		anidb:hashFile(path)
 
-	elseif fileInfo.lid == -1 and fileInfo.ed2k ~= "" and not appSettings.autoAddToMylist and fileInfo.mylistStatus == MYLIST_STATUS_UNKNOWN then
-		anidb:getMylistByEd2k(fileInfo.ed2k, fileInfo.size)
+	elseif fi.lid == -1 and fi.ed2k ~= "" and not appSettings.autoAddToMylist and fi.mylistStatus == MYLIST_STATUS_UNKNOWN then
+		anidb:getMylistByEd2k(fi.ed2k, fi.size)
 
-	elseif fileInfo.lid == -1 and fileInfo.ed2k ~= "" and appSettings.autoAddToMylist then
+	elseif fi.lid == -1 and fi.ed2k ~= "" and appSettings.autoAddToMylist and fi.mylistStatus ~= MYLIST_STATUS_INVALID then
 		-- This will act as getMylistByEd2k() if an entry already exist.
-		anidb:addMylistByEd2k(fileInfo.ed2k, fileInfo.size)
+		anidb:addMylistByEd2k(fi.ed2k, fi.size)
 
-	elseif fileInfo.lid ~= -1 and fileInfo.fid == -1 then
+	elseif fi.lid ~= -1 and fi.fid == -1 then
 		-- The app probably stopped before getting this info last session.
-		anidb:getMylist(fileInfo.lid)
+		anidb:getMylist(fi.lid)
 	end
 
-	return fileInfo
+	return fi
 end
 
 function removeFileInfo(fileInfo)
@@ -417,10 +416,11 @@ end
 function getFileStatus(fileInfo)
 	return
 		nil
-		or fileInfo.isHashing                         and "Calculating hash"
-		or fileInfo.mylistStatus == MYLIST_STATUS_YES and "In MyList"
-		or fileInfo.mylistStatus == MYLIST_STATUS_NO  and "Not in MyList"
-		or fileInfo.ed2k         ~= ""                and "Hashed"
+		or fileInfo.isHashing                              and "Calculating hash"
+		or fileInfo.mylistStatus == MYLIST_STATUS_INVALID  and "Not on AniDB"
+		or fileInfo.mylistStatus == MYLIST_STATUS_YES      and "In MyList"
+		or fileInfo.mylistStatus == MYLIST_STATUS_NO       and "Not in MyList"
+		or fileInfo.ed2k         ~= ""                     and "Hashed"
 		or "Not hashed"
 end
 
@@ -690,6 +690,17 @@ do
 
 	function isPaused()
 		return next(pauseKeys) ~= nil
+	end
+end
+
+
+
+function openContainingFolder(path)
+	if isDirectory(getDirectory(path)) then
+		showFileInExplorer(path)
+	else
+		showError("Error", F("Folder does not exist.\n\n%s", path))
+		checkFileInfos()
 	end
 end
 

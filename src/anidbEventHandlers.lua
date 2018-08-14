@@ -83,40 +83,34 @@ return {
 
 
 	["mylistgetsuccess"] =
-	function(what, ...) -- @Cleanup: Get rid of 'what' argument.
-		if what == "entry" then
-			local mylistEntry = ...
+	function(mylistEntry)
+		local fileInfo
+			=  mylistEntry.lid  and itemWith(fileInfos, "lid",mylistEntry.lid)
+			or mylistEntry.ed2k and itemWith(fileInfos, "ed2k",mylistEntry.ed2k, "size",mylistEntry.size)
+			or mylistEntry.fid  and itemWith(fileInfos, "fid",mylistEntry.fid)
 
-			local fileInfo
-				=  mylistEntry.lid  and itemWith(fileInfos, "lid",mylistEntry.lid)
-				or mylistEntry.ed2k and itemWith(fileInfos, "ed2k",mylistEntry.ed2k, "size",mylistEntry.size)
-				or mylistEntry.fid  and itemWith(fileInfos, "fid",mylistEntry.fid)
+		if not fileInfo then  return  end
 
-			if fileInfo then
-				setFileInfo(fileInfo, "lid",          mylistEntry.lid)
-				setFileInfo(fileInfo, "fid",          mylistEntry.fid)
-				setFileInfo(fileInfo, "mylistStatus", MYLIST_STATUS_YES)
-				saveFileInfos()
-			end
+		setFileInfo(fileInfo, "lid",          mylistEntry.lid)
+		setFileInfo(fileInfo, "fid",          mylistEntry.fid)
+		setFileInfo(fileInfo, "mylistStatus", MYLIST_STATUS_YES)
+		saveFileInfos()
+	end,
 
-		elseif what == "none" then
-			local ed2kHash, fileSize = ...
-			local fileInfo = itemWith(fileInfos, "ed2k",ed2kHash)
+	["mylistgetmissing"] =
+	function(ed2kHash, fileSize)
+		local fileInfo = itemWith(fileInfos, "ed2k",ed2kHash, "size",fileSize)
+		if not fileInfo then  return  end
 
-			if fileInfo then
-				setFileInfo(fileInfo, "lid",          -1) -- A previously existing entry may have been removed.
-				setFileInfo(fileInfo, "fid",          -1)
-				setFileInfo(fileInfo, "mylistStatus", MYLIST_STATUS_NO)
-				saveFileInfos()
-			end
+		setFileInfo(fileInfo, "lid",          -1) -- A previously existing entry may have been removed.
+		setFileInfo(fileInfo, "fid",          -1)
+		setFileInfo(fileInfo, "mylistStatus", MYLIST_STATUS_NO)
+		saveFileInfos()
+	end,
 
-		elseif what == "selection" then
-			local mylistSelection = ...
-			-- @Incomplete
-
-		else
-			logprinterror(nil, "mylistgetsuccess: Unknown what value '%s'.", what)
-		end
+	["mylistgetfoundmultipleentries"] =
+	function(mylistSelection)
+		-- @Incomplete
 	end,
 
 	["mylistgetfail"] =
@@ -128,7 +122,7 @@ return {
 	["mylistaddsuccess"] =
 	function(mylistEntryPartial, isEdit)
 		if not isEdit then
-			-- Should we fetch new fresh data for edited entries? Not sure if
+			-- Should we fetch new fresh data for edited entries too? Not sure if
 			-- the assurance of having up-to-date data is needed here. Everything
 			-- should already be up to date.
 			anidb:getMylist(mylistEntryPartial.lid)
@@ -154,6 +148,28 @@ return {
 	["mylistaddfoundmultiplefiles"] =
 	function(fids)
 		-- @Incomplete
+	end,
+
+	["mylistaddnofile"] =
+	function(fid)
+		local fileInfo = itemWith(fileInfos, "fid",fid)
+		if not fileInfo then  return  end
+
+		setFileInfo(fileInfo, "lid",          -1)
+		setFileInfo(fileInfo, "fid",          -1) -- The file must have been removed from AniDB for some reason.
+		setFileInfo(fileInfo, "mylistStatus", MYLIST_STATUS_INVALID)
+		saveFileInfos()
+	end,
+
+	["mylistaddnofilewithhash"] =
+	function(ed2kHash, fileSize)
+		local fileInfo = itemWith(fileInfos, "ed2k",ed2kHash, "size",fileSize)
+		if not fileInfo then  return  end
+
+		setFileInfo(fileInfo, "lid",          -1)
+		setFileInfo(fileInfo, "fid",          -1)
+		setFileInfo(fileInfo, "mylistStatus", MYLIST_STATUS_INVALID)
+		saveFileInfos()
 	end,
 
 	["mylistaddfail"] =

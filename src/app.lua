@@ -227,6 +227,8 @@ newMenuItem(menuHelp, topFrame, "&Log", "Open the text log in Notepad", function
 	openFileInNotepad(logFilePath)
 end)
 
+newMenuItemSeparator(menuHelp)
+
 newMenuItem(menuHelp, topFrame, wxID_ABOUT, "&About", "About MyHappyList", function(e)
 	dialogs.about()
 end)
@@ -371,14 +373,22 @@ on(fileList, "KEY_DOWN", function(e, kc)
 		-- Do nothing. For some reason space activates the selected item.
 
 	elseif anyFileInfos() then
-		if kc == KC_DELETE then
+		local mods = e:GetModifiers()
+
+		if kc == KC_DELETE and mods == wxMOD_NONE then
 			removeSelectedFileInfos()
 
-		elseif kc == KC_A and e:GetModifiers() == wxMOD_CONTROL then
+		elseif kc == KC_A and mods == wxMOD_CONTROL then
 			listCtrlSelectRows(fileList, range(0, fileList:GetItemCount()-1))
 
-		elseif kc == KC_F2 then
+		elseif kc == KC_F2 and mods == wxMOD_NONE then
 			dialogs.addmylist(getSelectedFileInfos(true))
+
+		elseif kc == KC_O and mods == wxMOD_CONTROL+wxMOD_SHIFT then
+			local fileInfo = getSelectedFileInfos()[1]
+			if fileInfo then
+				openContainingFolder(fileInfo.path)
+			end
 
 		else
 			e:Skip()
@@ -394,9 +404,10 @@ on(fileList, "CONTEXT_MENU", function(e)
 
 	local anyIsHashed      = false
 
-	local anyIsUnknown     = false
-	local anyIsNotInMylist = false
-	local anyIsInMylist    = false
+	local anyIsPossiblyOnAnidb = false
+	local anyIsUnknown         = false
+	local anyIsNotInMylist     = false
+	local anyIsInMylist        = false
 
 	-- local anyIsWatched     = false
 	-- local anyIsUnwatched   = false
@@ -406,12 +417,17 @@ on(fileList, "CONTEXT_MENU", function(e)
 			anyIsHashed = true
 		end
 
-		if fileInfo.mylistStatus == MYLIST_STATUS_YES then
-			anyIsInMylist    = true
+		if     fileInfo.mylistStatus == MYLIST_STATUS_YES then
+			anyIsPossiblyOnAnidb = true
+			anyIsInMylist        = true
 		elseif fileInfo.mylistStatus == MYLIST_STATUS_NO then
-			anyIsNotInMylist = true
+			anyIsPossiblyOnAnidb = true
+			anyIsNotInMylist     = true
+		elseif fileInfo.mylistStatus == MYLIST_STATUS_INVALID then
+			-- void
 		else
-			anyIsUnknown     = true
+			anyIsPossiblyOnAnidb = true
+			anyIsUnknown         = true
 		end
 
 		-- if fileInfo.lid ~= -1 then
@@ -455,16 +471,10 @@ on(fileList, "CONTEXT_MENU", function(e)
 				anidb:addMylistByEd2k(fileInfo.ed2k, fileInfo.size, values)
 			end
 		end
-	end):Enable(anyIsHashed)
+	end):Enable(anyIsPossiblyOnAnidb)
 
-	newMenuItem(popupMenu, fileList, "Open &Containing Folder", "Open the folder containing the file", function(e)
-		local path = fileInfosSelected[1].path
-		if isDirectory(getDirectory(path)) then
-			showFileInExplorer(path)
-		else
-			showError("Error", F("Folder does not exist.\n\n%s", path))
-			checkFileInfos()
-		end
+	newMenuItem(popupMenu, fileList, "Open &Containing Folder\tCtrl+Shift+O", "Open the folder containing the file", function(e)
+		openContainingFolder(fileInfosSelected[1].path)
 	end)
 
 	newMenuItem(popupMenu, fileList, "&Remove from List\tDelete", "Remove selected files from the list", function(e)
@@ -476,17 +486,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 
 	newMenuItem(popupMenu, fileList, "Add to / &Edit MyList\tF2", "Add file to, or edit, MyList", function(e)
 		dialogs.addmylist(getSelectedFileInfos(true))
-	end):Enable(anyIsHashed)
-
-	newMenuItem(popupMenu, fileList, "&Delete from MyList", "Delete file from MyList", function(e)
-		if not confirm("Delete from MyList", "Delete the selected files from MyList?", "Delete") then  return  end
-
-		for _, fileInfo in ipairs(fileInfosSelected) do
-			if fileInfo.lid ~= -1 then
-				anidb:deleteMylist(fileInfo.lid)
-			end
-		end
-	end):Enable(anyIsInMylist)
+	end):Enable(anyIsHashed and anyIsPossiblyOnAnidb)
 
 	----------------------------------------------------------------
 	newMenuItemSeparator(popupMenu)
@@ -496,11 +496,29 @@ on(fileList, "CONTEXT_MENU", function(e)
 	newMenuItem(
 		submenu, topFrame, "Copy ed2k to Clipboard", "Copy ed2k hash to clipboard",
 		function(e)
-			local fileInfo = fileInfosSelected[1]
-			clipboardSetText(fileInfo.ed2k)
-			setStatusText("Copied ed2k hash of '%s' to clipboard", fileInfo.name)
+			if fileInfosSelected[2] then
+				local ed2ks = getColumn(fileInfosSelected, "ed2k")
+				clipboardSetText(table.concat(ed2ks, "\n"))
+				setStatusText("Copied ed2k hashes of %d files to clipboard", #fileInfosSelected)
+			else
+				local fileInfo = fileInfosSelected[1]
+				clipboardSetText(fileInfo.ed2k)
+				setStatusText("Copied ed2k hash of '%s' to clipboard", fileInfo.name)
+			end
 		end
-	):Enable(#fileInfosSelected == 1 and anyIsHashed)
+	):Enable(anyIsHashed)
+
+	newMenuItemSeparator(submenu)
+
+	newMenuItem(submenu, fileList, "&Delete from MyList", "Delete file from MyList", function(e)
+		if not confirm("Delete from MyList", "Delete the selected files from MyList?", "Delete") then  return  end
+
+		for _, fileInfo in ipairs(fileInfosSelected) do
+			if fileInfo.lid ~= -1 then
+				anidb:deleteMylist(fileInfo.lid)
+			end
+		end
+	end):Enable(anyIsInMylist)
 
 	newMenuItem(popupMenu, fileList, "More", submenu)
 
@@ -519,7 +537,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 
 		newMenuItem(popupMenu, fileList, "[DEBUG] Get MYLIST", function(e)
 			for _, fileInfo in ipairs(fileInfosSelected) do
-				if fileInfo.lid ~= "" then
+				if fileInfo.lid ~= -1 then
 					anidb:getMylist(fileInfo.lid, true)
 				elseif fileInfo.ed2k ~= "" then
 					anidb:getMylistByEd2k(fileInfo.ed2k, fileInfo.size)

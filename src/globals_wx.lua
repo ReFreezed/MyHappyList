@@ -198,3 +198,4 @@ add   ("wxTHE_PEN_LIST",                     wx, "wxThePenList")           -- wx
 -- Custom helpers.
 wxGROW_ALL  = wxGROW + wxALL -- Note: wxGROW and wxALL has nothing to do with each other.
 wxICON_NONE = 0
+wxMOD_NONE  = 0
