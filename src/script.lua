@@ -1,8 +1,8 @@
 --[[============================================================
 --=
---=  Test Script
+--=  Script Runner
 --=
---=  Args: none
+--=  Args: scriptName, scriptArg1, ...
 --=
 --=-------------------------------------------------------------
 --=
@@ -12,8 +12,14 @@
 --=
 --============================================================]]
 
-print("...Testing...")
+assert(loadfile"src/load.lua")()
 
-io.stdout:write("Hello,")
-wxSleep(10)
-io.stdout:write(" world!\n")
+_G.args = {...}
+local scriptName = table.remove(args, 1)
+
+xpcall(
+	function()
+		require("scripts."..scriptName)
+	end,
+	handleError
+)

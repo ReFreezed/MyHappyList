@@ -465,7 +465,7 @@ function dialogs.credentials()
 
 	sizerDialog:AddSpacer(MARGIN_M)
 
-	local textObj = wxStaticText(dialog, wxID_ANY, "Note: These credentials will be saved in 'local/login'.")
+	local textObj = wxStaticText(dialog, wxID_ANY, F("Note: These credentials will be saved here:\n%s/login", DIR_CONFIG))
 	sizerDialog:Add(textObj, 0, wxGROW)
 
 	-- Buttons.

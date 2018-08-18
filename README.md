@@ -4,7 +4,7 @@
 
 **<big>MyHappyList</big>** - a very simple [AniDB](https://anidb.net/) *MyList* manager for Windows.
 
-[Forum thread](https://anidb.net/perl-bin/animedb.pl?show=cmt&id=83307)
+[Forum thread](https://anidb.net/thread83307)
 
 
 
@@ -19,7 +19,7 @@ have a look at [alternative software](https://anidb.net/perl-bin/animedb.pl?show
 
 
 ## Download
-See the [releases](https://github.com/ReFreezed/MyHappyList/releases) page.
+See the [latest release](https://github.com/ReFreezed/MyHappyList/releases/latest) page.
 No installation required - just unzip anywhere and run **MyHappyList.exe** !
 
 

@@ -12,26 +12,19 @@
 --=
 --============================================================]]
 
-assert(loadfile"src/load.lua")()
+local path = unpack(args)
 
-local path = ...
+local output, err = cmdCapture(cmdEscapeArgs([[utils\rhash.exe]], "--ed2k", path))
+if not output then
+	errorf("%s: Could not run rhash: %s", path, err)
+end
+if output == "" then
+	errorf("%s: %s", path, "No output from rhash.")
+end
 
-xpcall(
-	function()
-		local output, err = cmdCapture(cmdEscapeArgs([[utils\rhash.exe]], "--ed2k", path))
-		if not output then
-			errorf("%s: Could not run rhash: %s", path, err)
-		end
-		if output == "" then
-			errorf("%s: %s", path, "No output from rhash.")
-		end
+local ed2kHash = output:match"%S+"
+if not ed2kHash or #ed2kHash ~= 32 or ed2kHash:find"[^%da-f]" then
+	errorf("%s: %s", path, "rhash: "..output)
+end
 
-		local ed2kHash = output:match"%S+"
-		if not ed2kHash or #ed2kHash ~= 32 or ed2kHash:find"[^%da-f]" then
-			errorf("%s: %s", path, "rhash: "..output)
-		end
-
-		print("ed2k: "..ed2kHash)
-	end,
-	handleError
-)
+print("ed2k: "..ed2kHash)

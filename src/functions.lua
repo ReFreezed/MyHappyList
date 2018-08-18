@@ -826,8 +826,7 @@ end
 -- processStarted = scriptCaptureAsync( scriptName, callback, arg1, ... )
 -- callback = function( output )
 function scriptCaptureAsync(scriptName, cb, ...)
-	local scriptPath = "src/scripts/"..scriptName..".lua"
-	local cmd        = cmdEscapeArgs("wlua5.1.exe", scriptPath, ...)
+	local cmd = cmdEscapeArgs("wlua5.1.exe", "src/script.lua", scriptName, ...)
 
 	return (processStart(cmd, PROCESS_METHOD_ASYNC, function(process, exitCode)
 		cb(processReadEnded(process, exitCode, true))

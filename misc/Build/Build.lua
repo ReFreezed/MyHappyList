@@ -12,13 +12,9 @@
 
 assert(loadfile"src/load.lua")()
 
-local EXE_NAME          = "MyHappyList"
-
-local DIR_TEMP          = "temp"
-
 local DIR_OUTPUT        = "output"
 local DIR_OUTPUT_WIN32  = DIR_OUTPUT.."/Win32"
-local DIR_CONTENT_WIN32 = DIR_OUTPUT_WIN32.."/"..EXE_NAME
+local DIR_CONTENT_WIN32 = DIR_OUTPUT_WIN32.."/"..APP_NAME
 
 local PATH_7Z           = "utils/7-Zip/7z.exe"
 local PATH_IM           = "utils/ImageMagick/convert.exe"
@@ -83,7 +79,7 @@ writeFile(DIR_TEMP.."/AppInfo.rc", contents)
 assert(copyFile(PATH_SR_EXE, DIR_TEMP.."/App.exe"))
 run(PATH_RH, "-open", DIR_TEMP.."/AppInfo.rc", "-save", DIR_TEMP.."/AppInfo.res", "-action", "compile", "-log", "CONSOLE")
 run(PATH_RH, "-script", "misc/Build/UpdateExe.rhs", "-log", "CONSOLE")
-run(PATH_SR_GLUE, DIR_TEMP.."/App.exe", "misc/Build/exe.lua", EXE_NAME..".exe")
+run(PATH_SR_GLUE, DIR_TEMP.."/App.exe", "misc/Build/exe.lua", APP_NAME..".exe")
 
 print("Making exe... done!")
 
@@ -141,7 +137,7 @@ run(
 	FULLPATH_ROOT.."/"..PATH_7Z,
 	"a", "-tzip",
 	FULLPATH_ROOT.."/"..pathOut,
-	EXE_NAME
+	APP_NAME
 )
 cwdPop()
 

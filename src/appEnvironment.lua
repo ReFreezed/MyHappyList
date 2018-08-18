@@ -293,7 +293,7 @@ do
 
 		if DEBUG_DISABLE_VARIOUS_FILE_SAVING then  return  end
 
-		local path = CACHE_DIR.."/files"
+		local path = DIR_CACHE.."/files"
 
 		backupFileIfExists(path)
 		local file = assert(openFile(path, "w"))
@@ -314,7 +314,7 @@ do
 	end
 
 	function loadFileInfos()
-		local path = CACHE_DIR.."/files"
+		local path = DIR_CACHE.."/files"
 		if not isFile(path) then  return  end
 
 		local file = assert(openFile(path, "r"))
@@ -505,7 +505,7 @@ end
 
 
 do
-	local PATH_SETTINGS = "local/settings"
+	local PATH_SETTINGS = DIR_CONFIG.."/settings"
 
 	local saveScheduled = false
 	local saveTimer     = nil

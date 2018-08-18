@@ -40,17 +40,30 @@ for _, t in ipairs{wx, wxlua} do
 end
 --]]
 
--- Creating folders should be done first, in case they get used right away.
-assert(createDirectory("local"))
-assert(createDirectory("logs"))
-assert(createDirectory("temp"))
-assert(createDirectory(CACHE_DIR))
+-- Move old folders.
+assert(renameDirectoryIfExists(DIR_CACHE_OLD, DIR_CACHE))
+assert(renameDirectoryIfExists(DIR_LOGS_OLD,  DIR_LOGS))
+assert(renameDirectoryIfExists(DIR_TEMP_OLD,  DIR_TEMP))
+
+-- Creating folders should be done as early as possible, in case they get used right away.
+assert(createDirectory(DIR_CACHE))
+assert(createDirectory(DIR_CONFIG))
+assert(createDirectory(DIR_LOGS))
+assert(createDirectory(DIR_TEMP))
+
+-- Move files from old folders.
+local function move(dirOld, dirNew, pathRelative)
+	assert(renameFileIfExists(dirOld.."/"..pathRelative, dirNew.."/"..pathRelative))
+	assert(renameFileIfExists(dirOld.."/"..pathRelative..".bak", dirNew.."/"..pathRelative..".bak"))
+end
+move(DIR_CONFIG_OLD, DIR_CONFIG, (DEBUG_LOCAL and "/loginDebug" or "/login"))
+move(DIR_CONFIG_OLD, DIR_CONFIG, "settings")
 
 -- Prepare AniDB connection before opening the log file, in case the socket cannot open.
 -- Don't wanna risk having multiple MyHappyLists running and appending to the same file.
 anidb = require"Anidb"()
 
-local logFilePath = "logs/output.log"
+local logFilePath = DIR_LOGS.."/output.log"
 logFile = assert(openFile(logFilePath, "a"))
 
 appIcons  = wxIconBundle("gfx/appicon.ico", wxBITMAP_TYPE_ANY)
@@ -642,8 +655,8 @@ anidb:destroy()
 anidb = nil
 
 -- Cleanup.
-if isDirectory"temp" then
-	traverseFiles("temp", function(path)
+if isDirectory(DIR_TEMP) then
+	traverseFiles(DIR_TEMP, function(path)
 		if not deleteFile(path) then
 			logprinterror("App", "Could not delete file '%s'.", path)
 		end

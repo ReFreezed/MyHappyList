@@ -700,14 +700,14 @@ function blackout(self, duration)
 	self.blackoutUntil = math.floor(getTime()+duration)
 	self.isInBlackout  = true
 
-	local ok, err = writeFile(CACHE_DIR.."/blackout", F("%d", self.blackoutUntil))
+	local ok, err = writeFile(DIR_CACHE.."/blackout", F("%d", self.blackoutUntil))
 	if not ok then
-		_logprinterror("Could not write to file '%s/blackout': %s", CACHE_DIR, err)
+		_logprinterror("Could not write to file '%s/blackout': %s", DIR_CACHE, err)
 	end
 end
 
 function loadBlackout(self)
-	self.blackoutUntil = tonumber(getFileContents(CACHE_DIR.."/blackout") or 0)
+	self.blackoutUntil = tonumber(getFileContents(DIR_CACHE.."/blackout") or 0)
 	self.isInBlackout  = getTime() < self.blackoutUntil
 end
 
@@ -766,9 +766,9 @@ function updateNatInfo(self, port)
 			self.natLimitUpper = natLimitUp
 			_logprint("Ping delay: %d seconds", self.pingDelay)
 
-			local ok, err = writeFile(CACHE_DIR.."/nat", F("%d %d %d", pingDelay, natLimitLo, natLimitUp))
+			local ok, err = writeFile(DIR_CACHE.."/nat", F("%d %d %d", pingDelay, natLimitLo, natLimitUp))
 			if not ok then
-				_logprinterror("Could not write to file '%s/nat': %s", CACHE_DIR, err)
+				_logprinterror("Could not write to file '%s/nat': %s", DIR_CACHE, err)
 			end
 		end
 	end
@@ -777,7 +777,7 @@ function updateNatInfo(self, port)
 end
 
 function loadNatInfo(self)
-	local contents = getFileContents(CACHE_DIR.."/nat")
+	local contents = getFileContents(DIR_CACHE.."/nat")
 	if not contents then
 		_logprint("Ping delay: %d seconds", self.pingDelay)
 		return
@@ -785,7 +785,7 @@ function loadNatInfo(self)
 
 	local pingDelay, natLimitLower, natLimitUpper = contents:match"^(%d+) (%-?%d+) (%-?%d+)$"
 	if not pingDelay then
-		_logprinterror("Bad format of file '%s/nat'.", CACHE_DIR)
+		_logprinterror("Bad format of file '%s/nat'.", DIR_CACHE)
 		_logprint("Ping delay: %d seconds", self.pingDelay)
 		return
 	end
@@ -839,7 +839,7 @@ function startSession(self, session)
 	self.sessionKey = session
 	_logprint("Started session. (%s)", session)
 
-	writeFile(CACHE_DIR.."/session", session)
+	writeFile(DIR_CACHE.."/session", session)
 end
 
 -- success = dropSession( self )
@@ -852,12 +852,12 @@ function dropSession(self)
 	-- because AniDB notified us of it. That means a new port has opened!
 	-- self.isActive = false -- Bad!
 
-	deleteFile(CACHE_DIR.."/session")
+	deleteFile(DIR_CACHE.."/session")
 	return true
 end
 
 function loadSession(self)
-	self.sessionKey = getFileContents(CACHE_DIR.."/session") or ""
+	self.sessionKey = getFileContents(DIR_CACHE.."/session") or ""
 end
 
 
@@ -872,8 +872,8 @@ do
 		local id = assert(entry.id)
 
 		for _, path in ipairs{
-			F("%s/%s%d%s",     CACHE_DIR, pageName, id, (isPartial and ".part" or "")),
-			F("%s/%s%d%s.bak", CACHE_DIR, pageName, id, (isPartial and ".part" or "")),
+			F("%s/%s%d%s",     DIR_CACHE, pageName, id, (isPartial and ".part" or "")),
+			F("%s/%s%d%s.bak", DIR_CACHE, pageName, id, (isPartial and ".part" or "")),
 		} do
 			if isFile(path) and not deleteFile(path) then
 				_logprinterror("Could not delete '%s'.", path)
@@ -956,7 +956,7 @@ do
 		-- Write entry to file.
 		----------------------------------------------------------------
 
-		local path = F("%s/%s%d%s", CACHE_DIR, pageName, id, (isPartial and ".part" or ""))
+		local path = F("%s/%s%d%s", DIR_CACHE, pageName, id, (isPartial and ".part" or ""))
 		assert(writeSimpleEntryFile(path, entry))
 
 		----------------------------------------------------------------
@@ -977,7 +977,7 @@ do
 			return entry
 		end
 
-		local path = F("%s/%s%d%s", CACHE_DIR, pageName, id, (isPartial and ".part" or ""))
+		local path = F("%s/%s%d%s", DIR_CACHE, pageName, id, (isPartial and ".part" or ""))
 		entry = readSimpleEntryFile(path)
 		if not entry then  return nil, err  end
 
@@ -1017,7 +1017,7 @@ do
 	local function saveEd2ks()
 		if DEBUG_DISABLE_VARIOUS_FILE_SAVING then  return  end
 
-		local file = assert(openFile(CACHE_DIR.."/ed2ks", "w"))
+		local file = assert(openFile(DIR_CACHE.."/ed2ks", "w"))
 
 		for path, ed2kHash in pairsSorted(pathEd2ks) do
 			if ed2kHash ~= "" then
@@ -1032,7 +1032,7 @@ do
 	local function loadEd2ks()
 		isLoaded = true
 
-		local file = openFile(CACHE_DIR.."/ed2ks", "r")
+		local file = openFile(DIR_CACHE.."/ed2ks", "r")
 		if not file then  return  end
 
 		local ln = 0
@@ -1044,7 +1044,7 @@ do
 			fileSize = tonumber(fileSize)
 
 			if not ed2kHash then
-				_logprinterror("%s:%d: Bad line format: %s", CACHE_DIR.."/ed2ks", ln, line)
+				_logprinterror("%s:%d: Bad line format: %s", DIR_CACHE.."/ed2ks", ln, line)
 			else
 				pathEd2ks[path]     = ed2kHash
 				pathSizes[path]     = fileSize
@@ -1757,7 +1757,7 @@ function Anidb:init()
 
 	self:loadCredentials()
 
-	for name in directoryItems(CACHE_DIR) do
+	for name in directoryItems(DIR_CACHE) do
 		local pageName, id = name:match"^(%l)(%d+)$"
 		if pageName then
 			cacheLoad(self, pageName, tonumber(id), false)
@@ -1797,7 +1797,7 @@ end
 
 -- success = loadCredentials( )
 function Anidb:loadCredentials()
-	local path = DEBUG_LOCAL and "local/loginDebug" or "local/login"
+	local path = DIR_CONFIG..(DEBUG_LOCAL and "/loginDebug" or "/login")
 
 	-- @Speed: Don't read this from disc every time. Sigh.
 	local file, err = openFile(path, "r")
@@ -1829,7 +1829,7 @@ function Anidb:setCredentials(user, pass)
 	self.username = user
 	self.password = pass
 
-	local path = DEBUG_LOCAL and "local/loginDebug" or "local/login"
+	local path = DIR_CONFIG..(DEBUG_LOCAL and "/loginDebug" or "/login")
 	local file = assert(openFile(path, "w"))
 
 	writeLine(file, user)
@@ -1846,7 +1846,7 @@ function Anidb:removeCredentials()
 	self.username = ""
 	self.password = ""
 
-	local path = DEBUG_LOCAL and "local/loginDebug" or "local/login"
+	local path = DIR_CONFIG..(DEBUG_LOCAL and "/loginDebug" or "/login")
 	deleteFile(path)
 end
 

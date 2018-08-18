@@ -29,8 +29,8 @@ if chunk then  chunk()  end
 
 -- Settings, app/general.
 
+APP_NAME          = "MyHappyList"
 APP_VERSION       = require"version"
-CACHE_DIR         = DEBUG_LOCAL and "cacheDebug" or "cache"
 MAX_DROPPED_FILES = 1000
 SAVE_DELAY        = DEBUG and 1000 or 2000 -- Affects saving of settings, etc.
 
@@ -79,7 +79,34 @@ PROCESS_METHOD_ASYNC    = 1
 PROCESS_METHOD_SYNC     = 2
 PROCESS_METHOD_DETACHED = 3
 
-APPDIR                  = wxGetCwd() -- Hopefully the program isn't launched from another folder...
+--[[
+	Directories.
+
+	C:\ProgramData                   <- GetConfigDir
+	C:\Users\User\AppData\Local      <- GetUserLocalDataDir
+	C:\Users\User\AppData\Local\Temp <- GetTempDir
+	C:\Users\User\AppData\Roaming    <- GetUserConfigDir, GetUserDataDir
+	C:\Users\User\Documents          <- GetDocumentsDir
+	<MyHappyList>\bin                <- GetDataDir, GetLocalDataDir, GetPluginsDir, GetResourcesDir
+	<MyHappyList>\bin\wx.dll         <- GetExecutablePath
+]]
+local dirs = wxStandardPaths.Get()
+
+local function absDirTo(dirMethod, subdir)
+	return dirs[dirMethod](dirs):gsub("\\", "/") .. "/" .. APP_NAME .. subdir
+end
+
+DIR_APP        = wxGetCwd():gsub("\\", "/") -- Hopefully the program isn't launched from another folder...
+
+DIR_CACHE      = absDirTo("GetUserDataDir",   (DEBUG_LOCAL and "/cacheDebug" or "/cache"))
+DIR_CONFIG     = absDirTo("GetUserConfigDir", "")
+DIR_LOGS       = absDirTo("GetUserDataDir",   "/logs")
+DIR_TEMP       = absDirTo("GetTempDir",       "")
+
+DIR_CACHE_OLD  = DEBUG_LOCAL and "cacheDebug" or "cache"
+DIR_CONFIG_OLD = "local"
+DIR_LOGS_OLD   = "logs"
+DIR_TEMP_OLD   = "temp"
 
 -- AniDB.
 

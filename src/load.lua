@@ -19,6 +19,33 @@ package.path
 	.."./lib/?.lua;"
 	.."./lib/?/init.lua;"
 
+_G.appZip = require"zip".open"app"
+
+if appZip then
+	table.insert(package.loaders, 1, function(moduleName)
+		local modulePath = moduleName:gsub("%.", "/")
+
+		for pathPat in package.path:gmatch"[^;]+" do
+			local path = pathPat:gsub("%?", modulePath):gsub("^%./", "")
+			local file = appZip:open(path)
+
+			if file then
+				file:close()
+
+				return function()
+					file = assert(appZip:open(path))
+
+					local contents = file:read"*a"
+					file:close()
+
+					local chunk = assert(loadstring(contents, path))
+					return chunk()
+				end
+			end
+		end
+	end)
+end
+
 math.randomseed(require"socket".gettime()*1000)
 math.random() -- Gotta kickstart the randomness.
 

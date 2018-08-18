@@ -34,6 +34,14 @@ http://w3.impa.br/~diego/software/luasocket/home.html
 
 ================================================================
 
+LuaZip
+Designed and implemented by Danilo Tuler.
+Copyright © 2003-2007 The Kepler Project.
+Same license as Lua.
+http://math2.org/luasearch-2/luadist-extract/luazip-1.2.3.dist/doc/us/license.html
+
+================================================================
+
 wxLua
 Same license as wxWidgets.
 http://wxlua.sourceforge.net/license.php

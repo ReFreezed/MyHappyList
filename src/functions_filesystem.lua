@@ -19,8 +19,9 @@
 	getTempFilePath
 	isFile, isFileWritable, isDirectory
 	mkdir
-	openFile, deleteFile
+	openFile, deleteFile, removeDirectory
 	parseSimpleKv, writeSimpleKv, readSimpleEntryFile, writeSimpleEntryFile
+	rename, renameFileIfExists, renameDirectoryIfExists
 	toNormalPath, toWindowsPath, toShortPath
 	writef, writeLine
 
@@ -42,10 +43,6 @@ end
 -- success, errorMessage = createDirectory( path )
 function createDirectory(path)
 	if path == "" then  return  end
-
-	if path:find"^/" or path:find"^%a:" then
-		return false, F("[internal] Absolute paths are disabled. (%s)", path)
-	end
 
 	if not mkdir(path, true) then
 		return false, F("Could not create directory '%s'.", path)
@@ -238,15 +235,16 @@ end
 
 
 
--- path = getTempFilePath( [ asWindowsPath=false ] )
+--[[ path = getTempFilePath( [ asWindowsPath=false ] )
 function getTempFilePath(asWindowsPath)
-	local path = "temp/"..os.tmpname():gsub("[\\/]+", ""):gsub("%.$", "")
+	local path = DIR_TEMP.."/"..os.tmpname():gsub("[\\/]+", ""):gsub("%.$", "")
 	-- writeFile(path, "") -- May want to do this.
 
 	if asWindowsPath then  path = toWindowsPath(path)  end
 
 	return path
 end
+-- ]]
 
 
 
@@ -285,7 +283,7 @@ do
 	function openFile(path, modeFull)
 		-- Extra protection against wxFileDialog() (and maybe others) changing CWD however they want. Ugh.
 		if not (path:find"^[/\\]" or path:find"^%a:[/\\]") then
-			path = APPDIR.."/"..path
+			path = DIR_APP.."/"..path
 		end
 
 		local mode, access, update, binary = modeFull:match"^(([rwa]+)(%+?))(b?)$"
@@ -584,8 +582,15 @@ do
 	--]=]
 end
 
+-- success = deleteFile( path )
 function deleteFile(path)
 	return wxRemoveFile(path)
+end
+
+-- success = removeDirectory( directoryPath )
+-- Only works on empty directories.
+function removeDirectory(dirPath)
+	return wxRmdir(dirPath, 0)
 end
 
 
@@ -776,6 +781,94 @@ function writeSimpleEntryFile(path, t, backup)
 	end
 
 	file:close()
+	return true
+end
+
+
+
+-- success, errorMessage = rename( oldPath, newPath [, overwrite=false ] )
+function rename(pathOld, pathNew, overwrite)
+	overwrite = overwrite or false
+
+	if not wxRenameFile(pathOld, pathNew, overwrite) then
+		return false, F("Could not rename '%s' to '%s'.", pathOld, pathNew)
+	end
+
+	return true
+end
+
+-- success, errorMessage = renameFileIfExists( oldPath, newPath [, overwrite=false ] )
+-- success is true if the file does not exist.
+function renameFileIfExists(pathOld, pathNew, overwrite)
+	if not isFile(pathOld) then  return true  end
+
+	overwrite = overwrite or false
+	return rename(pathOld, pathNew, overwrite)
+end
+
+-- success, errorMessage = renameDirectoryIfExists( oldPath, newPath [, overwrite=false ] )
+-- success is true if the directory does not exist.
+-- Note: If newPath exists then the old and new directories are merged.
+function renameDirectoryIfExists(dirSource, dirTarget, overwrite)
+	if not isDirectory(dirSource) then  return true  end
+
+	overwrite = overwrite or false
+
+	local ok, err = rename(dirSource, dirTarget, overwrite)
+	if ok then  return true  end
+
+	-- The paths may point to different drives, in which case wxRenameFile() fails (I think).
+	-- Try moving each file manually instead.
+
+	-- @Robustness: Maybe undo previous operations on error?
+
+	local ok, err = createDirectory(dirSource)
+	if not ok then  return false, err  end
+
+	local createdDirs = {}
+
+	traverseDirectory(dirSource, true, function(pathOld, pathRel, name, mode)
+		if mode == "directory" then
+			ok = removeDirectory(pathOld)
+			if not ok then
+				err = F("Could not delete '%s' while moving.", pathOld)
+				return true
+			end
+
+		else
+			local pathNew = dirTarget.."/"..pathRel
+			local dirNew  = getDirectory(pathNew)
+
+			if not createdDirs[dirNew] then
+				ok, err = createDirectory(dirNew)
+				if not ok then  return true  end -- Break.
+
+				createdDirs[dirNew] = true
+			end
+
+			ok = wxCopyFile(pathOld, pathNew, overwrite)
+			if not ok then
+				err = F("Could not copy '%s' to '%s' while moving.", pathOld, pathNew)
+				return true
+			end
+
+			-- @Incomplete: Preserve timestamps.
+
+			ok = deleteFile(pathOld)
+			if not ok then
+				err = F("Could not delete '%s' while moving.", pathOld)
+				return true
+			end
+		end
+	end)
+	if not ok then  return false, err  end
+
+	ok = removeDirectory(dirSource)
+	if not ok then
+		err = F("Could not delete '%s' while moving.", dirSource)
+		return true
+	end
+
 	return true
 end
 
