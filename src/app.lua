@@ -27,19 +27,6 @@ elseif DEBUG then
 	print("!!!!!! DEBUG !!!!!!")
 end
 
---[[
-for _, t in ipairs{wx, wxlua} do
-	for k, v in pairs(t) do
-		k = k:gsub("^wx", "")
-		if not _G[k] then
-			-- print("ADD>>>", k, v)
-		else
-			print("?", k, type(v), v)
-		end
-	end
-end
---]]
-
 -- Move old folders.
 assert(renameDirectoryIfExists(DIR_CACHE_OLD, DIR_CACHE))
 assert(renameDirectoryIfExists(DIR_LOGS_OLD,  DIR_LOGS))
@@ -507,7 +494,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 	local submenu = wxMenu()
 
 	newMenuItem(
-		submenu, topFrame, "Copy ed2k to Clipboard", "Copy ed2k hash to clipboard",
+		submenu, topFrame, "Copy &ed2k to Clipboard", "Copy ed2k hash to clipboard",
 		function(e)
 			if fileInfosSelected[2] then
 				local ed2ks = getColumn(fileInfosSelected, "ed2k")
@@ -523,6 +510,15 @@ on(fileList, "CONTEXT_MENU", function(e)
 
 	newMenuItemSeparator(submenu)
 
+	newMenuItem(submenu, fileList, "&Refresh Status", "Manually update the status of the file", function(e)
+		for _, fileInfo in ipairs(fileInfosSelected) do
+			softUpdateFileInfo(fileInfo, true)
+		end
+		checkFileInfos()
+	end)
+
+	newMenuItemSeparator(submenu)
+
 	newMenuItem(submenu, fileList, "&Delete from MyList", "Delete file from MyList", function(e)
 		if not confirm("Delete from MyList", "Delete the selected files from MyList?", "Delete") then  return  end
 
@@ -533,7 +529,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 		end
 	end):Enable(anyIsInMylist)
 
-	newMenuItem(popupMenu, fileList, "More", submenu)
+	newMenuItem(popupMenu, fileList, "&More", submenu)
 
 	----------------------------------------------------------------
 	if DEBUG then
@@ -544,16 +540,6 @@ on(fileList, "CONTEXT_MENU", function(e)
 				if fileInfo.ed2k == "" and not fileInfo.isHashing then
 					setFileInfo(fileInfo, "isHashing", true)
 					anidb:hashFile(fileInfo.path)
-				end
-			end
-		end)
-
-		newMenuItem(popupMenu, fileList, "[DEBUG] Get MYLIST", function(e)
-			for _, fileInfo in ipairs(fileInfosSelected) do
-				if fileInfo.lid ~= -1 then
-					anidb:getMylist(fileInfo.lid, true)
-				elseif fileInfo.ed2k ~= "" then
-					anidb:getMylistByEd2k(fileInfo.ed2k, fileInfo.size)
 				end
 			end
 		end)

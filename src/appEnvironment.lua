@@ -22,7 +22,7 @@
 	getFileStatus, getFileViewed
 	openContainingFolder
 	saveFileInfos, loadFileInfos
-	setFileInfo
+	setFileInfo, softUpdateFileInfo
 	updateFileList
 
 --============================================================]]
@@ -152,25 +152,7 @@ function addFileInfo(pathOrFi)
 	local wxRow = listCtrlInsertRow(fileList, fi.name, fi.folder, formatBytes(fi.size), getFileViewed(fi), getFileStatus(fi))
 	fileList:SetItemData(wxRow, fi.id)
 
-	if not isFile(path) then
-		-- Do nothing here. checkFileInfos() should be called at some point after this function.
-
-	elseif fi.ed2k == "" and appSettings.autoHash then
-		setFileInfo(fi, "isHashing", true)
-		anidb:hashFile(path)
-
-	elseif fi.lid == -1 and fi.ed2k ~= "" and not appSettings.autoAddToMylist and fi.mylistStatus == MYLIST_STATUS_UNKNOWN then
-		anidb:getMylistByEd2k(fi.ed2k, fi.size)
-
-	elseif fi.lid == -1 and fi.ed2k ~= "" and appSettings.autoAddToMylist and fi.mylistStatus ~= MYLIST_STATUS_INVALID then
-		-- This will act as getMylistByEd2k() if an entry already exist.
-		anidb:addMylistByEd2k(fi.ed2k, fi.size)
-
-	elseif fi.lid ~= -1 and fi.fid == -1 then
-		-- The app probably stopped before getting this info last session.
-		anidb:getMylist(fi.lid)
-	end
-
+	softUpdateFileInfo(fi)
 	return fi
 end
 
@@ -409,6 +391,36 @@ function setFileInfo(fileInfo, k, v, force)
 		fileList:SetItem(wxRow, FILE_COLUMN_FILE-1,   fileInfo.name)
 		fileList:SetItem(wxRow, FILE_COLUMN_FOLDER-1, fileInfo.folder)
 	end
+end
+
+-- isNowUpdating = softUpdateFileInfo( fileInfo [, refresh=false ] )
+function softUpdateFileInfo(fi, refresh)
+	if not isFile(fi.path) then
+		-- Do nothing here. checkFileInfos() should be called at some point after this function.
+
+	elseif fi.ed2k == "" and appSettings.autoHash then
+		if not fi.isHashing then
+			setFileInfo(fi, "isHashing", true)
+			anidb:hashFile(fi.path)
+		end
+		return true
+
+	elseif fi.lid == -1 and fi.ed2k ~= "" and not appSettings.autoAddToMylist and fi.mylistStatus == MYLIST_STATUS_UNKNOWN then
+		anidb:getMylistByEd2k(fi.ed2k, fi.size)
+		return true
+
+	elseif fi.lid == -1 and fi.ed2k ~= "" and appSettings.autoAddToMylist and fi.mylistStatus ~= MYLIST_STATUS_INVALID then
+		-- This will act as getMylistByEd2k() if an entry already exist.
+		anidb:addMylistByEd2k(fi.ed2k, fi.size)
+		return true
+
+	elseif fi.lid ~= -1 and (fi.fid == -1 or refresh) then
+		-- The app probably stopped before getting this info last session.
+		anidb:getMylist(fi.lid, refresh)
+		return true
+	end
+
+	return false
 end
 
 
