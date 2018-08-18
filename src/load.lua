@@ -39,7 +39,7 @@ if appZip then
 					file:close()
 
 					local chunk = assert(loadstring(contents, path))
-					return chunk()
+					return chunk(moduleName)
 				end
 			end
 		end
