@@ -108,6 +108,11 @@ DIR_CONFIG_OLD = "local"
 DIR_LOGS_OLD   = "logs"
 DIR_TEMP_OLD   = "temp"
 
+WRITABLE_DIRS = {
+	absDirTo("GetUserConfigDir", ""),
+	absDirTo("GetTempDir",       ""),
+}
+
 -- AniDB.
 
 MYLIST_STATE_UNKNOWN                  = 0
@@ -132,7 +137,7 @@ MYLIST_FILESTATE_OTHER                = 100 -- normal
 
 -- Modules.
 
-socket = require"socket"
+socket = require"socket" ; require"socket.url" ; require"socket.http"
 
 _print = print -- We define our own print().
 
@@ -140,8 +145,13 @@ _print = print -- We define our own print().
 
 -- Variables and objects.
 
-logFile           = nil
-processes         = {}
-settingsAreFrozen = true
+bypassDirectoryProtection = false
+clearTempDirOnExit        = true
+settingsAreFrozen         = true
+
+logFile                   = nil
+logFilePath               = ""
+
+processes                 = {}
 
 

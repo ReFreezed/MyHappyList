@@ -52,21 +52,8 @@ print("Preparing folders...")
 assert(createDirectory(DIR_TEMP))
 assert(createDirectory(DIR_CONTENT_WIN32))
 
-traverseDirectory(DIR_TEMP, true, function(path, pathRel, name, mode)
-	if mode == "directory" then
-		assert(removeDirectory(path), path)
-	else
-		assert(deleteFile(path), path)
-	end
-end)
-
-traverseDirectory(DIR_CONTENT_WIN32, true, function(path, pathRel, name, mode)
-	if mode == "directory" then
-		assert(removeDirectory(path), path)
-	else
-		assert(deleteFile(path), path)
-	end
-end)
+assert(emptyDirectory(DIR_TEMP, false))
+assert(emptyDirectory(DIR_CONTENT_WIN32, false))
 
 print("Preparing folders... done!")
 

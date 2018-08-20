@@ -11,14 +11,16 @@
 --==============================================================
 
 	cast, is, isClass
-	eachChild
+	eachChild, eachChildRecursively
 	getSize, getWidth, getHeight
 	newMenuItem, newMenuItemLabel, newMenuItemSeparator, newButton, newText
 	newTimer
 	on, onAccelerator, off
+	printHierarchy
 	setAccelerators
 	setBoxSizer, setBoxSizerWithSpace, getSizerSpace
 	showButtonDialog, showMessage, showWarning, showError, confirm
+	showModalAndDestroy
 
 	checkBoxClick
 
@@ -51,8 +53,8 @@ local classNameSubstitutes = {
 	["wxGauge95"] = "wxGauge",
 }
 function cast(obj, className)
-	-- print(obj:GetClassInfo():GetClassName())
-	className = className or obj:GetClassInfo():GetClassName()
+	-- print(obj.ClassInfo.ClassName)
+	className = className or obj.ClassInfo.ClassName
 	className = classNameSubstitutes[className] or className
 	return obj:DynamicCast(className)
 end
@@ -68,7 +70,7 @@ do
 			wxlua.istrackedobject(b) and
 			a:IsKindOf(windowClassInfo) and
 			b:IsKindOf(windowClassInfo) and
-			a:GetHandle() == b:GetHandle()
+			a.Handle == b.Handle
 	end
 
 	function isClass(v, className)
@@ -89,8 +91,23 @@ function eachChild(window)
 		childNode = childList:Item(wxRow)
 
 		if childNode then
-			return wxRow+1, cast(childNode:GetData())
+			return wxRow+1, cast(childNode.Data)
 		end
+	end
+end
+
+-- for child in eachChildRecursively( window [, bottomUp=false ] ) do
+do
+	local function yieldChildren(window, bottomUp)
+		for _, child in eachChild(window) do
+			if     bottomUp then  yieldChildren(child)  end
+			coroutine.yield(child)
+			if not bottomUp then  yieldChildren(child)  end
+		end
+	end
+
+	function eachChildRecursively(window, bottomUp)
+		return iterate(yieldChildren, window, bottomUp)
 	end
 end
 
@@ -99,7 +116,7 @@ end
 -- wxColumn = listCtrlInsertColumn( listCtrl [, wxColumn=end ], heading [, width=auto ] )
 function listCtrlInsertColumn(listCtrl, wxCol, heading, w)
 	if type(wxCol) == "string" then
-		wxCol, heading, w = listCtrl:GetColumnCount(), wxCol, heading
+		wxCol, heading, w = listCtrl.ColumnCount, wxCol, heading
 	end
 
 	wxCol = listCtrl:InsertColumn(wxCol, heading, wxLIST_FORMAT_LEFT, w or -1)
@@ -110,7 +127,7 @@ end
 -- Note: At least one item must be specified.
 function listCtrlInsertRow(listCtrl, wxRow, ...)
 	if type(wxRow) ~= "number" then
-		return listCtrlInsertRow(listCtrl, listCtrl:GetItemCount(), wxRow, ...)
+		return listCtrlInsertRow(listCtrl, listCtrl.ItemCount, wxRow, ...)
 	end
 
 	wxRow = listCtrl:InsertItem(wxRow, (...))
@@ -173,12 +190,12 @@ function listCtrlPopupMenu(listCtrl, menu, wxRow, x, y)
 
 	local rect = wxRect()
 	if listCtrl:GetItemRect(wxRow, rect) then
-		x = rect:GetLeft()
-		y = rect:GetBottom()
+		x = rect.Left
+		y = rect.Bottom
 	else
-		rect = listCtrl:GetRect()
-		x = rect:GetLeft()
-		y = rect:GetTop()
+		rect = listCtrl.Rect
+		x = rect.Left
+		y = rect.Top
 	end
 
 	popupMenu(listCtrl, menu, x, y)
@@ -187,7 +204,7 @@ end
 -- anyRowWasSelected = listCtrlSelectRows( listCtrl [, wxIndices, fallbackWxIndex ] )
 -- anyRowWasSelected = listCtrlSelectRows( listCtrl [, wxIndices, fallbackToLastRow=false ] )
 function listCtrlSelectRows(listCtrl, wxIndices, fallback)
-	local count = listCtrl:GetItemCount()
+	local count = listCtrl.ItemCount
 	if count == 0 then  return false  end
 
 	local flags = wxLIST_STATE_SELECTED + wxLIST_STATE_FOCUSED
@@ -309,27 +326,27 @@ end
 do
 	local EVENT_EXPANDERS = {
 		["CHAR_HOOK"] -- keycode
-		= function(e)  return e:GetKeyCode()  end,
+		= function(e)  return e.KeyCode  end,
 		["COMMAND_LIST_COL_END_DRAG"] -- wxColumn, width
-		= function(e)  return e:GetColumn(), e:GetItem():GetWidth()  end,
+		= function(e)  return e.Column, e.Item.Width  end,
 		["COMMAND_LIST_ITEM_ACTIVATED"] -- wxRow
-		= function(e)  return e:GetIndex()  end,
+		= function(e)  return e.Index  end,
 		["DROP_FILES"] -- filePaths
-		= function(e)  return e:GetFiles()  end,
+		= function(e)  return e.Files  end,
 		["END_PROCESS"] -- exitCode, pid
-		= function(e)  return e:GetExitCode(), e:GetPid()  end,
+		= function(e)  return e.ExitCode, e.Pid  end,
 		["GRID_COL_SIZE"] -- wxColumn, x
-		= function(e)  return e:GetRowOrCol(), e:GetPosition():GetX()  end,
+		= function(e)  return e.RowOrCol, e.Position.X  end,
 		["GRID_ROW_SIZE"] -- wxRow, y
-		= function(e)  return e:GetRowOrCol(), e:GetPosition():GetY()  end,
+		= function(e)  return e.RowOrCol, e.Position.Y  end,
 		["KEY_DOWN"] -- keycode
-		= function(e)  return e:GetKeyCode()  end,
+		= function(e)  return e.KeyCode  end,
 		["MOVE"] -- x, y
-		= function(e)  return e:GetPosition():GetXY()  end,
+		= function(e)  return e.Position:GetXY()  end,
 		["MOVING"] -- x, y
-		= function(e)  return e:GetPosition():GetXY()  end,
+		= function(e)  return e.Position:GetXY()  end,
 		["SIZE"] -- width, height
-		= function(e)  local size = e:GetSize()  return size:GetWidth(), size:GetHeight()  end,
+		= function(e)  local size = e.Size  return size.Width, size.Height  end,
 	}
 
 	function on(eHandler, id, eType, cb)
@@ -402,7 +419,7 @@ end
 
 
 function setAccelerators(window, accelerators)
-	window:SetAcceleratorTable(wxAcceleratorTable(accelerators))
+	window.AcceleratorTable = wxAcceleratorTable(accelerators)
 end
 
 
@@ -417,7 +434,7 @@ function newTimer(milliseconds, oneShot, cb)
 	end
 
 	local timer = wxTimer(topFrame)
-	timer:SetOwner(timer)
+	timer.Owner = timer
 
 	on(timer, "TIMER", cb)
 
@@ -476,7 +493,7 @@ function showButtonDialog(caption, message, infos, icon)
 	----------------------------------------------------------------
 
 	local panel = wxPanel(dialog, wxID_ANY)
-	panel:SetBackgroundColour(wxColour(255, 255, 255))
+	panel.BackgroundColour = wxColour(255, 255, 255)
 
 	local sizer = wxBoxSizer(wxHORIZONTAL)
 
@@ -496,8 +513,8 @@ function showButtonDialog(caption, message, infos, icon)
 	local sizerWrapper = wxBoxSizer(wxHORIZONTAL)
 	sizerWrapper:Add(sizer, 0, wxGROW_ALL, 24)
 
-	panel:SetAutoLayout(true)
-	panel:SetSizer(sizerWrapper)
+	panel.AutoLayout = true
+	panel.Sizer      = sizerWrapper
 
 	sizerDialog:Add(panel, 0, wxGROW)
 
@@ -537,7 +554,7 @@ function showButtonDialog(caption, message, infos, icon)
 		local button = newButton(dialog, id, label, function(e)
 			if cb then cb(e) end
 
-			if not cb or e:GetSkipped() then
+			if not cb or e.Skipped then
 				dialog:EndModal(id)
 			end
 
@@ -551,13 +568,13 @@ function showButtonDialog(caption, message, infos, icon)
 
 	----------------------------------------------------------------
 
-	dialog:SetAutoLayout(true)
-	dialog:SetSizer(sizerDialog)
+	dialog.AutoLayout = true
+	dialog.Sizer      = sizerDialog
 
 	dialog:Fit()
 	dialog:Centre()
 
-	local id = dialog:ShowModal()
+	local id = showModalAndDestroy(dialog)
 	return returnValues[id]
 end
 
@@ -597,23 +614,23 @@ end
 
 -- width, height = getSize( wxObject )
 function getSize(obj)
-	local size = obj:GetSize()
-	return size:GetWidth(), size:GetHeight()
+	local size = obj.Size
+	return size.Width, size.Height
 end
 
 function getWidth(obj)
-	return obj:GetSize():GetWidth()
+	return obj.Size.Width
 end
 
 function getHeight(obj)
-	return obj:GetSize():GetHeight()
+	return obj.Size.Height
 end
 
 
 
 function statusBarInitFields(statusBar, widths)
-	statusBar:SetFieldsCount(#widths)
-	statusBar:SetStatusWidths(widths)
+	statusBar.FieldsCount  = #widths
+	statusBar.StatusWidths = widths
 end
 
 
@@ -639,8 +656,8 @@ function setBoxSizer(window, direction, ...)
 		sizer:Add(child, ...)
 	end
 
-	window:SetAutoLayout(true)
-	window:SetSizer(sizer)
+	window.AutoLayout = true
+	window.Sizer      = sizer
 
 	return sizer
 end
@@ -658,8 +675,8 @@ function setBoxSizerWithSpace(window, direction, spaceOutside, spaceBetween, pro
 		sizer:Add(child, (proportion or 0), (flags or 0)+wxALL, spaceOutside)
 	end
 
-	window:SetAutoLayout(true)
-	window:SetSizer(sizer)
+	window.AutoLayout = true
+	window.Sizer      = sizer
 
 	return sizer
 end
@@ -675,11 +692,11 @@ end
 function checkBoxClick(checkbox)
 	local state = not checkbox:IsChecked()
 
-	checkbox:SetValue(state)
+	checkbox.Value = state
 
-	local e = wxCommandEvent(wxEVT_COMMAND_CHECKBOX_CLICKED, checkbox:GetId())
-	e:SetEventObject(checkbox)
-	e:SetInt(state and 1 or 0)
+	local e       = wxCommandEvent(wxEVT_COMMAND_CHECKBOX_CLICKED, checkbox.Id)
+	e.EventObject = checkbox
+	e.Int         = state and 1 or 0
 
 	checkbox:ProcessEvent(e)
 end
@@ -687,7 +704,7 @@ end
 
 
 function textCtrlSelectAll(textCtrl)
-	textCtrl:SetSelection(0, textCtrl:GetLastPosition())
+	textCtrl:SetSelection(0, textCtrl.LastPosition)
 end
 
 
@@ -695,7 +712,7 @@ end
 function clipboardSetText(s)
 	local data      = wxTextDataObject(s)
 	local clipboard = wxClipboard.Get()
-	clipboard:SetData(data)
+	clipboard.Data  = data
 end
 
 
@@ -741,7 +758,7 @@ function streamRead(stream, isText)
 
 	if not stream:CanRead() then  return ""  end
 
-	local len = stream:GetLength()
+	local len = stream.Length
 	if len ~= wxSEEK_MODE_INVALID_OFFSET then
 		local s = stream:Read(len)
 		if isText then
@@ -774,7 +791,7 @@ end
 -- processStarted = processStart( cmd, method [, callback ] )
 -- callback       = function( process, exitCode )
 -- method         = PROCESS_METHOD_ASYNC|PROCESS_METHOD_SYNC|PROCESS_METHOD_DETACHED
--- Note: PROCESS_METHOD_ASYNC does not use the callback in any way.
+-- Note: PROCESS_METHOD_DETACHED does not use the callback in any way.
 function processStart(cmd, method, cb)
 	assertarg(1, cmd,    "string")
 	assertarg(2, method, "number")
@@ -782,6 +799,8 @@ function processStart(cmd, method, cb)
 
 	-- Async.
 	if method == PROCESS_METHOD_ASYNC then
+		if DEBUG then  logprint("Process", "CMD(async): %s", cmd)  end
+
 		local process = wxProcess(topFrame or wxNULL)
 		process:Redirect()
 
@@ -811,6 +830,8 @@ function processStart(cmd, method, cb)
 
 	-- Sync.
 	elseif method == PROCESS_METHOD_SYNC then
+		if DEBUG then  logprint("Process", "CMD(sync): %s", cmd)  end
+
 		local process = wxProcess(topFrame or wxNULL)
 		process:Redirect()
 
@@ -822,6 +843,8 @@ function processStart(cmd, method, cb)
 
 	-- Detached.
 	elseif method == PROCESS_METHOD_DETACHED then
+		if DEBUG then  logprint("Process", "CMD(detach): %s", cmd)  end
+
 		local pid = wxExecute(cmd, wxEXEC_ASYNC + wxEXEC_NOHIDE)
 		return pid ~= 0
 
@@ -892,10 +915,36 @@ function processReadEnded(process, exitCode, isText)
 	assertarg(2, exitCode, "number")
 	assertarg(3, isText,   "boolean","nil")
 
-	local stream = exitCode ~= 0 and process:IsErrorAvailable() and process:GetErrorStream() or process:GetInputStream()
+	local stream = exitCode ~= 0 and process:IsErrorAvailable() and process.ErrorStream or process.InputStream
 	local s      = streamRead(stream, isText)
 
 	return s
+end
+
+
+
+function printHierarchy(window, _depth)
+	_depth = _depth or 0
+
+	if _depth == 0 then  print(window)  end
+
+	for i, child in eachChild(window) do
+		print(("\t"):rep(_depth+1)..i..": "..tostring(child))
+		printHierarchy(child, _depth+1)
+	end
+end
+
+
+
+-- id = showModalAndDestroy( dialog )
+function showModalAndDestroy(dialog)
+	local id = dialog:ShowModal()
+
+	if not dialog:Destroy() then
+		logprinterror("Gui", "Could not destroy dialog '%s'.", tostring(dialog))
+	end
+
+	return id
 end
 
 

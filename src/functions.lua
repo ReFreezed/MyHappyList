@@ -10,11 +10,10 @@
 --=
 --==============================================================
 
-	arrayIterator
 	assertf, assertarg, check
 	clamp
 	cleanupPath
-	cmdAsync, cmdSync, cmdCapture, scriptCaptureAsync, cmdEscapeArgs, run
+	cmdAsync, cmdSync, cmdCapture, scriptCaptureAsync, scriptRunDetached, isScriptRunning, cmdEscapeArgs, run
 	cwdPush, cwdPop
 	eatSpaces
 	encodeHtmlEntities
@@ -34,15 +33,20 @@
 	indexOf, itemWith, itemWithAll, indexWith
 	ipairsr, iprev
 	isAny
+	isHost
 	isInt
 	isStringMatchingAnyPattern
+	iterate, arrayIterator
+	logStart, logEnd, logHeader, log, logprint, logprinterror, logprintOnce
 	makePrintable
+	matchLines
 	newSet
 	newStringBuilder
 	openFileExternally, openFileInNotepad, showFileInExplorer
 	pack
 	pairsSorted
-	print, printOnce, printf, printfOnce, log, logprint, logprinterror, logprintOnce, printobj
+	print, printOnce, printf, printfOnce, printobj
+	quit, maybeQuit
 	range
 	removeItem
 	round
@@ -53,6 +57,7 @@
 	splitString
 	tablePathGet, tablePathSet
 	trim, trimNewlines
+	unzip
 
 --============================================================]]
 
@@ -97,19 +102,18 @@ function handleError(err)
 	local errWithStack = debug.traceback(tostring(err), 2)
 	print(errWithStack)
 
-	if logFile then
-		logFile:close()
-	end
+	logEnd()
 
-	if not DEBUG then
-	 	wxTextEntryDialog(
+	if isApp and not DEBUG then
+	 	local dialog = wxTextEntryDialog(
 	 		wxNULL,
 	 		"An error ocurred and the program crashed! Sorry about that.\n"
 	 			.."The log file may have more information.\n\nMessage:",
 	 		"Error",
 	 		errWithStack,
 	 		wxOK + wxCENTRE + wxTE_MULTILINE + wxTE_DONTWRAP
- 		):ShowModal()
+ 		)
+ 		showModalAndDestroy(dialog)
 	end
 
 	os.exit(1)
@@ -188,63 +192,6 @@ function printfOnce(s, ...)
 	printOnce(s:format(...))
 end
 
--- log( string )
--- log( formatString, ... )
-do
-	local logBuffer = {}
-
-	function log(s, ...)
-		if select("#", ...) > 0 then  s = s:format(...)  end
-
-		if not logFile then
-			table.insert(logBuffer, s)
-			return
-		end
-
-		for i, s in ipairs(logBuffer) do
-			writeLine(logFile, s)
-			logBuffer[i] = nil
-		end
-
-		writeLine(logFile, s)
-	end
-end
-
-function logprint(agent, s, ...)
-	if select("#", ...) > 0 then  s = s:format(...)  end
-
-	local time = getTime()
-	if agent then
-		printf("%s.%03d|%s| %s", os.date("%H:%M:%S", time), 1000*(time%1), agent, s)
-	else
-		printf("%s.%03d| %s", os.date("%H:%M:%S", time), 1000*(time%1), s)
-	end
-end
-
-function logprinterror(agent, s, ...)
-	if select("#", ...) > 0 then  s = s:format(...)  end
-
-	local time = getTime()
-	-- io.stdout:write("\27[91m") -- Bright red. (No support in Sublime. :/ )
-	if agent then
-		printf("%s.%03d|%s| Error: %s", os.date("%H:%M:%S", time), 1000*(time%1), agent, s)
-	else
-		printf("%s.%03d| Error: %s", os.date("%H:%M:%S", time), 1000*(time%1), s)
-	end
-	-- io.stdout:write("\27[0m")  -- Clean.
-end
-
-function logprintOnce(agent, s, ...)
-	if select("#", ...) > 0 then  s = s:format(...)  end
-
-	local time = getTime()
-	if agent then
-		printfOnce("%s.%03d|%s| %s", os.date("%H:%M:%S", time), 1000*(time%1), agent, s)
-	else
-		printfOnce("%s.%03d| %s", os.date("%H:%M:%S", time), 1000*(time%1), s)
-	end
-end
-
 -- printobj( ... )
 -- Note: Does not write to log.
 do
@@ -308,7 +255,106 @@ do
 		end
 		out:write("\n")
 	end
+end
 
+
+
+do
+	local logBuffer = {}
+
+	local function logEmptyBuffer()
+		for i, s in ipairs(logBuffer) do
+			writeLine(logFile, s)
+			logBuffer[i] = nil
+		end
+	end
+
+	function logStart(basename)
+		if logFile then
+			errorf(2, "Log file already started. (new: '%s', old: '%s')", basename, logFilePath)
+		end
+
+		logFilePath = F("%s/%s.log", DIR_LOGS, basename)
+		logFile     = assert(openFile(logFilePath, "a"))
+
+		logEmptyBuffer()
+	end
+
+	function logEnd()
+		if not logFile then  return  end
+
+		logFile:close()
+		logFile = nil
+	end
+
+	function logHeader()
+		log("~~~ MyHappyList ~~~")
+		log(os.date"%Y-%m-%d %H:%M:%S")
+
+		if DEBUG_LOCAL then
+			print("!! DEBUG (local) !!")
+		elseif DEBUG then
+			print("!!!!!! DEBUG !!!!!!")
+		end
+	end
+
+	-- log( string )
+	-- log( formatString, ... )
+	function log(s, ...)
+		if select("#", ...) > 0 then  s = s:format(...)  end
+
+		if not logFile then
+			table.insert(logBuffer, s)
+			return
+		end
+
+		logEmptyBuffer()
+		writeLine(logFile, s)
+	end
+
+	-- logprint( agent, string )
+	-- logprint( agent, formatString, ... )
+	-- agent can be nil.
+	function logprint(agent, s, ...)
+		if select("#", ...) > 0 then  s = s:format(...)  end
+
+		local time = getTime()
+		if agent then
+			printf("%s.%03d|%s| %s", os.date("%H:%M:%S", time), 1000*(time%1), agent, s)
+		else
+			printf("%s.%03d| %s", os.date("%H:%M:%S", time), 1000*(time%1), s)
+		end
+	end
+
+	-- logprinterror( agent, string )
+	-- logprinterror( agent, formatString, ... )
+	-- agent can be nil.
+	function logprinterror(agent, s, ...)
+		if select("#", ...) > 0 then  s = s:format(...)  end
+
+		local time = getTime()
+		-- io.stdout:write("\27[91m") -- Bright red. (No support in Sublime. :/ )
+		if agent then
+			printf("%s.%03d|%s| Error: %s", os.date("%H:%M:%S", time), 1000*(time%1), agent, s)
+		else
+			printf("%s.%03d| Error: %s", os.date("%H:%M:%S", time), 1000*(time%1), s)
+		end
+		-- io.stdout:write("\27[0m")  -- Clean.
+	end
+
+	-- logprintOnce( agent, string )
+	-- logprintOnce( agent, formatString, ... )
+	-- agent can be nil.
+	function logprintOnce(agent, s, ...)
+		if select("#", ...) > 0 then  s = s:format(...)  end
+
+		local time = getTime()
+		if agent then
+			printfOnce("%s.%03d|%s| %s", os.date("%H:%M:%S", time), 1000*(time%1), agent, s)
+		else
+			printfOnce("%s.%03d| %s", os.date("%H:%M:%S", time), 1000*(time%1), s)
+		end
+	end
 end
 
 
@@ -823,14 +869,35 @@ function cmdCapture(cmd)
 	return output
 end
 
--- processStarted = scriptCaptureAsync( scriptName, callback, arg1, ... )
--- callback = function( output )
-function scriptCaptureAsync(scriptName, cb, ...)
-	local cmd = cmdEscapeArgs("wlua5.1.exe", "src/script.lua", scriptName, ...)
+do
+	local scriptsRunning = {}
 
-	return (processStart(cmd, PROCESS_METHOD_ASYNC, function(process, exitCode)
-		cb(processReadEnded(process, exitCode, true))
-	end))
+	-- processStarted = scriptCaptureAsync( scriptName, callback, arg1, ... )
+	-- callback = function( output )
+	function scriptCaptureAsync(scriptName, cb, ...)
+		local cmd = cmdEscapeArgs("wlua5.1.exe", "src/script.lua", scriptName, ...)
+
+		local ok = processStart(cmd, PROCESS_METHOD_ASYNC, function(process, exitCode)
+			scriptsRunning[scriptName] = false
+			cb(processReadEnded(process, exitCode, true))
+		end)
+
+		if not ok then  return false  end
+
+		scriptsRunning[scriptName] = true
+		return true
+	end
+
+	-- processStarted = scriptRunDetached( scriptName, arg1, ... )
+	function scriptRunDetached(scriptName, ...)
+		local cmd = cmdEscapeArgs("wlua5.1.exe", "src/script.lua", scriptName, ...)
+
+		return processStart(cmd, PROCESS_METHOD_DETACHED)
+	end
+
+	function isScriptRunning(scriptName)
+		return scriptsRunning[scriptName] or false
+	end
 end
 
 function cmdEscapeArgs(...)
@@ -839,7 +906,10 @@ function cmdEscapeArgs(...)
 	for i = 1, select('#', ...) do
 		local arg = select(i, ...)
 
-		if arg:find'[%z\n\r]' then
+		if type(arg) == "number" then
+			arg = tostring(arg)
+
+		elseif arg:find'[%z\n\r]' then
 			print("Arg "..i..": "..arg)
 			error("Argument contains invalid characters.")
 		end
@@ -875,6 +945,36 @@ end
 
 
 
+-- for value... in iterate( callback, argument... ) do
+-- 'value...' is whatever the callback yields.
+do
+	local coroutine_create = coroutine.create
+	local coroutine_resume = coroutine.resume
+	local coroutine_wrap   = coroutine.wrap
+	local coroutine_yield  = coroutine.yield
+
+	local function initiator(cb, ...)
+		coroutine_yield()
+		return cb(...)
+	end
+
+	local function iterator(co)
+		return select(2, assert(coroutine_resume(co)))
+	end
+
+	function iterate(cb, ...)
+		if select('#', ...) <= 2 then
+			return coroutine_wrap(cb), ...
+		end
+
+		local co = coroutine_create(initiator)
+		assert(coroutine_resume(co, cb, ...))
+
+		return iterator, co
+	end
+end
+
+-- for item in arrayIterator( array ) do
 function arrayIterator(t)
 	local i = 0
 
@@ -882,7 +982,7 @@ function arrayIterator(t)
 		i = i+1
 		local v = t[i]
 
-		if v ~= n then  return v  end
+		if v ~= nil then  return v  end
 	end
 end
 
@@ -1109,6 +1209,79 @@ do
 	function cwdPop()
 		wxSetWorkingDirectory(table.remove(cwds))
 	end
+end
+
+
+
+-- line1, ... [, rest ] = matchLines( string, lineCount [, returnRest=false ] )
+function matchLines(s, count, rest)
+	if count < 1 then
+		if rest then  return s  end
+		return
+	end
+
+	local pat = "^([^\n]+)" .. ("\n([^\n]+)"):rep(count-1)
+	if rest then
+		pat = pat.."\n?(.*)"
+	end
+
+	return s:match(pat)
+end
+
+
+
+function isHost(host, wantedHost)
+	return
+		host == wantedHost
+		or #host > #wantedHost and ("."..host):sub(#host+1-#wantedHost) == "."..wantedHost
+end
+
+
+
+function quit()
+	topFrame:Close(true)
+	wxGetApp():ExitMainLoop()
+end
+
+function maybeQuit()
+	if topFrame:Close() then
+		wxGetApp():ExitMainLoop()
+	end
+end
+
+
+
+-- success, errorMessage = unzip( zipFilePath, targetDirectory [, unwrapRootDirectoryInZipFile=false ] )
+function unzip(zipPath, targetDir, unwrapRoot)
+	if not isDirectoryWritable(targetDir) then
+		return false, targetDir..": Directory is not writable."
+	end
+
+	local zip = assert(require"zip".open(zipPath))
+
+	for archivedFile in zip:files() do
+		local pathRel = archivedFile.filename
+
+		-- Directory.
+		if pathRel:find"/$" then
+			pathRel = pathRel:sub(1, #pathRel-1)
+
+			local path = targetDir.."/"..(unwrapRoot and pathRel:gsub("^[^/]+/", "") or pathRel)
+			assert(createDirectory(path))
+
+		-- File.
+		else
+			local file     = assert(zip:open(pathRel))
+			local contents = file:read"*a"
+			file:close()
+
+			local path = targetDir.."/"..(unwrapRoot and pathRel:gsub("^[^/]+/", "") or pathRel)
+			assert(writeFile(path, contents))
+		end
+	end
+
+	zip:close()
+	return true
 end
 
 

@@ -4,6 +4,11 @@
 --=
 --=  Args: pathToFileToHash
 --=
+--=  Outputs:
+--=    ed2k: <ed2kHash>
+--=
+--=    <error>
+--=
 --=-------------------------------------------------------------
 --=
 --=  MyHappyList - manage your AniDB MyList

@@ -16,7 +16,6 @@
 
 	clearMessageQueue
 	destroy
-	events
 	getCacheMylist
 	getCredentials, loadCredentials, setCredentials, removeCredentials
 	hashFile
@@ -143,7 +142,6 @@ local Anidb = {
 
 	responses               = nil,
 	messages                = nil,
-	theEvents               = nil,
 	cache                   = nil,
 	cachePartial            = nil,
 
@@ -182,7 +180,6 @@ local responseHandlers
 --==============================================================
 
 local _logprint, _logprinterror
-local addEvent, clearEvents
 local applyMylistaddValues, compareMylistaddValues
 local blackout, loadBlackout
 local cacheSave, cacheLoad, cacheDelete
@@ -395,7 +392,7 @@ do
 		-- Actually, since we only send one message at a time, we should indeed insert the message first!
 		addMessage(self, msg, true)
 
-		addEvent(self, "resend", msg.command)
+		eventQueue:addEvent("resend", msg.command)
 	end
 
 	local function loginAndResendMessage(self, msg)
@@ -405,7 +402,7 @@ do
 			if ok then
 				resendMessage(self, msg)
 			else
-				addEvent(self, "error", "Failed "..msg.command.." command because we couldn't log in.")
+				eventQueue:addEvent("error", "Failed "..msg.command.." command because we couldn't log in.")
 			end
 		end)
 
@@ -458,7 +455,7 @@ do
 		if not (statusCode or ""):find"^%d%d%d$" then
 			_logprinterror("Server response misses a code: %s", makePrintable(data))
 
-			addEvent(self, "error", "Bad format of response from the server for "..msg.command.." command.")
+			eventQueue:addEvent("error", "Bad format of response from the server for "..msg.command.." command.")
 			msg:callback(self, false)
 			return false
 		end
@@ -499,13 +496,13 @@ do
 		elseif statusCode == 502 then
 			local err = "AniDB denied access when we sent a "..msg.command.." command."
 			_logprinterror(err)
-			addEvent(self, "error", err)
+			eventQueue:addEvent("error", err)
 
 		-- ILLEGAL INPUT OR ACCESS DENIED
 		elseif statusCode == 505 then
 			local err = "AniDB got bad data when we sent a "..msg.command.." command. There may be a bug in MyHappyList."
 			_logprinterror(err)
-			addEvent(self, "error", err)
+			eventQueue:addEvent("error", err)
 
 		-- INVALID SESSION
 		elseif statusCode == 506 then
@@ -520,7 +517,7 @@ do
 
 		-- UNKNOWN COMMAND
 		elseif statusCode == 598 then
-			addEvent(self, "error", "AniDB does not recognize a "..msg.command.." command.")
+			eventQueue:addEvent("error", "AniDB does not recognize a "..msg.command.." command.")
 
 		-- Fatal error.
 		-- Note: 6XX messages do not always return the tag given with the command which caused the error!
@@ -534,7 +531,7 @@ do
 				if errServer ~= "" then
 					err = F("%s\nError message: %s", err, errServer)
 				end
-				addEvent(self, eName, err)
+				eventQueue:addEvent(eName, err)
 			end
 
 			local function pleaseReport()
@@ -612,7 +609,7 @@ function addMessage(self, msg, first)
 	self.messages[msg.tag] = msg
 	table.insert(self.messages, i, msg)
 
-	addEvent(self, "messagecount", #self.messages)
+	eventQueue:addOrReplaceEvent("message_count", #self.messages)
 end
 
 -- Note: We allow removeMessage() to be called more than once, unlike addMessage().
@@ -623,24 +620,7 @@ function removeMessage(self, msg)
 	self.messages[msg.tag] = nil
 	removeItem(self.messages, msg)
 
-	addEvent(self, "messagecount", #self.messages)
-end
-
-
-
-function addEvent(self, eName, ...)
-	assertarg(1, self,  "table")
-	assertarg(2, eName, "string")
-
-	table.insert(self.theEvents, {eName, ...})
-end
-
-function clearEvents(self, eName)
-	for i, eventData in ipairsr(self.theEvents) do
-		if eventData[1] == eName then
-			table.remove(self.theEvents, i)
-		end
-	end
+	eventQueue:addOrReplaceEvent("message_count", #self.messages)
 end
 
 
@@ -694,7 +674,7 @@ function blackout(self, duration)
 	_logprint("Blackout for %s.", durationStr)
 
 	if not self.isInBlackout then
-		addEvent(self, "blackoutstart")
+		eventQueue:addEvent("blackout_start")
 	end
 
 	self.blackoutUntil = math.floor(getTime()+duration)
@@ -1081,7 +1061,7 @@ do
 
 				saveEd2ks()
 
-				addEvent(self, "ed2kfail", path)
+				eventQueue:addEvent("ed2k_fail", path)
 				cb(ED2K_STATE_ERROR)
 
 				isProcessing = false
@@ -1102,7 +1082,7 @@ do
 
 			saveEd2ks()
 
-			addEvent(self, "ed2ksuccess", path, ed2kHash, fileSize)
+			eventQueue:addEvent("ed2k_success", path, ed2kHash, fileSize)
 			cb(ED2K_STATE_SUCCESS, ed2kHash, fileSize)
 
 			isProcessing = false
@@ -1117,7 +1097,7 @@ do
 
 		if not fileSize then
 			_logprinterror("Could not get info about file '%s': %s", path, err)
-			addEvent(self, "ed2kfail", path)
+			eventQueue:addEvent("ed2k_fail", path)
 			cb(ED2K_STATE_ERROR)
 			return
 		end
@@ -1143,7 +1123,7 @@ do
 				-- Both ed2ks and size match previous values.
 
 				-- This event may be overkill, but solves desync between local file list and ed2k list.
-				addEvent(self, "ed2ksuccess", path, ed2kHash, fileSize)
+				eventQueue:addEvent("ed2k_success", path, ed2kHash, fileSize)
 
 				cb(ED2K_STATE_SUCCESS, ed2kHash, fileSize)
 				return
@@ -1279,7 +1259,7 @@ responseHandlers = {
 
 	["PING"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			addEvent(self, "pingfail", "Something went wrong while sending ping. Check the log.")
+			eventQueue:addEvent("ping_fail", "Something went wrong while sending ping. Check the log.")
 
 		-- 300 PONG
 		elseif statusCode == 300 then
@@ -1295,7 +1275,7 @@ responseHandlers = {
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			addEvent(self, "pingfail", "AniDB error "..statusCode..": "..statusText)
+			eventQueue:addEvent("ping_fail", "AniDB error "..statusCode..": "..statusText)
 		end
 	end,
 
@@ -1303,7 +1283,7 @@ responseHandlers = {
 
 	["AUTH"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			addEvent(self, "loginfail", "Something went wrong while logging in. Check the log.")
+			eventQueue:addEvent("login_fail", "Something went wrong while logging in. Check the log.")
 			self.onLogin(false)
 
 		-- 200 session_key LOGIN ACCEPTED
@@ -1328,9 +1308,9 @@ responseHandlers = {
 				end
 			end
 
-			addEvent(self, "loginsuccess")
+			eventQueue:addEvent("login_success")
 			if statusCode == 201 then
-				addEvent(self, "newversionavailable")
+				eventQueue:addEvent("new_version_available")
 			end
 			self.onLogin(true)
 
@@ -1338,12 +1318,12 @@ responseHandlers = {
 		elseif statusCode == 500 then
 			self:removeCredentials()
 			self.canAskForCredentials = true
-			addEvent(self, "loginbadlogin")
+			eventQueue:addEvent("login_badlogin")
 			self.onLogin(false)
 
 		-- 503 CLIENT VERSION OUTDATED
 		elseif statusCode == 503 then
-			addEvent(self, "loginfail", "MyHappyList is outdated. Please download the newest version.")
+			eventQueue:addEvent("login_fail", "MyHappyList is outdated. Please download the newest version.")
 			self.onLogin(false)
 
 		-- 504 CLIENT BANNED - reason
@@ -1351,12 +1331,12 @@ responseHandlers = {
 			local reason = trim(statusText:match"%- (.+)" or "")
 			reason       = reason == "" and "No reason given." or "Reason: "..reason
 
-			addEvent(self, "loginfail", "The client has been banned from AniDB.\n"..reason)
+			eventQueue:addEvent("login_fail", "The client has been banned from AniDB.\n"..reason)
 			self.onLogin(false)
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			addEvent(self, "loginfail", "AniDB error "..statusCode..": "..statusText)
+			eventQueue:addEvent("login_fail", "AniDB error "..statusCode..": "..statusText)
 			self.onLogin(false)
 		end
 	end,
@@ -1365,22 +1345,22 @@ responseHandlers = {
 
 	["LOGOUT"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			addEvent(self, "logoutfail", "Something went wrong while logging out. Check the log.")
+			eventQueue:addEvent("logoutfail", "Something went wrong while logging out. Check the log.")
 
 		-- 203 LOGGED OUT
 		elseif statusCode == 203 then
 			dropSession(self)
-			addEvent(self, "logoutsuccess")
+			eventQueue:addEvent("logoutsuccess")
 
 		-- 403 NOT LOGGED IN
 		elseif statusCode == 403 then
 			_logprinterror("Tried to log out, but we weren't logged in.")
 			dropSession(self)
-			addEvent(self, "logoutsuccess") -- Still count as success.
+			eventQueue:addEvent("logoutsuccess") -- Still count as success.
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			addEvent(self, "logoutfail", "AniDB error "..statusCode..": "..statusText)
+			eventQueue:addEvent("logoutfail", "AniDB error "..statusCode..": "..statusText)
 		end
 	end,
 
@@ -1388,7 +1368,7 @@ responseHandlers = {
 
 	["MYLIST"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			addEvent(self, "mylistgetfail", "Something went wrong while retrieving mylist entries. Check the log.")
+			eventQueue:addEvent("mylistget_fail", "Something went wrong while retrieving mylist entries. Check the log.")
 
 		-- 221 MYLIST\nint4 lid|int fid|int eid|int aid|int gid|int date|int state|int viewdate|str storage|str source|str other|int filestate
 		elseif statusCode == 221 then
@@ -1431,7 +1411,7 @@ responseHandlers = {
 				cacheSave(self, "f", fileEntryPartial, true)
 			end
 
-			addEvent(self, "mylistgetsuccess", mylistEntry)
+			eventQueue:addEvent("mylistget_success", mylistEntry)
 
 		-- 312 MULTIPLE MYLIST ENTRIES\nstr anime title|int episodes|str eps with state unknown|str eps with state on hhd|str eps with state on cd|str eps with state deleted|str watched eps|str group 1 short name|str eps for group 1|...
 		elseif statusCode == 312 then
@@ -1461,16 +1441,16 @@ responseHandlers = {
 				})
 			end
 
-			addEvent(self, "mylistgetfoundmultipleentries", mylistSelection)
+			eventQueue:addEvent("mylistget_found_multiple_entries", mylistSelection)
 
 		-- 321 NO SUCH ENTRY
 		elseif statusCode == 321 then
 			-- @Robustness @Check: Are ed2k and size params always set here?
-			addEvent(self, "mylistgetmissing", msg.params.ed2k, msg.params.size)
+			eventQueue:addEvent("mylistget_missing", msg.params.ed2k, msg.params.size)
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			addEvent(self, "mylistgetfail", "AniDB error "..statusCode..": "..statusText)
+			eventQueue:addEvent("mylistget_fail", "AniDB error "..statusCode..": "..statusText)
 		end
 	end,
 
@@ -1478,7 +1458,7 @@ responseHandlers = {
 
 	["MYLISTADD"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			addEvent(self, "mylistaddfail", "Something went wrong while adding mylist entries. Check the log.")
+			eventQueue:addEvent("mylistadd_fail", "Something went wrong while adding mylist entries. Check the log.")
 
 		-- 210 MYLIST ENTRY ADDED\nint mylist id of new entry
 		-- 210 MYLIST ENTRY ADDED\nint number of entries added
@@ -1487,7 +1467,7 @@ responseHandlers = {
 
 			if msg.params.aid or msg.params.aname then
 				local count = paramNumberDecode(nextField())
-				addEvent(self, "mylistaddsuccessmultiple", count)
+				eventQueue:addEvent("mylistadd_success_multiple", count)
 				return
 			end
 
@@ -1513,7 +1493,7 @@ responseHandlers = {
 			}
 			mylistEntryPartial = cacheSave(self, "l", mylistEntryPartial, true)
 
-			addEvent(self, "mylistaddsuccess", mylistEntryPartial, false)
+			eventQueue:addEvent("mylistadd_success", mylistEntryPartial, false)
 
 		-- 310 FILE ALREADY IN MYLIST\nint lid|int fid|int eid|int aid|int gid|int date|int state|int viewdate|str storage|str source|str other|int filestate
 		elseif statusCode == 310 then
@@ -1556,10 +1536,10 @@ responseHandlers = {
 				cacheSave(self, "f", fileEntryPartial, true)
 			end
 
-			addEvent(self, "mylistaddsuccess", mylistEntry, false)
+			eventQueue:addEvent("mylistadd_success", mylistEntry, false)
 
 			-- Also trigger a "get" event, as we may only have had a partial entry before, and now we got a full one.
-			addEvent(self, "mylistgetsuccess", mylistEntry)
+			eventQueue:addEvent("mylistget_success", mylistEntry)
 
 		-- 311 MYLIST ENTRY EDITED
 		-- 311 MYLIST ENTRY EDITED\nint number of entries edited
@@ -1568,7 +1548,7 @@ responseHandlers = {
 
 			if msg.params.aid or msg.params.aname then
 				local count = paramNumberDecode(nextField())
-				addEvent(self, "mylistaddsuccessmultiple", count)
+				eventQueue:addEvent("mylistadd_success_multiple", count)
 				return
 			end
 
@@ -1607,13 +1587,13 @@ responseHandlers = {
 			local isPartial = (mylistEntry == nil)
 			mylistEntryMaybePartial = cacheSave(self, "l", mylistEntryMaybePartial, isPartial)
 
-			addEvent(self, "mylistaddsuccess", mylistEntryMaybePartial, true)
+			eventQueue:addEvent("mylistadd_success", mylistEntryMaybePartial, true)
 
 		-- 320 NO SUCH FILE
 		elseif statusCode == 320 and msg.params.fid then
-			addEvent(self, "mylistaddnofile", msg.params.fid)
+			eventQueue:addEvent("mylistadd_no_file", msg.params.fid)
 		elseif statusCode == 320 and msg.params.ed2k then
-			addEvent(self, "mylistaddnofilewithhash", msg.params.ed2k, msg.params.size)
+			eventQueue:addEvent("mylistadd_no_file_with_hash", msg.params.ed2k, msg.params.size)
 
 		-- 322 MULTIPLE FILES FOUND\nint fid 1|int fid 2|...|int fid n
 		elseif statusCode == 322 then
@@ -1628,23 +1608,23 @@ responseHandlers = {
 				end
 			end
 
-			addEvent(self, "mylistaddfoundmultiplefiles", fids)
+			eventQueue:addEvent("mylistadd_found_multiple_files", fids)
 
 		-- 330 NO SUCH ANIME
 		elseif statusCode == 330 and msg.params.aid then
-			addEvent(self, "mylistaddfail", "No anime on AniDB with ID %d.", msg.params.aid)
+			eventQueue:addEvent("mylistadd_fail", "No anime on AniDB with ID %d.", msg.params.aid)
 
 		-- 350 NO SUCH GROUP
 		elseif statusCode == 350 and msg.params.gid then
-			addEvent(self, "mylistaddfail", "No group on AniDB with ID %d.", msg.params.gid)
+			eventQueue:addEvent("mylistadd_fail", "No group on AniDB with ID %d.", msg.params.gid)
 
 		-- 411 NO SUCH MYLIST ENTRY
 		elseif statusCode == 411 then
-			addEvent(self, "mylistaddfail", "No mylist entry with ID %d.", msg.params.lid)
+			eventQueue:addEvent("mylistadd_fail", "No mylist entry with ID %d.", msg.params.lid)
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			addEvent(self, "mylistaddfail", "AniDB error "..statusCode..": "..statusText)
+			eventQueue:addEvent("mylistadd_fail", "AniDB error "..statusCode..": "..statusText)
 		end
 	end,
 
@@ -1652,7 +1632,7 @@ responseHandlers = {
 
 	["MYLISTDEL"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			addEvent(self, "mylistdeletefail", "Something went wrong while deleting mylist entries. Check the log.")
+			eventQueue:addEvent("mylistdelete_fail", "Something went wrong while deleting mylist entries. Check the log.")
 
 		-- 211 MYLIST ENTRY DELETED\nint number of entries
 		elseif statusCode == 211 then
@@ -1666,7 +1646,7 @@ responseHandlers = {
 
 				if mylistEntryMaybePartial then
 					cacheDelete(self, "l", mylistEntryMaybePartial)
-					addEvent(self, "mylistdeletesuccess", mylistEntryMaybePartial)
+					eventQueue:addEvent("mylistdelete_success", mylistEntryMaybePartial)
 				end
 
 			elseif msg.params.fid then
@@ -1676,7 +1656,7 @@ responseHandlers = {
 
 				if mylistEntryMaybePartial then
 					cacheDelete(self, "l", mylistEntryMaybePartial)
-					addEvent(self, "mylistdeletesuccess", mylistEntryMaybePartial)
+					eventQueue:addEvent("mylistdelete_success", mylistEntryMaybePartial)
 				end
 
 			elseif msg.params.ed2k then
@@ -1686,7 +1666,7 @@ responseHandlers = {
 
 				if mylistEntryMaybePartial then
 					cacheDelete(self, "l", mylistEntryMaybePartial)
-					addEvent(self, "mylistdeletesuccess", mylistEntryMaybePartial)
+					eventQueue:addEvent("mylistdelete_success", mylistEntryMaybePartial)
 				end
 
 			-- elseif msg.params.aname then
@@ -1705,11 +1685,11 @@ responseHandlers = {
 
 		-- 411 NO SUCH MYLIST ENTRY
 		elseif statusCode == 411 then
-			addEvent(self, "mylistdeletefail", "No mylist entry with ID %d.", msg.params.lid)
+			eventQueue:addEvent("mylistdelete_fail", "No mylist entry with ID %d.", msg.params.lid)
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			addEvent(self, "mylistdeletefail", "AniDB error "..statusCode..": "..statusText)
+			eventQueue:addEvent("mylistdelete_fail", "AniDB error "..statusCode..": "..statusText)
 		end
 	end,
 
@@ -1725,7 +1705,6 @@ responseHandlers = {
 function Anidb:init()
 	self.responses = {}
 	self.messages  = {}
-	self.theEvents = {}
 
 	self.previousResponseTimes = {}
 
@@ -1837,7 +1816,7 @@ function Anidb:setCredentials(user, pass)
 
 	file:close()
 
-	clearEvents(self, "needcredentials")
+	eventQueue:clearEvents("need_credentials")
 	self.canAskForCredentials = true
 end
 
@@ -1922,7 +1901,7 @@ function Anidb:getMylist(lid, force)
 	if not force then
 		local mylistEntry = itemWith(self.cache.l, "lid",lid)
 		if mylistEntry then
-			addEvent(self, "mylistgetsuccess", mylistEntry)
+			eventQueue:addEvent("mylistget_success", mylistEntry)
 			return
 		end
 	end
@@ -1969,7 +1948,7 @@ function Anidb:getMylistByEd2k(ed2kHash, fileSize)
 
 	local mylistEntry = itemWith(self.cache.l, "ed2k",ed2kHash, "size",fileSize)
 	if mylistEntry then
-		addEvent(self, "mylistgetsuccess", mylistEntry)
+		eventQueue:addEvent("mylistget_success", mylistEntry)
 		return
 	end
 
@@ -2026,7 +2005,7 @@ function Anidb:addMylistByEd2k(ed2kHash, fileSize, values)
 		or itemWith(self.cachePartial.l, "ed2k",ed2kHash, "size",fileSize)
 
 	if mylistEntryMaybePartial then
-		addEvent(self, "mylistaddsuccess", mylistEntryMaybePartial, false)
+		eventQueue:addEvent("mylistadd_success", mylistEntryMaybePartial, false)
 		return
 	end
 
@@ -2105,7 +2084,7 @@ function Anidb:update(force)
 
 	if self.isInBlackout and time >= self.blackoutUntil then
 		self.isInBlackout = false
-		addEvent(self, "blackoutstop")
+		eventQueue:addEvent("blackout_stop")
 	end
 
 	-- Get responses.
@@ -2140,7 +2119,7 @@ function Anidb:update(force)
 				msg.stage = MESSAGE_STAGE_RESPONSE_TIMEOUT
 				removeMessage(self, msg)
 
-				addEvent(self, "errorresponsetimeout", msg.command)
+				eventQueue:addEvent("error_response_timeout", msg.command)
 				msg:callback(self, false)
 			end
 		end
@@ -2160,7 +2139,7 @@ function Anidb:update(force)
 			if not (user and pass) then
 				if self.canAskForCredentials then
 					self.canAskForCredentials = false
-					addEvent(self, "needcredentials")
+					eventQueue:addEvent("need_credentials")
 				end
 				okToSend = false
 
@@ -2208,17 +2187,6 @@ function Anidb:update(force)
 	-- Send ping.
 	if self.isActive and time > self.responseTimeLast+self.pingDelay and not isAnyMessageInTransit(self) then
 		self:ping()
-	end
-end
-
-
-
--- for eventName, value1, ... in events( ) do
-function Anidb:events()
-	local es = self.theEvents
-	return function()
-		if isPaused() then  return  end
-		if es[1]      then  return unpack(table.remove(es, 1))  end
 	end
 end
 

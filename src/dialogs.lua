@@ -16,6 +16,7 @@
 	credentials
 	missingFile
 	settings
+	updateApp
 
 --============================================================]]
 
@@ -74,7 +75,7 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 	sizerParent:Add(viewedRadio, 0, wxGROW)
 
 	if valuesCurrent and valuesCurrent.viewed ~= nil then
-		viewedRadio:SetSelection(indexWith(VIEWED_STATES, "value", valuesCurrent.viewed)-1)
+		viewedRadio.Selection = indexWith(VIEWED_STATES, "value", valuesCurrent.viewed)-1
 	end
 
 	-- MyList state.
@@ -92,7 +93,7 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 	sizerParent:Add(mylistStateRadio, 0, wxGROW)
 
 	if valuesCurrent and valuesCurrent.state ~= nil then
-		mylistStateRadio:SetSelection(indexWith(MYLIST_STATES, "value", valuesCurrent.state)-1)
+		mylistStateRadio.Selection = indexWith(MYLIST_STATES, "value", valuesCurrent.state)-1
 	end
 
 	-- Source.
@@ -106,20 +107,20 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 	local sourceCheckbox = wxCheckBox(panel, wxID_ANY, "Source:")
 	sourceCheckbox:SetSizeHints(60, getHeight(sourceCheckbox))
 	sourceCheckbox:SetToolTip("I.e. ed2k, DC, FTP or IRC")
-	sourceCheckbox:SetValue(valuesCurrent ~= nil and valuesCurrent.source ~= nil)
+	sourceCheckbox.Value = (valuesCurrent ~= nil and valuesCurrent.source ~= nil)
 	sizerPanel:Add(sourceCheckbox, 0, wxGROW)
 
 	local sourceInput = wxTextCtrl(panel, wxID_ANY, (valuesCurrent and valuesCurrent.source or ""))
 	sourceInput:SetSizeHints(200, getHeight(sourceInput))
-	sourceInput:SetMaxLength(MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH)
-	sourceInput:SetToolTip(sourceCheckbox:GetToolTip():GetTip())
+	sourceInput.MaxLength = MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH
+	sourceInput:SetToolTip(sourceCheckbox.ToolTip.Tip)
 	sizerPanel:Add(sourceInput, 0, wxGROW)
 
 	if not (valuesCurrent and valuesCurrent.source) then
 		sourceInput:Enable(false)
 	end
 	if not valuesCurrent and mylistEntry and mylistEntry.source then
-		sourceInput:SetValue(mylistEntry.source)
+		sourceInput.Value = mylistEntry.source
 	end
 
 	on(sourceCheckbox, "COMMAND_CHECKBOX_CLICKED", function(e)
@@ -133,8 +134,8 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 		end
 	end)
 
-	panel:SetAutoLayout(true)
-	panel:SetSizer(sizerPanel)
+	panel.AutoLayout = true
+	panel.Sizer      = sizerPanel
 	sizerParent:Add(panel, 0, wxGROW)
 
 	-- Storage.
@@ -148,20 +149,20 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 	local storageCheckbox = wxCheckBox(panel, wxID_ANY, "Storage:")
 	storageCheckbox:SetSizeHints(60, getHeight(storageCheckbox))
 	storageCheckbox:SetToolTip("I.e. the label of the CD with this file")
-	storageCheckbox:SetValue(valuesCurrent ~= nil and valuesCurrent.storage ~= nil)
+	storageCheckbox.Value = (valuesCurrent ~= nil and valuesCurrent.storage ~= nil)
 	sizerPanel:Add(storageCheckbox, 0, wxGROW)
 
 	local storageInput = wxTextCtrl(panel, wxID_ANY, (valuesCurrent and valuesCurrent.storage or ""))
 	storageInput:SetSizeHints(200, getHeight(storageInput))
-	storageInput:SetMaxLength(MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH)
-	storageInput:SetToolTip(storageCheckbox:GetToolTip():GetTip())
+	storageInput.MaxLength = MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH
+	storageInput:SetToolTip(storageCheckbox.ToolTip.Tip)
 	sizerPanel:Add(storageInput, 0, wxGROW)
 
 	if not (valuesCurrent and valuesCurrent.storage) then
 		storageInput:Enable(false)
 	end
 	if not valuesCurrent and mylistEntry and mylistEntry.storage then
-		storageInput:SetValue(mylistEntry.storage)
+		storageInput.Value = mylistEntry.storage
 	end
 
 	on(storageCheckbox, "COMMAND_CHECKBOX_CLICKED", function(e)
@@ -175,8 +176,8 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 		end
 	end)
 
-	panel:SetAutoLayout(true)
-	panel:SetSizer(sizerPanel)
+	panel.AutoLayout = true
+	panel.Sizer      = sizerPanel
 	sizerParent:Add(panel, 0, wxGROW)
 
 	-- Other.
@@ -189,34 +190,34 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 
 	local otherCheckbox = wxCheckBox(panel, wxID_ANY, "Note:")
 	otherCheckbox:SetSizeHints(60, getHeight(otherCheckbox))
-	otherCheckbox:SetValue(valuesCurrent ~= nil and valuesCurrent.other ~= nil)
+	otherCheckbox.Value = (valuesCurrent ~= nil and valuesCurrent.other ~= nil)
 	sizerPanel:Add(otherCheckbox)
 
 	local otherInput = wxTextCtrl(
 		panel, wxID_ANY, (valuesCurrent and valuesCurrent.other or ""),
 		wxDEFAULT_POSITION, wxSize(200, 100), wxTE_MULTILINE
 	)
-	local colorOn  = otherInput:GetBackgroundColour()
+	local colorOn  = otherInput.BackgroundColour
 	local colorOff = wxSystemSettings.GetColour(wxSYS_COLOUR_3DFACE)
-	otherInput:SetMaxLength(MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH)
+	otherInput.MaxLength = MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH
 	sizerPanel:Add(otherInput, 0, wxGROW)
 
 	if not (valuesCurrent and valuesCurrent.other) then
 		otherInput:Enable(false)
-		otherInput:SetBackgroundColour(colorOff)
+		otherInput.BackgroundColour = colorOff
 	end
 	if not valuesCurrent and mylistEntry and mylistEntry.other then
-		otherInput:SetValue(mylistEntry.other)
+		otherInput.Value = mylistEntry.other
 	end
 
 	on(otherCheckbox, "COMMAND_CHECKBOX_CLICKED", function(e)
 		otherInput:Enable(e:IsChecked())
-		otherInput:SetBackgroundColour(e:IsChecked() and colorOn or colorOff)
+		otherInput.BackgroundColour = e:IsChecked() and colorOn or colorOff
 		otherInput:SetFocus()
 	end)
 
 	on(otherInput, "KEY_DOWN", function(e, kc)
-		if kc == KC_A and e:GetModifiers() == wxMOD_CONTROL then
+		if kc == KC_A and e.Modifiers == wxMOD_CONTROL then
 			textCtrlSelectAll(otherInput)
 		else
 			e:Skip()
@@ -229,8 +230,8 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 		end
 	end)
 
-	panel:SetAutoLayout(true)
-	panel:SetSizer(sizerPanel)
+	panel.AutoLayout = true
+	panel.Sizer      = sizerPanel
 	sizerParent:Add(panel, 0, wxGROW)
 
 	----------------------------------------------------------------
@@ -250,13 +251,17 @@ end
 
 
 function dialogs.about()
-	local title     = "MyHappyList "..APP_VERSION
-	local copyright = "Copyright © 2018 Marcus 'ReFreezed' Thunström. MIT license."
+	local title
+		= "MyHappyList "..APP_VERSION
+
+	local copyright
+		= "Copyright © 2018 Marcus 'ReFreezed' Thunström. MIT license."
+
 	local desciption
-		= "MyHappyList is made using Lua, wxLua, LuaSocket and rhash. "
+		= "MyHappyList is made using Lua, wxLua, LuaSocket, LuaZip, LuaSec and rhash. "
 		.."The executable is built using srlua, ResourceHacker and ImageMagick."
 
-	local dialog = wxDialog(topPanel, wxID_ANY, "About MyHappyList")
+	local dialog = wxDialog(topFrame, wxID_ANY, "About MyHappyList")
 	local sizer  = wxBoxSizer(wxVERTICAL)
 
 	-- Icon.
@@ -269,7 +274,7 @@ function dialogs.about()
 
 	-- Title.
 	local textObj = wxStaticText(dialog, wxID_ANY, title, wxDEFAULT_POSITION, wxDEFAULT_SIZE, wxALIGN_CENTRE_HORIZONTAL)
-	textObj:SetFont(fontTitle)
+	textObj.Font = fontTitle
 	sizer:Add(textObj, 0, wxGROW)
 
 	sizer:AddSpacer(MARGIN_M)
@@ -295,13 +300,13 @@ function dialogs.about()
 	local sizerWrapper = wxBoxSizer(wxHORIZONTAL)
 	sizerWrapper:Add(sizer, 0, wxGROW_ALL, MARGIN_L)
 
-	dialog:SetAutoLayout(true)
-	dialog:SetSizer(sizerWrapper)
+	dialog.AutoLayout = true
+	dialog.Sizer      = sizerWrapper
 
 	dialog:Fit()
 	dialog:Centre()
 
-	dialog:ShowModal()
+	showModalAndDestroy(dialog)
 end
 
 
@@ -315,7 +320,7 @@ function dialogs.addmylist(fileInfosToAddOrEdit)
 		mylistEntry = anidb:getCacheMylist(fileInfoFirst.lid)
 	end
 
-	local dialog       = wxDialog(topPanel, wxID_ANY, "Add to / Edit MyList")
+	local dialog       = wxDialog(topFrame, wxID_ANY, "Add to / Edit MyList")
 	local sizerDialog  = wxBoxSizer(wxVERTICAL)
 
 	-- File count text.
@@ -358,11 +363,11 @@ function dialogs.addmylist(fileInfosToAddOrEdit)
 	local sizerButtons = wxStdDialogButtonSizer()
 
 	local button = newButton(dialog, wxID_OK, "Add / Edit", function(e)
-		local viewed  = VIEWED_STATES[viewedRadio:GetSelection()+1].value
-		local state   = MYLIST_STATES[mylistStateRadio:GetSelection()+1].value
-		local storage = storageCheckbox:IsChecked() and storageInput:GetValue() or nil
-		local source  = sourceCheckbox:IsChecked()  and sourceInput:GetValue()  or nil
-		local other   = otherCheckbox:IsChecked()   and otherInput:GetValue()   or nil
+		local viewed  = VIEWED_STATES[viewedRadio.Selection+1].value
+		local state   = MYLIST_STATES[mylistStateRadio.Selection+1].value
+		local storage = storageCheckbox:IsChecked() and storageInput.Value or nil
+		local source  = sourceCheckbox:IsChecked()  and sourceInput.Value  or nil
+		local other   = otherCheckbox:IsChecked()   and otherInput.Value   or nil
 
 		local totalStrLen = #(storage or "") + #(source or "") + #(other or ""):gsub("\n", "<br />")
 
@@ -399,10 +404,10 @@ function dialogs.addmylist(fileInfosToAddOrEdit)
 
 		e:Skip()
 	end)
-	sizerButtons:SetAffirmativeButton(button)
+	sizerButtons.AffirmativeButton = button
 
 	local button = newButton(dialog, wxID_CANCEL, "Cancel")
-	sizerButtons:SetCancelButton(button)
+	sizerButtons.CancelButton = button
 
 	sizerButtons:Realize()
 	sizerDialog:Add(sizerButtons, 0, wxGROW)
@@ -412,19 +417,19 @@ function dialogs.addmylist(fileInfosToAddOrEdit)
 	local sizerWrapper = wxBoxSizer(wxHORIZONTAL)
 	sizerWrapper:Add(sizerDialog, 0, wxGROW_ALL, MARGIN_M)
 
-	dialog:SetAutoLayout(true)
-	dialog:SetSizer(sizerWrapper)
+	dialog.AutoLayout = true
+	dialog.Sizer      = sizerWrapper
 
 	dialog:Fit()
 	dialog:Centre()
 
-	dialog:ShowModal()
+	showModalAndDestroy(dialog)
 end
 
 
 
 function dialogs.credentials()
-	local dialog       = wxDialog(topPanel, wxID_ANY, "Credentials to AniDB")
+	local dialog       = wxDialog(topFrame, wxID_ANY, "Credentials to AniDB")
 	local sizerDialog  = wxBoxSizer(wxVERTICAL)
 
 	-- Inputs.
@@ -440,7 +445,7 @@ function dialogs.credentials()
 	sizerSection:Add(textObj)
 
 	local userInput = wxTextCtrl(dialog, wxID_ANY, (user or ""))
-	userInput:SetMaxLength(16)
+	userInput.MaxLength = 16
 	sizerSection:Add(userInput, 1, wxGROW)
 
 	sizerDialog:Add(sizerSection, 1, wxGROW)
@@ -455,7 +460,7 @@ function dialogs.credentials()
 	sizerSection:Add(textObj)
 
 	local passInput = wxTextCtrl(dialog, wxID_ANY, (pass or ""), wxDEFAULT_POSITION, wxDEFAULT_SIZE, wxTE_PASSWORD)
-	passInput:SetMaxLength(64)
+	passInput.MaxLength = 64
 	sizerSection:Add(passInput, 1, wxGROW)
 
 	sizerDialog:Add(sizerSection, 1, wxGROW)
@@ -476,8 +481,8 @@ function dialogs.credentials()
 	local sizerButtons = wxStdDialogButtonSizer()
 
 	local button = newButton(dialog, wxID_OK, "Save", function(e)
-		local user = userInput:GetValue()
-		local pass = passInput:GetValue()
+		local user = userInput.Value
+		local pass = passInput.Value
 
 		-- Username. 3-16 characters. A-Z, a-z, 0-9, - and _ only.
 		if #user < 3 or #user > 16 or user:find"[^-%w_]" then
@@ -495,10 +500,10 @@ function dialogs.credentials()
 			e:Skip()
 		end
 	end)
-	sizerButtons:SetAffirmativeButton(button)
+	sizerButtons.AffirmativeButton = button
 
 	local button = newButton(dialog, wxID_CANCEL, "Cancel")
-	sizerButtons:SetCancelButton(button)
+	sizerButtons.CancelButton = button
 
 	sizerButtons:Realize()
 	sizerDialog:Add(sizerButtons, 0, wxGROW)
@@ -508,8 +513,8 @@ function dialogs.credentials()
 	local sizerWrapper = wxBoxSizer(wxHORIZONTAL)
 	sizerWrapper:Add(sizerDialog, 0, wxGROW_ALL, MARGIN_M)
 
-	dialog:SetAutoLayout(true)
-	dialog:SetSizer(sizerWrapper)
+	dialog.AutoLayout = true
+	dialog.Sizer      = sizerWrapper
 
 	dialog:Fit()
 	dialog:Centre()
@@ -517,14 +522,14 @@ function dialogs.credentials()
 	show(loginButton, topPanel)
 
 	pause("credentials")
-	dialog:ShowModal()
+	showModalAndDestroy(dialog)
 	unpause("credentials")
 end
 
 
 
 function dialogs.settings()
-	local dialog       = wxDialog(topPanel, wxID_ANY, "Settings")
+	local dialog       = wxDialog(topFrame, wxID_ANY, "Settings")
 	local sizerDialog  = wxBoxSizer(wxVERTICAL)
 	local sizerGrid    = wxGridBagSizer(MARGIN_L, MARGIN_L) -- 2x2
 
@@ -541,22 +546,22 @@ function dialogs.settings()
 	----------------------------------------------------------------
 
 	local sizerBox = wxStaticBoxSizer(wxVERTICAL, dialog, "General")
-	sizerBox:GetStaticBox():SetFont(fontTitle)
+	sizerBox.StaticBox.Font = fontTitle
 
 	local autoHashCheckbox = wxCheckBox(dialog, wxID_ANY, "Start hashing files automatically")
-	autoHashCheckbox:SetValue(appSettings.autoHash)
+	autoHashCheckbox.Value = appSettings.autoHash
 	sizerBox:Add(autoHashCheckbox)
 
 	local autoAddToMylistCheckbox = wxCheckBox(dialog, wxID_ANY, "Automatically add files to MyList")
-	autoAddToMylistCheckbox:SetValue(appSettings.autoAddToMylist)
+	autoAddToMylistCheckbox.Value = appSettings.autoAddToMylist
 	sizerBox:Add(autoAddToMylistCheckbox, 0, wxTOP, MARGIN_S)
 
 	local autoRemoveDeletedFilesCheckbox = wxCheckBox(dialog, wxID_ANY, "Automatically remove moved/deleted files from list")
-	autoRemoveDeletedFilesCheckbox:SetValue(appSettings.autoRemoveDeletedFiles)
+	autoRemoveDeletedFilesCheckbox.Value = appSettings.autoRemoveDeletedFiles
 	sizerBox:Add(autoRemoveDeletedFilesCheckbox, 0, wxTOP, MARGIN_S)
 
 	local truncateFoldersCheckbox = wxCheckBox(dialog, wxID_ANY, "Show truncated folder paths")
-	truncateFoldersCheckbox:SetValue(appSettings.truncateFolders)
+	truncateFoldersCheckbox.Value = appSettings.truncateFolders
 	sizerBox:Add(truncateFoldersCheckbox, 0, wxTOP, MARGIN_M)
 
 	sizerGrid:Add(sizerBox, wxGBPosition(0, 0), wxGBSpan(1, 1), wxGROW)
@@ -565,7 +570,7 @@ function dialogs.settings()
 	----------------------------------------------------------------
 
 	local sizerBox = wxStaticBoxSizer(wxVERTICAL, dialog, "File Extensions")
-	sizerBox:GetStaticBox():SetFont(fontTitle)
+	sizerBox.StaticBox.Font = fontTitle
 
 	local textObj = wxStaticText(
 		dialog, wxID_ANY,
@@ -590,7 +595,7 @@ function dialogs.settings()
 	----------------------------------------------------------------
 
 	local sizerBox = wxStaticBoxSizer(wxVERTICAL, dialog, "MyList Defaults")
-	sizerBox:GetStaticBox():SetFont(fontTitle)
+	sizerBox.StaticBox.Font = fontTitle
 
 	local
 		viewedRadio,
@@ -614,11 +619,11 @@ function dialogs.settings()
 	local sizerButtons = wxStdDialogButtonSizer()
 
 	local button = newButton(dialog, wxID_OK, "Save", function(e)
-		local viewed  = VIEWED_STATES[viewedRadio:GetSelection()+1].value
-		local state   = MYLIST_STATES[mylistStateRadio:GetSelection()+1].value
-		local storage = storageCheckbox:IsChecked() and storageInput:GetValue() or nil
-		local source  = sourceCheckbox:IsChecked()  and sourceInput:GetValue()  or nil
-		local other   = otherCheckbox:IsChecked()   and otherInput:GetValue()   or nil
+		local viewed  = VIEWED_STATES[viewedRadio.Selection+1].value
+		local state   = MYLIST_STATES[mylistStateRadio.Selection+1].value
+		local storage = storageCheckbox:IsChecked() and storageInput.Value or nil
+		local source  = sourceCheckbox:IsChecked()  and sourceInput.Value  or nil
+		local other   = otherCheckbox:IsChecked()   and otherInput.Value   or nil
 
 		local totalStrLen = #(storage or "") + #(source or "") + #(other or ""):gsub("\n", "<br />")
 
@@ -642,7 +647,7 @@ function dialogs.settings()
 			other   = other,
 		}
 
-		local exts        = splitString(extensionsInput:GetValue(), "\n", 1, true)
+		local exts        = splitString(extensionsInput.Value, "\n", 1, true)
 		local extExisting = {[""]=true}
 
 		for i, ext in ipairsr(exts) do
@@ -668,10 +673,10 @@ function dialogs.settings()
 		updateFileList()
 		e:Skip()
 	end)
-	sizerButtons:SetAffirmativeButton(button)
+	sizerButtons.AffirmativeButton = button
 
 	local button = newButton(dialog, wxID_CANCEL, "Cancel")
-	sizerButtons:SetCancelButton(button)
+	sizerButtons.CancelButton = button
 
 	sizerButtons:Realize()
 	sizerDialog:Add(sizerButtons, 0, wxGROW)
@@ -681,13 +686,13 @@ function dialogs.settings()
 	local sizerWrapper = wxBoxSizer(wxHORIZONTAL)
 	sizerWrapper:Add(sizerDialog, 0, wxGROW_ALL, MARGIN_L)
 
-	dialog:SetAutoLayout(true)
-	dialog:SetSizer(sizerWrapper)
+	dialog.AutoLayout = true
+	dialog.Sizer      = sizerWrapper
 
 	dialog:Fit()
 	dialog:Centre()
 
-	dialog:ShowModal()
+	showModalAndDestroy(dialog)
 end
 
 
@@ -727,15 +732,15 @@ function dialogs.missingFile(path)
 		)
 
 		pause("wxFileDialog")
-		local id = dialog:ShowModal()
+		local id = showModalAndDestroy(dialog)
 		unpause("wxFileDialog")
 
 		if id == wxID_CANCEL then
-			cast(e:GetEventObject()):SetFocus(true) -- Fixes the dialog not getting back focus.
+			cast(e.EventObject):SetFocus() -- Fixes the dialog not getting back focus.
 			return
 		end
 
-		pathNew = toNormalPath(dialog:GetPath())
+		pathNew = toNormalPath(dialog.Path)
 		e:Skip() -- Continue closing the dialog.
 	end
 
@@ -760,7 +765,7 @@ end
 
 
 function dialogs.changelog()
-	local dialog = wxDialog(topPanel, wxID_ANY, "Changelog")
+	local dialog = wxDialog(topFrame, wxID_ANY, "Changelog")
 	local sizer  = wxBoxSizer(wxVERTICAL)
 
 	local changelog = getFileContents"Changelog.txt":gsub("\r", "")
@@ -775,13 +780,219 @@ function dialogs.changelog()
 	button:SetSizeHints(100, getHeight(button)+2*3)
 	sizer:Add(button, 0, wxALIGN_CENTRE_HORIZONTAL + wxALL, MARGIN_M)
 
-	dialog:SetAutoLayout(true)
-	dialog:SetSizer(sizer)
+	dialog.AutoLayout = true
+	dialog.Sizer      = sizer
 
 	dialog:Fit()
 	dialog:Centre()
 
-	dialog:ShowModal()
+	showModalAndDestroy(dialog)
+end
+
+
+do
+	local latestVersion = ""
+	local downloadUrl   = ""
+
+	--[[ DEBUG
+	latestVersion = "99.0.0"
+	downloadUrl   = "https://api.github.com/repos/ReFreezed/MyHappyList/releases/assets/8247018"
+	--]]
+
+	-- success = maybeGetLatestVersionNumber( )
+	local function maybeGetLatestVersionNumber()
+		if latestVersion ~= "" then
+			if latestVersion == APP_VERSION then
+				eventQueue:addEvent("git:version_up_to_date")
+			else
+				eventQueue:addEvent("git:version_new_available", latestVersion, downloadUrl)
+			end
+			return true
+		end
+
+		if isScriptRunning"getLatestVersionNumber" then  return true  end
+
+		local ok = scriptCaptureAsync("getLatestVersionNumber", function(output)
+			local status, body = matchLines(output, 1, true)
+
+			if status == ":version" then
+				local _latestVersion, _downloadUrl = matchLines(body, 2)
+
+				if not _latestVersion then
+					logprinterror("getLatestVersionNumber", output)
+					eventQueue:addEvent("git:version_fail", "getLatestVersionNumber: Internal script error.")
+					return
+				end
+
+				latestVersion = _latestVersion
+				downloadUrl   = _downloadUrl
+
+				if latestVersion == APP_VERSION then
+					eventQueue:addEvent("git:version_up_to_date")
+				else
+					eventQueue:addEvent("git:version_new_available", latestVersion, downloadUrl)
+				end
+
+			else
+				local err
+
+				if status == ":error_request" then
+					err = trim(body)
+					eventQueue:addEvent("git:version_fail", F("Error while trying to send request to GitHub: %s", err))
+
+				elseif status == ":error_http" then
+					local statusCode, statusText = matchLines(body, 2)
+					err = F("Bad response from GitHub: %s", statusText)
+
+				elseif status == ":error_malformed_response" then
+					err = trim(body)
+					if err == "" then  err = "?"  end
+					err = F("Malformed response from GitHub: %s", err)
+
+				else
+					err = trim(output)
+					if err == "" then  err = "?"  end
+					err = F("Unknown error while trying to send request to GitHub: %s", err)
+				end
+
+				logprinterror("getLatestVersionNumber", output)
+				eventQueue:addEvent("git:version_fail", err)
+			end
+		end)
+
+		if not ok then
+			showError("Error", "getLatestVersionNumber: Could not run script.")
+			return false
+		end
+
+		return true
+	end
+
+	local function listenStart(dialog, textObj, updateButton)
+		local eventHandlers = require"eventHandlers"
+
+		eventHandlers["git:version_up_to_date"] = function()
+			textObj.Label = "You have the latest version!"
+			dialog:Fit()
+			dialog:Layout()
+		end
+
+		eventHandlers["git:version_new_available"] = function(_latestVersion, _downloadUrl)
+			textObj.Label = F("Version %s avaliable. You have version %s.", _latestVersion, APP_VERSION)
+			updateButton:Enable(true)
+			dialog:Fit()
+			dialog:Layout()
+		end
+
+		eventHandlers["git:version_fail"] = function(userMessage)
+			textObj.Label = "Error: "..userMessage
+			dialog:Fit()
+			dialog:Layout()
+		end
+	end
+
+	local function listenStop()
+		local eventHandlers = require"eventHandlers"
+		eventHandlers["git:version_up_to_date"]    = nil
+		eventHandlers["git:version_new_available"] = nil
+		eventHandlers["git:version_fail"]          = nil
+	end
+
+	function dialogs.updateApp()
+		if not maybeGetLatestVersionNumber() then  return  end
+
+		local dialog       = wxDialog(topFrame, wxID_ANY, "Update MyHappyList")
+		local sizerDialog  = wxBoxSizer(wxVERTICAL)
+
+		local updateButton, cancelButton
+
+		local isDownloading = false
+
+		on(dialog, wxID_CANCEL, "COMMAND_BUTTON_CLICKED", function(e)
+			if isDownloading then  return  end -- Abort closing.
+
+			e:Skip() -- Proceed with closing.
+		end)
+
+		-- Text.
+		----------------------------------------------------------------
+
+		local textObj = wxStaticText(
+			dialog, wxID_ANY, "Checking for a newer version...",
+			wxDEFAULT_POSITION, wxDEFAULT_SIZE, wxTE_CENTRE
+		)
+		textObj:SetSizeHints(300, getHeight(textObj))
+		sizerDialog:Add(textObj, 0, wxGROW)
+
+		-- Buttons.
+		----------------------------------------------------------------
+
+		local sizerButtons = wxStdDialogButtonSizer()
+
+		updateButton = newButton(dialog, wxID_OK, "Update", function(e)
+			local path = DIR_TEMP.."/LatestVersion.zip"
+
+			local ok = scriptCaptureAsync("download", function(output)
+				isDownloading = false
+
+				local status, rest = matchLines(output, 1, true)
+
+				if status ~= ":success" then
+					logprinterror("download", "Could not download '%s' to '%s':\n%s", downloadUrl, path, output)
+					dialog:EndModal(wxID_CANCEL)
+					showError("Error", "Could not download the latest version.")
+					return
+				end
+
+				if not scriptRunDetached("updateApp", path, wxGetProcessId()) then
+					dialog:EndModal(wxID_CANCEL)
+					showError("Error", "updateApp: Could not run script.")
+					return
+				end
+
+				-- Don't remove the downloaded file!
+				clearTempDirOnExit = false
+
+				-- Should we force quit here? Surely no one would update while
+				-- AniDB messages are in transit or anything. Surely. <_<
+				quit()
+			end, downloadUrl, path)
+
+			if not ok then
+				showError("Error", "download: Could not run script.")
+				e:Skip()
+				return
+			end
+
+			isDownloading = true
+			updateButton:Enable(false)
+			cancelButton:Enable(false)
+			-- pause("updating") -- Bad! We need events to flow!
+		end)
+		updateButton:Enable(false)
+		sizerButtons.AffirmativeButton = updateButton
+
+		cancelButton = newButton(dialog, wxID_CANCEL, "Cancel")
+		sizerButtons.CancelButton = cancelButton
+
+		sizerButtons:Realize()
+		sizerDialog:Add(sizerButtons, 0, wxTOP + wxALIGN_CENTRE_HORIZONTAL, MARGIN_M)
+
+		----------------------------------------------------------------
+
+		local sizerWrapper = wxBoxSizer(wxHORIZONTAL)
+		sizerWrapper:Add(sizerDialog, 0, wxGROW_ALL, MARGIN_M)
+
+		dialog.AutoLayout = true
+		dialog.Sizer      = sizerWrapper
+
+		dialog:Fit()
+		dialog:Centre()
+
+		listenStart(dialog, textObj, updateButton)
+		showModalAndDestroy(dialog)
+		listenStop()
+	end
 end
 
 

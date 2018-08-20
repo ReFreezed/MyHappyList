@@ -11,17 +11,18 @@
 --==============================================================
 
 	backupFileIfExists
-	createDirectory, isDirectoryEmpty, removeEmptyDirectories
+	createDirectory, isDirectoryEmpty, removeEmptyDirectories, emptyDirectory
 	directoryItems, traverseDirectory, traverseFiles
 	getDirectory, getFilename, getExtension, getBasename
 	getFileContents, writeFile, copyFile
 	getFileSize
 	getTempFilePath
-	isFile, isFileWritable, isDirectory
+	isFile, isDirectory
+	isFileWritable, isDirectoryWritable, isDirectoryRemovable
 	mkdir
-	openFile, deleteFile, removeDirectory
+	openFile, deleteFile, deleteFileIfExists, removeDirectory, removeDirectoryAndChildren
 	parseSimpleKv, writeSimpleKv, readSimpleEntryFile, writeSimpleEntryFile
-	rename, renameFileIfExists, renameDirectoryIfExists
+	renameFile, renameDirectory, renameFileIfExists, renameDirectoryIfExists
 	toNormalPath, toWindowsPath, toShortPath
 	writef, writeLine
 
@@ -40,12 +41,16 @@ end
 
 
 
--- success, errorMessage = createDirectory( path )
-function createDirectory(path)
-	if path == "" then  return  end
+-- success, errorMessage = createDirectory( directoryPath )
+function createDirectory(dirPath)
+	if not isDirectoryWritable(dirPath) then
+		return false, dirPath..": Directory is not writable."
+	end
 
-	if not mkdir(path, true) then
-		return false, F("Could not create directory '%s'.", path)
+	if dirPath == "" then  return false, "Empty directory path."  end
+
+	if not mkdir(dirPath, true) then
+		return false, F("Could not create directory '%s'.", dirPath)
 	end
 
 	return true
@@ -83,6 +88,29 @@ function removeEmptyDirectories(dirPath)
 end
 ]]
 
+-- success = emptyDirectory( directoryPath, continueOnError )
+function emptyDirectory(dirPath, continueOnError)
+	assertarg(1, dirPath,         "string")
+	assertarg(2, continueOnError, "boolean")
+
+	if not isDirectoryWritable(dirPath) then  return false  end
+
+	local ok = true
+
+	traverseDirectory(dirPath, true, function(path, pathRel, name, mode)
+		local remove = (mode == "directory" and removeDirectory or deleteFile)
+
+		if not remove(path) then
+			ok = false
+			logprinterror("FS", "Could not remove '%s'.", path)
+
+			if not continueOnError then  return true  end
+		end
+	end)
+
+	return ok
+end
+
 
 
 -- for name in directoryItems( directoryPath ) do
@@ -104,8 +132,8 @@ function directoryItems(dirPath)
 end
 
 -- traverseDirectory( directoryPath, [ bottomUp=false, ] callback )
--- callback = function( path, relativePath, name, mode )
--- mode     = "file"|"directory"
+-- abort = callback( path, relativePath, name, mode )
+-- mode  = "file"|"directory"|"other"
 function traverseDirectory(dirPath, bottomUp, cb, _pathRelStart)
 	if type(bottomUp) == "function" then
 		bottomUp, cb = false, bottomUp
@@ -114,34 +142,38 @@ function traverseDirectory(dirPath, bottomUp, cb, _pathRelStart)
 	_pathRelStart = _pathRelStart or #dirPath+2
 
 	for name in directoryItems(dirPath) do
-		local path = dirPath.."/"..name
+		local path    = dirPath.."/"..name
+		local pathRel = path:sub(_pathRelStart)
+		local abort
 
 		if isFile(path) then
-			local pathRel = path:sub(_pathRelStart)
-			local abort   = cb(path, pathRel, name, "file")
+			abort = cb(path, pathRel, name, "file")
 			if abort then  return true  end
 
 		elseif isDirectory(path) then
 			if bottomUp then
-				local abort = traverseDirectory(path, bottomUp, cb, _pathRelStart)
+				abort = traverseDirectory(path, bottomUp, cb, _pathRelStart)
 				if abort then  return true  end
 			end
 
-			local pathRel = path:sub(_pathRelStart)
-			local abort   = cb(path, pathRel, name, "directory")
+			abort = cb(path, pathRel, name, "directory")
 			if abort then  return true  end
 
 			if not bottomUp then
-				local abort = traverseDirectory(path, bottomUp, cb, _pathRelStart)
+				abort = traverseDirectory(path, bottomUp, cb, _pathRelStart)
 				if abort then  return true  end
 			end
+
+		else
+			abort = cb(path, pathRel, name, "other")
+			if abort then  return true  end
 		end
 	end
 
 end
 
 -- traverseFiles( directoryPath, callback )
--- callback = function( path, relativePath, filename, extension )
+-- abort = callback( path, relativePath, filename, extension )
 function traverseFiles(dirPath, cb, _pathRelStart)
 	_pathRelStart = _pathRelStart or #dirPath+2
 
@@ -213,6 +245,11 @@ end
 
 -- success, errorMessage = copyFile( fromPath, toPath )
 function copyFile(pathFrom, pathTo)
+	local dirPath = getDirectory(pathTo)
+	if not isDirectoryWritable(dirPath) then
+		return false, dirPath..": Directory is not writable."
+	end
+
 	if not wxCopyFile(pathFrom, pathTo) then
 		return false, F("Could not copy '%s' to '%s'.", pathFrom, pathTo)
 	end
@@ -252,20 +289,57 @@ function isFile(path)
 	return wxFileName.FileExists(path)
 end
 
-function isFileWritable(path)
-	return wxFileName.IsFileWritable(path)
-end
-
 function isDirectory(path)
 	return wxFileName.DirExists(path)
 end
 
 
 
--- success = mkdir( path [, full=false ] )
-function mkdir(path, full)
+function isFileWritable(path)
+	if not isDirectoryWritable(getDirectory(path)) then  return false  end
+
+	return wxFileName.IsFileWritable(path)
+end
+
+function isDirectoryWritable(dirPath)
+	if bypassDirectoryProtection then  return true  end
+
+	for _, writableDir in ipairs(WRITABLE_DIRS) do
+		local len = #writableDir
+		local c   = dirPath:sub(len+1, len+1)
+
+		if (c == "/" or c == "") and dirPath:sub(1, len) == writableDir then
+			return true
+		end
+	end
+
+	return false
+end
+
+function isDirectoryRemovable(dirPath)
+	if bypassDirectoryProtection then  return true  end
+
+	for _, writableDir in ipairs(WRITABLE_DIRS) do
+		local len = #writableDir
+
+		if dirPath:sub(len+1, len+1) == "/" and dirPath:sub(1, len) == writableDir then
+			return true
+		end
+	end
+
+	return false
+end
+
+
+
+-- success = mkdir( directoryPath [, full=false ] )
+function mkdir(dirPath, full)
+	if not isDirectoryWritable(dirPath) then  return false  end
+
+	if dirPath == "" then  return true  end
+
 	local flags = (full and wxPATH_MKDIR_FULL or 0)
-	return wxFileName.Mkdir(path, 4095, flags)
+	return wxFileName.Mkdir(dirPath, 4095, flags)
 end
 
 
@@ -299,6 +373,11 @@ do
 
 		if mode == "r" and not isFile(path) then
 			return nil, path..": File does not exist"
+		end
+
+		local dirPath = getDirectory(path)
+		if mode ~= "r" and not isDirectoryWritable(dirPath) then
+			return nil, dirPath..": Directory is not writable."
 		end
 
 		local file
@@ -356,18 +435,30 @@ do
 			end
 		end
 
+		-- http://www.lua.org/manual/5.1/manual.html#5.7
 		local fileWrapper = setmetatable({}, {__index={
 
-			-- file:close( )
+			-- success, errorMessage = file:close( )
 			close = function(fileWrapper)
-				checkOpen()
+				-- Allow multiple calls to close().
+				if not file:IsOpened() then  return nil, "File is already closed."  end
+
 				file:Close()
+				if file:IsOpened() then
+					return nil, "Could not close file."
+				end
+
+				collectgarbage() -- Seems to fix "Program stopped working" on exit.
+				return true
 			end,
 
-			-- file:flush( )
+			-- success, errorMessage = file:flush( )
 			flush = function(fileWrapper)
 				checkOpen()
-				file:Flush()
+				if not file:Flush() then
+					return nil, "Could not flush the file buffer."
+				end
+				return true
 			end,
 
 			-- for line in file:lines( ) do
@@ -399,7 +490,7 @@ do
 						return s, read(...)
 
 					elseif type(readFormat) ~= "string" then
-						errorf("bad type of read format (string or number expected, got %s)", type(offset))
+						errorf("Bad type of read format (string or number expected, got %s)", type(offset))
 
 					-- Read line.
 					elseif readFormat:find"^*l" then
@@ -445,7 +536,7 @@ do
 						error("Cannot read numbers - file:read() is not fully implemented.") -- @Incomplete
 
 					else
-						errorf("bad read format string '%s'", readFormat)
+						errorf("Bad read format string '%s'", readFormat)
 					end
 				end
 
@@ -464,10 +555,10 @@ do
 				offset = offset or 0
 
 				if type(whence) ~= "string" then
-					return nil, F("bad type of whence (string expected, got %s)", type(whence))
+					return nil, F("Bad type of whence (string expected, got %s)", type(whence))
 				end
 				if type(offset) ~= "number" then
-					return nil, F("bad type of offset (number expected, got %s)", type(offset))
+					return nil, F("Bad type of offset (number expected, got %s)", type(offset))
 				end
 
 				local pos
@@ -478,17 +569,17 @@ do
 				elseif whence == "end" then
 					pos = file:Seek(offset, wxSEEK_MODE_FROM_END)
 				else
-					return nil, F("bad whence value '%s'.", whence)
+					return nil, F("Bad whence value '%s'.", whence)
 				end
 
 				if pos == wxSEEK_MODE_INVALID_OFFSET then
-					return nil, F("bad offset %d", offset)
+					return nil, F("Bad offset %d", offset)
 				end
 
 				return file:Tell()
 			end,
 
-			-- file:setvbuf( mode [, size ] )
+			-- success, errorMessage = file:setvbuf( mode [, size ] )
 			setvbuf = function(fileWrapper, _bufMode, size)
 				checkOpen()
 				logprintOnce("FS", "Warning: file:setvbuf() is not fully implemented.") -- @Incomplete
@@ -504,12 +595,16 @@ do
 					bufferingMode = _bufMode
 
 				else
-					errorf(2, "bad buffering mode '%s'.", _bufMode)
+					errorf(2, "Bad buffering mode '%s'.", _bufMode)
 				end
+
+				return true
 			end,
 
 			-- file:write( ... )
 			write = function(fileWrapper, ...)
+				checkOpen()
+
 				for i = 1, select("#", ...) do
 					local v = select(i, ...)
 
@@ -517,20 +612,27 @@ do
 						if not binary then
 							v = v:gsub("\n", "\r\n")
 						end
-						file:Write(v, #v)
 
 					elseif type(v) == "number" then
 						v = tostring(v)
-						file:Write(v, #v)
 
 					else
-						errorf(2, "cannot write values of type '%s'.", type(v))
+						errorf(2, "Cannot write values of type '%s'.", type(v))
+					end
+
+					local sizeToWrite = #v
+					local sizeWritten = file:Write(v, sizeToWrite)
+
+					if sizeWritten ~= sizeToWrite then
+						errorf(2, "Could not write to file.")
 					end
 
 					if bufferingMode == "no" then
 						file:Flush()
 					end
 				end
+
+				return true
 			end,
 
 		}})
@@ -584,13 +686,38 @@ end
 
 -- success = deleteFile( path )
 function deleteFile(path)
+	if not isDirectoryWritable(getDirectory(path)) then  return false  end
+
 	return wxRemoveFile(path)
+end
+
+-- success = deleteFileIfExists( path )
+function deleteFileIfExists(path)
+	if not isFile(path) then  return true  end
+
+	return deleteFile(path)
 end
 
 -- success = removeDirectory( directoryPath )
 -- Only works on empty directories.
 function removeDirectory(dirPath)
-	return wxRmdir(dirPath, 0)
+	if not isDirectoryRemovable(dirPath) then  return false  end
+
+	local ok = wxRmdir(dirPath)
+	collectgarbage() -- @Ugh
+
+	return ok
+end
+
+-- success = removeDirectoryAndChildren( directoryPath, continueOnError )
+function removeDirectoryAndChildren(dirPath, continueOnError)
+	assertarg(1, dirPath,         "string")
+	assertarg(2, continueOnError, "boolean")
+
+	if not isDirectoryRemovable(dirPath) then  return false  end
+
+	emptyDirectory(dirPath, continueOnError)
+	return removeDirectory(dirPath)
 end
 
 
@@ -608,7 +735,7 @@ end
 -- path = toShortPath( path [, asWindowsPath=false ] )
 -- Note: May return the path as-is if the file doesn't exist.
 function toShortPath(path, asWindowsPath)
-	path = wxFileName(path):GetShortPath()
+	path = wxFileName(path).ShortPath
 
 	if not asWindowsPath then  path = toNormalPath(path)  end
 
@@ -786,35 +913,37 @@ end
 
 
 
--- success, errorMessage = rename( oldPath, newPath [, overwrite=false ] )
-function rename(pathOld, pathNew, overwrite)
+-- success, errorMessage = renameFile( oldPath, newPath [, overwrite=false ] )
+function renameFile(pathOld, pathNew, overwrite)
 	overwrite = overwrite or false
 
-	if not wxRenameFile(pathOld, pathNew, overwrite) then
-		return false, F("Could not rename '%s' to '%s'.", pathOld, pathNew)
+	if not isDirectoryWritable(getDirectory(pathOld)) then
+		return false, getDirectory(pathOld)..": Directory contents are not movable."
+	end
+	if not isDirectoryWritable(getDirectory(pathNew)) then
+		return false, getDirectory(pathNew)..": Directory is not writable."
 	end
 
-	return true
+	if wxRenameFile(pathOld, pathNew, overwrite) then
+		return true
+	end
+
+	return false, F("Could not rename '%s' to '%s'.", pathOld, pathNew)
 end
 
--- success, errorMessage = renameFileIfExists( oldPath, newPath [, overwrite=false ] )
--- success is true if the file does not exist.
-function renameFileIfExists(pathOld, pathNew, overwrite)
-	if not isFile(pathOld) then  return true  end
-
-	overwrite = overwrite or false
-	return rename(pathOld, pathNew, overwrite)
-end
-
--- success, errorMessage = renameDirectoryIfExists( oldPath, newPath [, overwrite=false ] )
--- success is true if the directory does not exist.
+-- success, errorMessage = renameDirectory( oldPath, newPath [, overwrite=false ] )
 -- Note: If newPath exists then the old and new directories are merged.
-function renameDirectoryIfExists(dirSource, dirTarget, overwrite)
-	if not isDirectory(dirSource) then  return true  end
-
+function renameDirectory(dirSource, dirTarget, overwrite)
 	overwrite = overwrite or false
 
-	local ok, err = rename(dirSource, dirTarget, overwrite)
+	if not isDirectoryRemovable(dirSource) then
+		return false, dirSource..": Directory is not movable."
+	end
+	if not isDirectoryRemovable(dirTarget) then
+		return false, dirTarget..": Directory is not writable."
+	end
+
+	local ok, err = wxRenameFile(dirSource, dirTarget, overwrite)
 	if ok then  return true  end
 
 	-- The paths may point to different drives, in which case wxRenameFile() fails (I think).
@@ -870,6 +999,23 @@ function renameDirectoryIfExists(dirSource, dirTarget, overwrite)
 	end
 
 	return true
+end
+
+-- success, errorMessage = renameFileIfExists( oldPath, newPath [, overwrite=false ] )
+-- success is true if the file does not exist.
+function renameFileIfExists(pathOld, pathNew, overwrite)
+	if not isFile(pathOld) then  return true  end
+
+	return renameFile(pathOld, pathNew, overwrite)
+end
+
+-- success, errorMessage = renameDirectoryIfExists( oldPath, newPath [, overwrite=false ] )
+-- success is true if the directory does not exist.
+-- Note: If newPath exists then the old and new directories are merged.
+function renameDirectoryIfExists(dirSource, dirTarget, overwrite)
+	if not isDirectory(dirSource) then  return true  end
+
+	return renameDirectory(dirSource, dirTarget, overwrite)
 end
 
 

@@ -55,4 +55,6 @@ io.stderr:setvbuf("no")
 require"globals"
 require"functions"
 
+socket.http.USERAGENT = "MyHappyList/"..APP_VERSION
+
 wxPleaseJustStop = wxLogNull() -- Ugh.

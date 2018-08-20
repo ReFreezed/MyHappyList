@@ -2,6 +2,7 @@
 -- HTTP/1.1 client support for the Lua language.
 -- LuaSocket toolkit.
 -- Author: Diego Nehab
+-- Edited by Marcus Thunström on 2018-08-19
 -- RCS ID: $Id: http.lua,v 1.70 2007/03/12 04:08:40 diego Exp $
 -----------------------------------------------------------------------------
 
@@ -226,14 +227,16 @@ local function adjustheaders(reqt)
 end
 
 -- default url parts
-local default = {
-    host = "",
-    port = PORT,
-    path ="/",
-    scheme = "http"
-}
+-- local default = This doesn't respect PORT changes!  @Edit
 
 local function adjustrequest(reqt)
+	local default = { -- @Edit
+	    host = "",
+	    port = PORT,
+	    path ="/",
+	    scheme = "http"
+	}
+
     -- parse url if provided
     local nreqt = reqt.url and url.parse(reqt.url, default) or {}
     -- explicit components override url

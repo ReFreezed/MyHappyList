@@ -18,19 +18,14 @@ require"appEnvironment"
 --= Prepare Stuff ==============================================
 --==============================================================
 
-log("~~~ MyHappyList ~~~")
-log(os.date"%Y-%m-%d %H:%M:%S")
-
-if DEBUG_LOCAL then
-	print("!! DEBUG (local) !!")
-elseif DEBUG then
-	print("!!!!!! DEBUG !!!!!!")
-end
+logHeader()
 
 -- Move old folders.
+bypassDirectoryProtection = true
 assert(renameDirectoryIfExists(DIR_CACHE_OLD, DIR_CACHE))
 assert(renameDirectoryIfExists(DIR_LOGS_OLD,  DIR_LOGS))
 assert(renameDirectoryIfExists(DIR_TEMP_OLD,  DIR_TEMP))
+bypassDirectoryProtection = false
 
 -- Creating folders should be done as early as possible, in case they get used right away.
 assert(createDirectory(DIR_CACHE))
@@ -43,18 +38,21 @@ local function move(dirOld, dirNew, pathRelative)
 	assert(renameFileIfExists(dirOld.."/"..pathRelative, dirNew.."/"..pathRelative))
 	assert(renameFileIfExists(dirOld.."/"..pathRelative..".bak", dirNew.."/"..pathRelative..".bak"))
 end
+bypassDirectoryProtection = true
 move(DIR_CONFIG_OLD, DIR_CONFIG, (DEBUG_LOCAL and "/loginDebug" or "/login"))
 move(DIR_CONFIG_OLD, DIR_CONFIG, "settings")
+bypassDirectoryProtection = false
+
+eventQueue = require"EventQueue"()
 
 -- Prepare AniDB connection before opening the log file, in case the socket cannot open.
 -- Don't wanna risk having multiple MyHappyLists running and appending to the same file.
 anidb = require"Anidb"()
 
-local logFilePath = DIR_LOGS.."/output.log"
-logFile = assert(openFile(logFilePath, "a"))
+logStart("output")
 
-appIcons  = wxIconBundle("gfx/appicon.ico", wxBITMAP_TYPE_ANY)
-fontTitle = wxFont(1.2*wxFONT_NORMAL:GetPointSize(), wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD)
+appIcons   = wxIconBundle("gfx/appicon.ico", wxBITMAP_TYPE_ANY)
+fontTitle  = wxFont(1.2*wxFONT_NORMAL.PointSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD)
 
 
 
@@ -71,7 +69,7 @@ topFrame = wxFrame(
 )
 
 topFrame:DragAcceptFiles(true)
-topFrame:SetIcons(appIcons)
+topFrame.Icons = appIcons
 
 on(topFrame, "CLOSE_WINDOW", function(e)
 	if
@@ -79,14 +77,23 @@ on(topFrame, "CLOSE_WINDOW", function(e)
 		and anidb:getActiveMessageCount() > 0
 		and not confirm("Exit", "The task queue is not empty. Data may get lost. Exit anyway?", "Exit")
 	then
-		e:Veto() -- Abort exit.
+		e:Veto()
 		return
 	end
 
-	e:Skip() -- Proceed with exit.
-
 	-- Must do this here because of callbacks that reference wxWindow objects.
 	saveSettings()
+
+	-- Begin destruction!
+	--------------------------------
+
+	for child in eachChildRecursively(topFrame, true) do
+		if isClass(child, "wxDialog") and child:IsModal() then
+			child:EndModal(wxID_CANCEL)
+		end
+	end
+
+	topFrame:Destroy() -- Needed?
 end)
 
 on(topFrame, "DROP_FILES", function(e, paths)
@@ -118,14 +125,14 @@ on(topFrame, "DROP_FILES", function(e, paths)
 
 	if not pathsToAdd[1] then  return  end
 
-	local previousLastWxRow = (anyFileInfos() and fileList:GetItemCount() or 0)-1
+	local previousLastWxRow = (anyFileInfos() and fileList.ItemCount or 0)-1
 
 	for _, path in ipairs(pathsToAdd) do
 		addFileInfo(toNormalPath(path))
 	end
 
 	saveFileInfos()
-	listCtrlSelectRows(fileList, range(previousLastWxRow+1, fileList:GetItemCount()-1))
+	listCtrlSelectRows(fileList, range(previousLastWxRow+1, fileList.ItemCount-1))
 	updateFileList()
 end)
 
@@ -179,7 +186,7 @@ statusBarSetField(statusBar, STATUS_BAR_FIELD_MESSAGE_QUEUE, "")
 local progressGauge = wxGauge(
 	statusBar, wxID_ANY, 100, wxDEFAULT_POSITION, wxSize(GAUGE_WIDTH, getHeight(statusBar)-2*GAUGE_MARGIN), wxGA_SMOOTH
 )
--- progressGauge:SetValue(50)
+-- progressGauge.Value = 50
 
 on(statusBar, "SIZE", function(e, w, h)
 	e:Skip()
@@ -202,10 +209,18 @@ newMenuItem(menuFile, topFrame, "&Settings"..(DEBUG and "\tAlt+S" or ""), "Chang
 	dialogs.settings()
 end)
 
+if appZip or DEBUG then
+	newMenuItemSeparator(menuFile)
+
+	newMenuItem(menuFile, topFrame, "&Update Program", "Update MyHappyList to the latest version", function(e)
+		dialogs.updateApp()
+	end)
+end
+
 newMenuItemSeparator(menuFile)
 
 newMenuItem(menuFile, topFrame, wxID_EXIT, "E&xit\tCtrl+Q", "Quit the program", function(e)
-	topFrame:Close()
+	maybeQuit()
 end)
 
 -- Help.
@@ -299,7 +314,7 @@ menuBar:Append(menuFile, "&File")
 if DEBUG then  menuBar:Append(menuDebug, "&Debug")  end
 menuBar:Append(menuHelp, "&Help")
 
-topFrame:SetMenuBar(menuBar)
+topFrame.MenuBar = menuBar
 
 
 
@@ -315,7 +330,7 @@ loginButton = newButton(topPanel, wxID_ANY, "Log In", function(e)
 	dialogs.credentials()
 end)
 loginButton:SetSizeHints(getWidth(loginButton), 1.4*getHeight(loginButton))
-loginButton:SetBackgroundColour(wxColour(255, 255, 0))
+loginButton.BackgroundColour = wxColour(255, 255, 0)
 loginButton:Show(false)
 sizerMain:Add(loginButton, 0, wxGROW)
 
@@ -373,13 +388,13 @@ on(fileList, "KEY_DOWN", function(e, kc)
 		-- Do nothing. For some reason space activates the selected item.
 
 	elseif anyFileInfos() then
-		local mods = e:GetModifiers()
+		local mods = e.Modifiers
 
 		if kc == KC_DELETE and mods == wxMOD_NONE then
 			removeSelectedFileInfos()
 
 		elseif kc == KC_A and mods == wxMOD_CONTROL then
-			listCtrlSelectRows(fileList, range(0, fileList:GetItemCount()-1))
+			listCtrlSelectRows(fileList, range(0, fileList.ItemCount-1))
 
 		elseif kc == KC_F2 and mods == wxMOD_NONE then
 			dialogs.addmylist(getSelectedFileInfos(true))
@@ -547,24 +562,24 @@ on(fileList, "CONTEXT_MENU", function(e)
 
 	----------------------------------------------------------------
 	local wxRows = listCtrlGetSelectedRows(fileList)
-	listCtrlPopupMenu(fileList, popupMenu, wxRows[#wxRows], e:GetPosition())
+	listCtrlPopupMenu(fileList, popupMenu, wxRows[#wxRows], e.Position)
 end)
 
 
 
 --==============================================================
 
-topFrame:SetDefaultItem(fileList)
-topPanel:SetAutoLayout(true)
-topPanel:SetSizer(sizerMain)
+topFrame.DefaultItem = fileList
+topPanel.AutoLayout  = true
+topPanel.Sizer       = sizerMain
 
-anidbUpdateTimer = newTimer(function(e)
+local updateTimer = newTimer(function(e)
 	anidb:update()
 
-	local eHandlers = require"anidbEventHandlers"
+	local eHandlers = require"eventHandlers"
 
-	for eName, _1, _2, _3, _4, _5 in anidb:events() do
-		if not isAny(eName, "messagecount") then
+	for eName, _1, _2, _3, _4, _5 in eventQueue:events() do
+		if not isAny(eName, "message_count") then
 			logprint(nil, "Event: %s", eName)
 		end
 
@@ -572,8 +587,11 @@ anidbUpdateTimer = newTimer(function(e)
 		if handler then
 			handler(_1, _2, _3, _4, _5)
 
-		elseif eName:find"^error" then
+		elseif eName:find"^error" or eName:find"^%w+:error" then
 			eHandlers._error(eName, _1)
+
+		else
+			logprinterror("App", "Unhandled event '%s'.", eName)
 		end
 	end
 end)
@@ -621,7 +639,7 @@ end)
 
 topFrame:Show(true)
 
-anidbUpdateTimer:Start(1000/10)
+updateTimer:Start(1000/20)
 
 settingsAreFrozen = false
 
@@ -640,17 +658,11 @@ processStopAll(true) -- May take some time as we try to end the processes gracef
 anidb:destroy()
 anidb = nil
 
--- Cleanup.
-if isDirectory(DIR_TEMP) then
-	traverseFiles(DIR_TEMP, function(path)
-		if not deleteFile(path) then
-			logprinterror("App", "Could not delete file '%s'.", path)
-		end
-	end)
+if clearTempDirOnExit and isDirectory(DIR_TEMP) then
+	emptyDirectory(DIR_TEMP, true)
 end
 
 logprint(nil, "Exiting normally.")
-logFile:close()
-logFile = nil
+logEnd()
 
 

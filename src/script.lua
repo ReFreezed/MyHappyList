@@ -2,7 +2,7 @@
 --=
 --=  Script Runner
 --=
---=  Args: scriptName, scriptArg1, ...
+--=  Args: scriptName scriptArg1 ...
 --=
 --=-------------------------------------------------------------
 --=

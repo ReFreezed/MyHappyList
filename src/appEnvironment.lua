@@ -49,6 +49,7 @@ STATUS_BAR_FIELD_MESSAGE_QUEUE = 1
 
 anidb            = nil
 appIcons         = nil
+eventQueue       = nil
 fontTitle        = nil
 
 topFrame         = nil
@@ -56,8 +57,6 @@ statusBar        = nil
 topPanel         = nil
 loginButton      = nil
 fileList         = nil
-
-anidbUpdateTimer = nil
 
 fileInfos        = {}
 lastFileId       = 0 -- Local ID, not fid on AniDB.
@@ -260,7 +259,7 @@ function updateFileList()
 	local colorStripe1 = wxCOLOUR_WHITE
 	local colorStripe2 = wxColour(245, 245, 245)
 
-	for wxRow = 0, fileList:GetItemCount()-1 do
+	for wxRow = 0, fileList.ItemCount-1 do
 		local color = (wxRow%2 == 0 and colorStripe1 or colorStripe2)
 		fileList:SetItemBackgroundColour(wxRow, color)
 	end
@@ -511,7 +510,7 @@ function setStatusText(s, ...)
 	if select("#", ...) > 0 then
 		s = s:format(...)
 	end
-	topFrame:SetStatusText(s)
+	topFrame.StatusText = s
 end
 
 
@@ -658,7 +657,7 @@ do
 			anyFileInfoChanged = checkFile(fileInfo, i) or anyFileInfoChanged
 		end
 
-		-- @@ Do autoHash etc.
+		-- @Incomplete: Do autoHash etc.
 
 		if anyFileInfoChanged then
 			saveFileInfos()

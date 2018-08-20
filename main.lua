@@ -33,7 +33,8 @@ exec lua "$0" "$@"
 
 assert(loadfile"src/load.lua")()
 
-_G.args = _G.args or {...}
+_G.args  = _G.args or {...}
+_G.isApp = true
 
 xpcall(
 	function()
