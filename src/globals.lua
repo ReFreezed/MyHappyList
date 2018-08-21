@@ -16,10 +16,13 @@
 
 DEBUG                             = false
 DEBUG_LOCAL                       = false and DEBUG
+
 DEBUG_FORCE_NAT_OFF               = false and DEBUG_LOCAL
-DEBUG_DISABLE_VARIOUS_FILE_SAVING = false and DEBUG_LOCAL
 DEBUG_EXPIRATION_TIME_PORT        = 30
 DEBUG_EXPIRATION_TIME_SESSION     = 3*60 -- Only useful is NAT is off.
+
+DEBUG_DISABLE_VARIOUS_FILE_SAVING = false and DEBUG_LOCAL
+DEBUG_NEVER_UP_TO_DATE            = false and DEBUG
 
 -- Allow overriding DEBUG settings through a local file.
 local chunk = loadfile"local/debug.lua"
@@ -137,7 +140,12 @@ MYLIST_FILESTATE_OTHER                = 100 -- normal
 
 -- Modules.
 
-socket = require"socket" ; require"socket.url" ; require"socket.http"
+local ok, _socket = pcall(require, "socket")
+if ok then
+	socket = _socket
+	require"socket.url"
+	require"socket.http"
+end
 
 _print = print -- We define our own print().
 

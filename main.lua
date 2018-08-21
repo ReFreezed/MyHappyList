@@ -31,7 +31,8 @@ exec lua "$0" "$@"
 --=
 --============================================================]]
 
-assert(loadfile"src/load.lua")()
+assert(loadfile"src/loadBasic.lua")()
+require"load"
 
 _G.args  = _G.args or {...}
 _G.isApp = true

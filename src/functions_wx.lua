@@ -799,7 +799,7 @@ function processStart(cmd, method, cb)
 
 	-- Async.
 	if method == PROCESS_METHOD_ASYNC then
-		if DEBUG then  logprint("Process", "CMD(async): %s", cmd)  end
+		log("CMD(async): %s", cmd)
 
 		local process = wxProcess(topFrame or wxNULL)
 		process:Redirect()
@@ -830,7 +830,7 @@ function processStart(cmd, method, cb)
 
 	-- Sync.
 	elseif method == PROCESS_METHOD_SYNC then
-		if DEBUG then  logprint("Process", "CMD(sync): %s", cmd)  end
+		log("CMD(sync): %s", cmd)
 
 		local process = wxProcess(topFrame or wxNULL)
 		process:Redirect()
@@ -843,7 +843,7 @@ function processStart(cmd, method, cb)
 
 	-- Detached.
 	elseif method == PROCESS_METHOD_DETACHED then
-		if DEBUG then  logprint("Process", "CMD(detach): %s", cmd)  end
+		log("CMD(detach): %s", cmd)
 
 		local pid = wxExecute(cmd, wxEXEC_ASYNC + wxEXEC_NOHIDE)
 		return pid ~= 0

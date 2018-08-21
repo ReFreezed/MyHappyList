@@ -344,345 +344,334 @@ end
 
 
 
-do
-	local modes = {
-		["r"]  = wxFile.read,
-		["w"]  = wxFile.write,
-		["a"]  = wxFile.write_append,
-		["r+"] = wxFile.read_write,
-		["w+"] = wxFile.read_write,
-		["a+"] = wxFile.read_write,
-	}
+function openFile(path, modeFull)
+	-- Extra protection against wxFileDialog() (and maybe others) changing CWD however they want. Ugh.
+	if not (path:find"^[/\\]" or path:find"^%a:[/\\]") then
+		path = DIR_APP.."/"..path
+	end
 
-	function openFile(path, modeFull)
-		-- Extra protection against wxFileDialog() (and maybe others) changing CWD however they want. Ugh.
-		if not (path:find"^[/\\]" or path:find"^%a:[/\\]") then
-			path = DIR_APP.."/"..path
-		end
+	local mode, access, update, binary = modeFull:match"^(([rwa]+)(%+?))(b?)$"
+	if not mode then
+		mode, access, binary, update = modeFull:match"^(([rwa]+)(b?)(%+?))$"
+	end
+	if not mode then
+		return nil, F("Invalid mode '%s'.", modeFull)
+	end
 
-		local mode, access, update, binary = modeFull:match"^(([rwa]+)(%+?))(b?)$"
-		if not mode then
-			mode, access, binary, update = modeFull:match"^(([rwa]+)(b?)(%+?))$"
-		end
-		if not mode then
-			return nil, F("Invalid mode '%s'.", modeFull)
-		end
+	update = (update == "+")
+	binary = (binary == "b" or not wxGetOsDescription():find"Windows")
 
-		update = (update == "+")
-		binary = (binary == "b" or not wxGetOsDescription():find"Windows")
+	if mode == "r" and not isFile(path) then
+		return nil, path..": File does not exist"
+	end
 
-		if mode == "r" and not isFile(path) then
-			return nil, path..": File does not exist"
-		end
+	local dirPath = getDirectory(path)
+	if mode ~= "r" and not isDirectoryWritable(dirPath) then
+		return nil, dirPath..": Directory is not writable."
+	end
 
-		local dirPath = getDirectory(path)
-		if mode ~= "r" and not isDirectoryWritable(dirPath) then
-			return nil, dirPath..": Directory is not writable."
-		end
+	local file
+	local bufferingMode = "full"
 
-		local file
-		local bufferingMode = "full"
+	-- @Robustness: Need to test more and stuff here.
 
-		-- @Robustness: Need to test more and stuff here.
+	-- Note: The following wxFile() calls may trigger the annoying wxLua error dialog if the
+	-- file doesn't exist. Ugh.
 
-		-- Note: The following wxFile() calls may trigger the annoying wxLua error dialog if the
-		-- file doesn't exist. Ugh.
+	-- read: Open file for input operations. The file must exist.
+	if     mode == "r"  then
+		file = wxFile(path, wxFILE_MODE_READ)
 
-		-- read: Open file for input operations. The file must exist.
-		if     mode == "r"  then
-			file = wxFile(path, wxFile.read)
+	-- write: Create an empty file for output operations. If a file with the same name already
+	-- exists, its contents are discarded and the file is treated as a new empty file.
+	elseif mode == "w"  then
+		file = wxFile(path, wxFILE_MODE_WRITE)
 
-		-- write: Create an empty file for output operations. If a file with the same name already
-		-- exists, its contents are discarded and the file is treated as a new empty file.
-		elseif mode == "w"  then
-			file = wxFile(path, wxFile.write)
+	-- append: Open file for output at the end of a file. Output operations always write data
+	-- at the end of the file, expanding it. Repositioning operations (fseek, fsetpos, rewind)
+	-- are ignored. The file is created if it does not exist.
+	elseif mode == "a"  then
+		file = wxFile(path, wxFILE_MODE_APPEND)
 
-		-- append: Open file for output at the end of a file. Output operations always write data
-		-- at the end of the file, expanding it. Repositioning operations (fseek, fsetpos, rewind)
-		-- are ignored. The file is created if it does not exist.
-		elseif mode == "a"  then
-			file = wxFile(path, wxFile.write_append)
+	-- read/update: Open a file for update (both for input and output). The file must exist.
+	elseif mode == "r+" then
+		errorf(2, "Mode '%s' is not implemented or tested yet.", mode) -- @Incomplete
 
-		-- read/update: Open a file for update (both for input and output). The file must exist.
-		elseif mode == "r+" then
-			errorf(2, "Mode '%s' is not implemented or tested yet.", mode) -- @Incomplete
+	-- write/update: Create an empty file and open it for update (both for input and output).
+	-- If a file with the same name already exists its contents are discarded and the file is
+	-- treated as a new empty file.
+	elseif mode == "w+" then
+		errorf(2, "Mode '%s' is not implemented or tested yet.", mode) -- @Incomplete
 
-		-- write/update: Create an empty file and open it for update (both for input and output).
-		-- If a file with the same name already exists its contents are discarded and the file is
-		-- treated as a new empty file.
-		elseif mode == "w+" then
-			errorf(2, "Mode '%s' is not implemented or tested yet.", mode) -- @Incomplete
+	-- append/update: Open a file for update (both for input and output) with all output
+	-- operations writing data at the end of the file. Repositioning operations (fseek, fsetpos,
+	-- rewind) affects the next input operations, but output operations move the position back
+	-- to the end of file. The file is created if it does not exist.
+	elseif mode == "a+" then
+		file = wxFile(path, wxFILE_MODE_READWRITE)
+	end
 
-		-- append/update: Open a file for update (both for input and output) with all output
-		-- operations writing data at the end of the file. Repositioning operations (fseek, fsetpos,
-		-- rewind) affects the next input operations, but output operations move the position back
-		-- to the end of file. The file is created if it does not exist.
-		elseif mode == "a+" then
-			file = wxFile(path, wxFile.read_write)
-		end
+	if not file:IsOpened() then
+		return nil, path..": Could not open file"
+	end
 
+	if mode == "a+" then
+		file:SeekEnd()
+	end
+
+	local function checkOpen()
 		if not file:IsOpened() then
-			return nil, path..": Could not open file"
+			error("attempt to use a closed file", 3)
 		end
+	end
 
-		if mode == "a+" then
-			file:SeekEnd()
-		end
+	-- http://www.lua.org/manual/5.1/manual.html#5.7
+	local fileWrapper = setmetatable({}, {__index={
 
-		local function checkOpen()
-			if not file:IsOpened() then
-				error("attempt to use a closed file", 3)
+		-- success, errorMessage = file:close( )
+		close = function(fileWrapper)
+			-- Allow multiple calls to close().
+			if not file:IsOpened() then  return nil, "File is already closed."  end
+
+			file:Close()
+			if file:IsOpened() then
+				return nil, "Could not close file."
 			end
-		end
 
-		-- http://www.lua.org/manual/5.1/manual.html#5.7
-		local fileWrapper = setmetatable({}, {__index={
+			collectgarbage() -- Seems to fix "Program stopped working" on exit.
+			return true
+		end,
 
-			-- success, errorMessage = file:close( )
-			close = function(fileWrapper)
-				-- Allow multiple calls to close().
-				if not file:IsOpened() then  return nil, "File is already closed."  end
+		-- success, errorMessage = file:flush( )
+		flush = function(fileWrapper)
+			checkOpen()
+			if not file:Flush() then
+				return nil, "Could not flush the file buffer."
+			end
+			return true
+		end,
 
-				file:Close()
-				if file:IsOpened() then
-					return nil, "Could not close file."
-				end
+		-- for line in file:lines( ) do
+		lines = function(fileWrapper)
+			checkOpen()
 
-				collectgarbage() -- Seems to fix "Program stopped working" on exit.
-				return true
-			end,
+			return function()
+				local line = fileWrapper:read"*l"
+				if line then  return line  end
+			end
+		end,
 
-			-- success, errorMessage = file:flush( )
-			flush = function(fileWrapper)
-				checkOpen()
-				if not file:Flush() then
-					return nil, "Could not flush the file buffer."
-				end
-				return true
-			end,
+		-- ... = file:read( readFormat1, ... )
+		read = function(fileWrapper, readFormat, ...)
+			checkOpen()
 
-			-- for line in file:lines( ) do
-			lines = function(fileWrapper)
-				checkOpen()
+			readFormat     = readFormat or "*l"
+			local argsLeft = 1+select("#", ...)
 
-				return function()
-					local line = fileWrapper:read"*l"
-					if line then  return line  end
-				end
-			end,
+			local function read(readFormat, ...)
+				argsLeft = argsLeft-1
+				if argsLeft < 0 then  return  end
 
-			-- ... = file:read( readFormat1, ... )
-			read = function(fileWrapper, readFormat, ...)
-				checkOpen()
+				-- Read bytes.
+				if type(readFormat) == "number" then
+					if file:Eof() then  return nil  end
 
-				readFormat     = readFormat or "*l"
-				local argsLeft = 1+select("#", ...)
+					local _, s = file:Read(readFormat)
+					return s, read(...)
 
-				local function read(readFormat, ...)
-					argsLeft = argsLeft-1
-					if argsLeft < 0 then  return  end
+				elseif type(readFormat) ~= "string" then
+					errorf("Bad type of read format (string or number expected, got %s)", type(offset))
 
-					-- Read bytes.
-					if type(readFormat) == "number" then
-						if file:Eof() then  return nil  end
+				-- Read line.
+				elseif readFormat:find"^*l" then
+					if file:Eof() then  return nil  end
 
-						local _, s = file:Read(readFormat)
-						return s, read(...)
+					local chars = {}
+					local count, c
 
-					elseif type(readFormat) ~= "string" then
-						errorf("Bad type of read format (string or number expected, got %s)", type(offset))
+					while true do
+						count, c = file:Read(1)
 
-					-- Read line.
-					elseif readFormat:find"^*l" then
-						if file:Eof() then  return nil  end
+						-- EOF reached.
+						if count == 0 then
+							break
 
-						local chars = {}
-						local count, c
-
-						while true do
-							count, c = file:Read(1)
-
-							-- EOF reached.
-							if count == 0 then
-								break
-
-							-- EOL reached.
-							elseif c == "\n" then
-								if not binary and chars[#chars] == "\r" then
-									chars[#chars] = nil
-								end
-								break
-
-							-- Normal character.
-							else
-								table.insert(chars, c)
+						-- EOL reached.
+						elseif c == "\n" then
+							if not binary and chars[#chars] == "\r" then
+								chars[#chars] = nil
 							end
+							break
+
+						-- Normal character.
+						else
+							table.insert(chars, c)
 						end
-
-						return table.concat(chars)
-
-					-- Read rest of file.
-					elseif readFormat:find"^*a" then
-						local _, s = file:Read(file:Length()-file:Tell()) -- Length may go past EOF, but that doesn't matter.
-
-						if not binary then
-							s = s:gsub("\r\n", "\n")
-						end
-
-						return s, read(...)
-
-					-- Read number (and return a number instead of a string).
-					elseif readFormat:find"^*n" then
-						error("Cannot read numbers - file:read() is not fully implemented.") -- @Incomplete
-
-					else
-						errorf("Bad read format string '%s'", readFormat)
 					end
-				end
 
-				return read(readFormat, ...)
-			end,
+					return table.concat(chars)
 
-			-- position, errorMessage = file:seek( [ whence ] [, offset ] )
-			seek = function(fileWrapper, whence, offset)
-				checkOpen()
+				-- Read rest of file.
+				elseif readFormat:find"^*a" then
+					local _, s = file:Read(file:Length()-file:Tell()) -- Length may go past EOF, but that doesn't matter.
 
-				if type(whence) == "number" then
-					whence, offset = nil, whence
-				end
+					if not binary then
+						s = s:gsub("\r\n", "\n")
+					end
 
-				whence = whence or "cur"
-				offset = offset or 0
+					return s, read(...)
 
-				if type(whence) ~= "string" then
-					return nil, F("Bad type of whence (string expected, got %s)", type(whence))
-				end
-				if type(offset) ~= "number" then
-					return nil, F("Bad type of offset (number expected, got %s)", type(offset))
-				end
+				-- Read number (and return a number instead of a string).
+				elseif readFormat:find"^*n" then
+					error("Cannot read numbers - file:read() is not fully implemented.") -- @Incomplete
 
-				local pos
-				if whence == "set" then
-					pos = file:Seek(offset, wxSEEK_MODE_FROM_START)
-				elseif whence == "cur" then
-					pos = file:Seek(offset, wxSEEK_MODE_FROM_CURRENT)
-				elseif whence == "end" then
-					pos = file:Seek(offset, wxSEEK_MODE_FROM_END)
 				else
-					return nil, F("Bad whence value '%s'.", whence)
+					errorf("Bad read format string '%s'", readFormat)
+				end
+			end
+
+			return read(readFormat, ...)
+		end,
+
+		-- position, errorMessage = file:seek( [ whence ] [, offset ] )
+		seek = function(fileWrapper, whence, offset)
+			checkOpen()
+
+			if type(whence) == "number" then
+				whence, offset = nil, whence
+			end
+
+			whence = whence or "cur"
+			offset = offset or 0
+
+			if type(whence) ~= "string" then
+				return nil, F("Bad type of whence (string expected, got %s)", type(whence))
+			end
+			if type(offset) ~= "number" then
+				return nil, F("Bad type of offset (number expected, got %s)", type(offset))
+			end
+
+			local pos
+			if whence == "set" then
+				pos = file:Seek(offset, wxSEEK_MODE_FROM_START)
+			elseif whence == "cur" then
+				pos = file:Seek(offset, wxSEEK_MODE_FROM_CURRENT)
+			elseif whence == "end" then
+				pos = file:Seek(offset, wxSEEK_MODE_FROM_END)
+			else
+				return nil, F("Bad whence value '%s'.", whence)
+			end
+
+			if pos == wxSEEK_MODE_INVALID_OFFSET then
+				return nil, F("Bad offset %d", offset)
+			end
+
+			return file:Tell()
+		end,
+
+		-- success, errorMessage = file:setvbuf( mode [, size ] )
+		setvbuf = function(fileWrapper, _bufMode, size)
+			checkOpen()
+			logprintOnce("FS", "Warning: file:setvbuf() is not fully implemented.") -- @Incomplete
+
+			if _bufMode == "no" then
+				bufferingMode = _bufMode
+				file:Flush()
+
+			elseif _bufMode == "full" then
+				bufferingMode = _bufMode
+
+			elseif _bufMode == "line" then
+				bufferingMode = _bufMode
+
+			else
+				errorf(2, "Bad buffering mode '%s'.", _bufMode)
+			end
+
+			return true
+		end,
+
+		-- file:write( ... )
+		write = function(fileWrapper, ...)
+			checkOpen()
+
+			for i = 1, select("#", ...) do
+				local v = select(i, ...)
+
+				if type(v) == "string" then
+					if not binary then
+						v = v:gsub("\n", "\r\n")
+					end
+
+				elseif type(v) == "number" then
+					v = tostring(v)
+
+				else
+					errorf(2, "Cannot write values of type '%s'.", type(v))
 				end
 
-				if pos == wxSEEK_MODE_INVALID_OFFSET then
-					return nil, F("Bad offset %d", offset)
+				local sizeToWrite = #v
+				local sizeWritten = file:Write(v, sizeToWrite)
+
+				if sizeWritten ~= sizeToWrite then
+					errorf(2, "Could not write to file.")
 				end
 
-				return file:Tell()
-			end,
-
-			-- success, errorMessage = file:setvbuf( mode [, size ] )
-			setvbuf = function(fileWrapper, _bufMode, size)
-				checkOpen()
-				logprintOnce("FS", "Warning: file:setvbuf() is not fully implemented.") -- @Incomplete
-
-				if _bufMode == "no" then
-					bufferingMode = _bufMode
+				if bufferingMode == "no" then
 					file:Flush()
-
-				elseif _bufMode == "full" then
-					bufferingMode = _bufMode
-
-				elseif _bufMode == "line" then
-					bufferingMode = _bufMode
-
-				else
-					errorf(2, "Bad buffering mode '%s'.", _bufMode)
 				end
+			end
 
-				return true
-			end,
+			return true
+		end,
 
-			-- file:write( ... )
-			write = function(fileWrapper, ...)
-				checkOpen()
+	}})
 
-				for i = 1, select("#", ...) do
-					local v = select(i, ...)
+	return fileWrapper
 
-					if type(v) == "string" then
-						if not binary then
-							v = v:gsub("\n", "\r\n")
-						end
+	--[[ Having the file objects being userdata would be good, but these operations are a bit... questionable.
+	local file = wxObject()
 
-					elseif type(v) == "number" then
-						v = tostring(v)
+	local mt = {__index={
+		read = function(file, ...)
+		end,
+	}}
 
-					else
-						errorf(2, "Cannot write values of type '%s'.", type(v))
-					end
-
-					local sizeToWrite = #v
-					local sizeWritten = file:Write(v, sizeToWrite)
-
-					if sizeWritten ~= sizeToWrite then
-						errorf(2, "Could not write to file.")
-					end
-
-					if bufferingMode == "no" then
-						file:Flush()
-					end
-				end
-
-				return true
-			end,
-
-		}})
-
-		return fileWrapper
-
-		--[[ Having the file objects being userdata would be good, but these operations are a bit... questionable.
-		local file = wxObject()
-
-		local mt = {__index={
-			read = function(file, ...)
-			end,
-		}}
-
-		debug.setmetatable(file, mt) -- Is this ok? Are we gonna corrupt memory or something?
-		]]
-	end
-
-	--[=[ Test the modes.
-	--[[
-	local file = assert(openFile("local/test.txt", "w"))
-	-- local file = assert(io.open("local/test.txt", "w"))
-	file:write("Hallå!\nJapp nr. ", 5, "\n")
-	--]]
-
-	--[[
-	local file = assert(openFile("local/test.txt", "a+"))
-	-- local file = assert(io.open("local/test.txt", "a+"))
-	file:setvbuf("no")
-	file:write("Hallå!\nJapp nr. ", 5, "\n")
-	file:seek("set")
-	print('"'..tostring(file:read"*a")..'"')
-	--]]
-
-	-- [[
-	local file = assert(openFile("local/test.txt", "r"))
-	-- local file = assert(io.open("local/test.txt", "r"))
-	-- print('"'..tostring(file:read"*l")..'"')
-	-- print('"'..tostring(file:read"*a")..'"')
-	-- print('"'..tostring(file:read"*l")..'"')
-	-- print('"'..tostring(file:read"*a")..'"')
-	for line in file:lines() do
-		print('"'..line..'"', line:byte(1, #line))
-	end
-	--]]
-
-	file:close()
-	os.exit(1)
-	--]=]
+	debug.setmetatable(file, mt) -- Is this ok? Are we gonna corrupt memory or something?
+	]]
 end
+
+--[=[ Test the modes.
+--[[
+local file = assert(openFile("local/test.txt", "w"))
+-- local file = assert(io.open("local/test.txt", "w"))
+file:write("Hallå!\nJapp nr. ", 5, "\n")
+--]]
+
+--[[
+local file = assert(openFile("local/test.txt", "a+"))
+-- local file = assert(io.open("local/test.txt", "a+"))
+file:setvbuf("no")
+file:write("Hallå!\nJapp nr. ", 5, "\n")
+file:seek("set")
+print('"'..tostring(file:read"*a")..'"')
+--]]
+
+-- [[
+local file = assert(openFile("local/test.txt", "r"))
+-- local file = assert(io.open("local/test.txt", "r"))
+-- print('"'..tostring(file:read"*l")..'"')
+-- print('"'..tostring(file:read"*a")..'"')
+-- print('"'..tostring(file:read"*l")..'"')
+-- print('"'..tostring(file:read"*a")..'"')
+for line in file:lines() do
+	print('"'..line..'"', line:byte(1, #line))
+end
+--]]
+
+file:close()
+os.exit(1)
+--]=]
 
 -- success = deleteFile( path )
 function deleteFile(path)
@@ -924,8 +913,19 @@ function renameFile(pathOld, pathNew, overwrite)
 		return false, getDirectory(pathNew)..": Directory is not writable."
 	end
 
-	if wxRenameFile(pathOld, pathNew, overwrite) then
-		return true
+	if wxRenameFile(pathOld, pathNew, overwrite) then  return true  end
+
+	-- The paths may point to different drives, in which case wxRenameFile() fails (I think).
+	-- Try copying the file manually instead.
+
+	if wxCopyFile(pathOld, pathNew, overwrite) then  return true  end
+
+	-- @Incomplete: Preserve timestamps.
+
+	local ok = deleteFile(pathOld)
+	if not ok then
+		err = F("Could not delete '%s' while moving.", pathOld)
+		return false
 	end
 
 	return false, F("Could not rename '%s' to '%s'.", pathOld, pathNew)

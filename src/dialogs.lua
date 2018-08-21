@@ -802,10 +802,10 @@ do
 	-- success = maybeGetLatestVersionNumber( )
 	local function maybeGetLatestVersionNumber()
 		if latestVersion ~= "" then
-			if latestVersion == APP_VERSION then
-				eventQueue:addEvent("git:version_up_to_date")
-			else
+			if latestVersion ~= APP_VERSION or DEBUG_NEVER_UP_TO_DATE then
 				eventQueue:addEvent("git:version_new_available", latestVersion, downloadUrl)
+			else
+				eventQueue:addEvent("git:version_up_to_date")
 			end
 			return true
 		end
@@ -827,10 +827,10 @@ do
 				latestVersion = _latestVersion
 				downloadUrl   = _downloadUrl
 
-				if latestVersion == APP_VERSION then
-					eventQueue:addEvent("git:version_up_to_date")
-				else
+				if latestVersion ~= APP_VERSION or DEBUG_NEVER_UP_TO_DATE then
 					eventQueue:addEvent("git:version_new_available", latestVersion, downloadUrl)
+				else
+					eventQueue:addEvent("git:version_up_to_date")
 				end
 
 			else
@@ -944,9 +944,9 @@ do
 					return
 				end
 
-				if not scriptRunDetached("updateApp", path, wxGetProcessId()) then
+				if not cmdDetached("misc/Update/wlua5.1.exe", "misc/Update/update.lua", path, wxGetProcessId()) then
 					dialog:EndModal(wxID_CANCEL)
-					showError("Error", "updateApp: Could not run script.")
+					showError("Error", "Could not start updater.")
 					return
 				end
 
@@ -965,6 +965,7 @@ do
 			end
 
 			isDownloading = true
+			updateButton.Label = "Updating..." -- @Incomplete: Show an animated working indicator when updating.
 			updateButton:Enable(false)
 			cancelButton:Enable(false)
 			-- pause("updating") -- Bad! We need events to flow!

@@ -13,7 +13,7 @@
 	assertf, assertarg, check
 	clamp
 	cleanupPath
-	cmdAsync, cmdSync, cmdCapture, scriptCaptureAsync, scriptRunDetached, isScriptRunning, cmdEscapeArgs, run
+	cmdAsync, cmdSync, cmdDetached, cmdCapture, scriptCaptureAsync, scriptRunDetached, isScriptRunning, cmdEscapeArgs, run
 	cwdPush, cwdPop
 	eatSpaces
 	encodeHtmlEntities
@@ -108,7 +108,8 @@ function handleError(err)
 	 	local dialog = wxTextEntryDialog(
 	 		wxNULL,
 	 		"An error ocurred and the program crashed! Sorry about that.\n"
-	 			.."The log file may have more information.\n\nMessage:",
+	 			.."The log file may have more information.\n\n"
+	 			.."Log file: "..logFilePath.."\n\nMessage:",
 	 		"Error",
 	 		errWithStack,
 	 		wxOK + wxCENTRE + wxTE_MULTILINE + wxTE_DONTWRAP
@@ -642,7 +643,7 @@ end
 
 
 function getTime()
-	return socket.gettime()
+	return socket and socket.gettime() or os.time()
 end
 
 
@@ -839,13 +840,15 @@ end
 
 
 
--- processStarted = cmdAsync( cmd )
-function cmdAsync(cmd)
-	return (processStart(cmd, PROCESS_METHOD_ASYNC))
+-- processStarted = cmdAsync( ... )
+function cmdAsync(pathToApp, ...)
+	local cmd = cmdEscapeArgs(toWindowsPath(pathToApp), ...)
+	return processStart(cmd, PROCESS_METHOD_ASYNC)
 end
 
--- success, exitCode = cmdSync( cmd )
-function cmdSync(cmd)
+-- success, exitCode = cmdSync( ... )
+function cmdSync(pathToApp, ...)
+	local cmd = cmdEscapeArgs(toWindowsPath(pathToApp), ...)
 	local exitCode = -1
 
 	local ok = processStart(cmd, PROCESS_METHOD_SYNC, function(process, _exitCode)
@@ -855,9 +858,16 @@ function cmdSync(cmd)
 	return (ok and exitCode == 0), exitCode
 end
 
--- output, errorMessage = cmdCapture( cmd )
+-- processStarted = cmdDetached( ... )
+function cmdDetached(pathToApp, ...)
+	local cmd = cmdEscapeArgs(toWindowsPath(pathToApp), ...)
+	return processStart(cmd, PROCESS_METHOD_DETACHED)
+end
+
+-- output, errorMessage = cmdCapture( ... )
 -- Note: output may be the contents of stderr.
-function cmdCapture(cmd)
+function cmdCapture(pathToApp, ...)
+	local cmd = cmdEscapeArgs(toWindowsPath(pathToApp), ...)
 	local output
 
 	local ok = processStart(cmd, PROCESS_METHOD_SYNC, function(process, exitCode)
@@ -890,9 +900,7 @@ do
 
 	-- processStarted = scriptRunDetached( scriptName, arg1, ... )
 	function scriptRunDetached(scriptName, ...)
-		local cmd = cmdEscapeArgs("wlua5.1.exe", "src/script.lua", scriptName, ...)
-
-		return processStart(cmd, PROCESS_METHOD_DETACHED)
+		return cmdDetached("wlua5.1.exe", "src/script.lua", scriptName, ...)
 	end
 
 	function isScriptRunning(scriptName)
@@ -936,9 +944,9 @@ function cmdEscapeArgs(...)
 end
 
 function run(pathToApp, ...)
-	local cmd = cmdEscapeArgs(toWindowsPath(pathToApp), ...)
-	local ok, exitCode = cmdSync(cmd)
+	local ok, exitCode = cmdSync(pathToApp, ...)
 	if not ok then
+		local cmd = cmdEscapeArgs(toWindowsPath(pathToApp), ...)
 		errorf("Command returned %d: %s", exitCode, cmd)
 	end
 end
@@ -1045,19 +1053,19 @@ end
 
 
 
+-- success = openFileExternally( path )
 function openFileExternally(path)
-	local cmd = cmdEscapeArgs("explorer", toShortPath(path, true))
-	processStart(cmd, PROCESS_METHOD_DETACHED)
+	return cmdDetached("explorer", toShortPath(path, true))
 end
 
+-- success = openFileInNotepad( path )
 function openFileInNotepad(path)
-	local cmd = cmdEscapeArgs("notepad", toShortPath(path, true))
-	processStart(cmd, PROCESS_METHOD_DETACHED)
+	return cmdDetached("notepad", toShortPath(path, true))
 end
 
+-- success = showFileInExplorer( path )
 function showFileInExplorer(path)
-	local cmd = cmdEscapeArgs("explorer", "/select,"..toShortPath(path, true))
-	processStart(cmd, PROCESS_METHOD_DETACHED)
+	return cmdDetached("explorer", "/select,"..toShortPath(path, true))
 end
 
 
@@ -1262,8 +1270,11 @@ function unzip(zipPath, targetDir, unwrapRoot)
 	for archivedFile in zip:files() do
 		local pathRel = archivedFile.filename
 
+		if unwrapRoot and pathRel:find"^[^/]+/$" then
+			-- void
+
 		-- Directory.
-		if pathRel:find"/$" then
+		elseif pathRel:find"/$" then
 			pathRel = pathRel:sub(1, #pathRel-1)
 
 			local path = targetDir.."/"..(unwrapRoot and pathRel:gsub("^[^/]+/", "") or pathRel)

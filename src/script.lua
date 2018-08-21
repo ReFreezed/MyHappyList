@@ -12,7 +12,8 @@
 --=
 --============================================================]]
 
-assert(loadfile"src/load.lua")()
+assert(loadfile"src/loadBasic.lua")()
+require"load"
 
 _G.args = {...}
 local scriptName = table.remove(args, 1)

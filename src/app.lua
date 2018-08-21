@@ -35,12 +35,13 @@ assert(createDirectory(DIR_TEMP))
 
 -- Move files from old folders.
 local function move(dirOld, dirNew, pathRelative)
-	assert(renameFileIfExists(dirOld.."/"..pathRelative, dirNew.."/"..pathRelative))
+	assert(renameFileIfExists(dirOld.."/"..pathRelative,         dirNew.."/"..pathRelative))
 	assert(renameFileIfExists(dirOld.."/"..pathRelative..".bak", dirNew.."/"..pathRelative..".bak"))
 end
 bypassDirectoryProtection = true
 move(DIR_CONFIG_OLD, DIR_CONFIG, (DEBUG_LOCAL and "/loginDebug" or "/login"))
 move(DIR_CONFIG_OLD, DIR_CONFIG, "settings")
+removeDirectory(DIR_CONFIG_OLD) -- Only succeeds if the folder is empty, which is what we want.
 bypassDirectoryProtection = false
 
 eventQueue = require"EventQueue"()
@@ -226,13 +227,6 @@ end)
 -- Help.
 --------------------------------
 
-newMenuItem(menuHelp, topFrame, "&Forum Thread", "Go to MyHappyList's forum thread on AniDB", function(e)
-	local url = "https://anidb.net/perl-bin/animedb.pl?show=cmt&id=83307"
-	if not wxLaunchDefaultBrowser(url) then
-		showError("Error", "Could not launch default browser.\n\n"..url)
-	end
-end)
-
 newMenuItem(menuHelp, topFrame, "&Changes", "View the changelog", function(e)
 	dialogs.changelog()
 end)
@@ -240,6 +234,22 @@ end)
 newMenuItem(menuHelp, topFrame, "&Log", "Open the text log in Notepad", function(e)
 	-- @UX: Show a window with the log instead of using Notepad.
 	openFileInNotepad(logFilePath)
+end)
+
+newMenuItemSeparator(menuHelp)
+
+newMenuItem(menuHelp, topFrame, "&Forum Thread", "Go to MyHappyList's forum thread on AniDB", function(e)
+	local url = "https://anidb.net/perl-bin/animedb.pl?show=cmt&id=83307"
+	if not wxLaunchDefaultBrowser(url) then
+		showError("Error", "Could not launch default browser.\n\n"..url)
+	end
+end)
+
+newMenuItem(menuHelp, topFrame, "&Repository", "Go to MyHappyList's repository on GitHub", function(e)
+	local url = "https://github.com/ReFreezed/MyHappyList"
+	if not wxLaunchDefaultBrowser(url) then
+		showError("Error", "Could not launch default browser.\n\n"..url)
+	end
 end)
 
 newMenuItemSeparator(menuHelp)

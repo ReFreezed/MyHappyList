@@ -19,7 +19,7 @@
 
 local path = unpack(args)
 
-local output, err = cmdCapture(cmdEscapeArgs([[utils\rhash.exe]], "--ed2k", path))
+local output, err = cmdCapture("utils/rhash.exe", "--ed2k", path)
 if not output then
 	errorf("%s: Could not run rhash: %s", path, err)
 end

@@ -251,8 +251,11 @@ function simulateServerResponse(udp, data)
 			startNewSession()
 
 			local natStr = params["nat"] == BOOL_TRUE and F(" %s:%d", "192.0.2.0", port) or ""
-			b("200 %s%s LOGIN ACCEPTED\n", session, natStr)
-			-- b("201 %s%s LOGIN ACCEPTED - NEW VERSION AVAILABLE\n", session, natStr)
+			if DEBUG_NEVER_UP_TO_DATE then
+				b("201 %s%s LOGIN ACCEPTED - NEW VERSION AVAILABLE\n", session, natStr)
+			else
+				b("200 %s%s LOGIN ACCEPTED\n", session, natStr)
+			end
 		else
 			b("500 LOGIN FAILED\n")
 		end

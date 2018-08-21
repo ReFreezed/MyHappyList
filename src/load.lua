@@ -1,6 +1,6 @@
 --[[============================================================
 --=
---=  Initial Loading
+--=  Initial Loading (assumes loadBasic has been loaded)
 --=
 --=-------------------------------------------------------------
 --=
@@ -10,16 +10,8 @@
 --=
 --============================================================]]
 
-package.cpath
-	= "./bin/?.dll;"
-	.."./bin/?51.dll;"
-
-package.path
-	= "./src/?.lua;"
-	.."./lib/?.lua;"
-	.."./lib/?/init.lua;"
-
-_G.appZip = require"zip".open"app"
+local ok, zipLib = pcall(require, "zip")
+if ok then  _G.appZip = zipLib.open"app"  end
 
 if appZip then
 	table.insert(package.loaders, 1, function(moduleName)
@@ -46,15 +38,15 @@ if appZip then
 	end)
 end
 
-math.randomseed(require"socket".gettime()*1000)
+local ok, _socket = pcall(require, "socket")
+math.randomseed(ok and _socket.gettime()*1000 or os.time())
 math.random() -- Gotta kickstart the randomness.
-
-io.stdout:setvbuf("no")
-io.stderr:setvbuf("no")
 
 require"globals"
 require"functions"
 
-socket.http.USERAGENT = "MyHappyList/"..APP_VERSION
+if socket then
+	socket.http.USERAGENT = "MyHappyList/"..APP_VERSION
+end
 
 wxPleaseJustStop = wxLogNull() -- Ugh.
