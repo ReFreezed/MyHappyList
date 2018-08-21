@@ -52,7 +52,7 @@ LOCAL_PORT                          = DEBUG_LOCAL and 9000 or 24040
 
 PROTOCOL_VERSION                    = 3
 CLIENT_NAME                         = "myhappylist"
-CLIENT_VERSION                      = 1
+CLIENT_VERSION                      = 2
 
 DEFAULT_PING_DELAY                  = DEBUG_LOCAL and 20 or 60
 DELAY_BETWEEN_REQUESTS_LONG         = 4
