@@ -25,8 +25,7 @@ DEBUG_DISABLE_VARIOUS_FILE_SAVING = false and DEBUG_LOCAL
 DEBUG_NEVER_UP_TO_DATE            = false and DEBUG
 
 -- Allow overriding DEBUG settings through a local file.
-local chunk = loadfile"local/debug.lua"
-if chunk then  chunk()  end
+pcall(require, "local.debug")
 
 
 

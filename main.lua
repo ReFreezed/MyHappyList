@@ -31,7 +31,9 @@ exec lua "$0" "$@"
 --=
 --============================================================]]
 
-assert(loadfile"src/loadBasic.lua")()
+DIR_EXE = DIR_EXE or "."
+
+require"src/loadBasic"
 require"load"
 
 _G.args  = _G.args or {...}

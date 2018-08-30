@@ -10,15 +10,15 @@
 --=
 --============================================================]]
 
-local ok, zipLib = pcall(require, "zip")
-if ok then  _G.appZip = zipLib.open"app"  end
+local zipLib = require"zip"
+_G.appZip = zipLib.open(DIR_EXE.."/app")
 
 if appZip then
 	table.insert(package.loaders, 1, function(moduleName)
 		local modulePath = moduleName:gsub("%.", "/")
 
-		for pathPat in package.path:gmatch"[^;]+" do
-			local path = pathPat:gsub("%?", modulePath):gsub("^%./", "")
+		for pathTemplate in package.relpath:gmatch"[^;]+" do
+			local path = pathTemplate:gsub("%?", modulePath):gsub("^%./", "")
 			local file = appZip:open(path)
 
 			if file then
@@ -48,5 +48,3 @@ require"functions"
 if socket then
 	socket.http.USERAGENT = "MyHappyList/"..APP_VERSION
 end
-
-wxPleaseJustStop = wxLogNull() -- Ugh.

@@ -10,7 +10,9 @@
 --=
 --============================================================]]
 
-assert(loadfile"src/loadBasic.lua")()
+DIR_EXE = "."
+
+require"src.loadBasic"
 require"load"
 
 local DIR_ZIP           = DIR_TEMP.."/zip"

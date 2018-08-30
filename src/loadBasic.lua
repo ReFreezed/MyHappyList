@@ -10,14 +10,17 @@
 --=
 --============================================================]]
 
-package.cpath
-	= "./bin/?.dll;"
-	.."./bin/?51.dll;"
+package.relpath
+	= "?.lua;"
+	.."src/?.lua;"
+	.."lib/?.lua;"
+	.."lib/?/init.lua;"
 
-package.path
-	= "./src/?.lua;"
-	.."./lib/?.lua;"
-	.."./lib/?/init.lua;"
+package.path = package.relpath:gsub("[^;]+", DIR_EXE.."/%0")
+
+package.cpath
+	= DIR_EXE.."/bin/?.dll;"
+	..DIR_EXE.."/bin/?51.dll;"
 
 io.stdout:setvbuf("no")
 io.stderr:setvbuf("no")

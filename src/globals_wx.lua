@@ -24,6 +24,9 @@ print     = print_lua
 bit       = nil
 print_lua = nil
 
+wxPleaseJustStop = wx.wxLogNull() -- Ugh.
+wx.wxSetWorkingDirectory(DIR_EXE)
+
 -- Quick'n'dirty export.
 for _, t in ipairs{wx, wxlua} do
 	for k0, v in pairs(t) do
