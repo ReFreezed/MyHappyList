@@ -58,6 +58,7 @@
 	tablePathGet, tablePathSet
 	trim, trimNewlines
 	unzip
+	updater_getUnzipDir, updater_moveFilesAfterUnzipMain, updater_moveFilesAfterUnzipUpdater
 
 --============================================================]]
 
@@ -1259,13 +1260,21 @@ end
 
 
 
--- success, errorMessage = unzip( zipFilePath, targetDirectory [, unwrapRootDirectoryInZipFile=false ] )
-function unzip(zipPath, targetDir, unwrapRoot)
+-- success, errorMessage = unzip( zipFilePath, targetDirectory [, unwrapRootDirectoryInZipFile=false ] [, filter ] )
+-- doUnzip = filter( relativePath )
+-- Note: relativePath can be a directory or file.
+function unzip(zipPath, targetDir, unwrapRoot, filter)
+	if type(unwrapRoot) == "function" then
+		unwrapRoot, filter = false, unwrapRoot
+	end
+
 	if not isDirectoryWritable(targetDir) then
 		return false, targetDir..": Directory is not writable."
 	end
 
 	local zip = assert(require"zip".open(zipPath))
+
+	assert(createDirectory(targetDir))
 
 	for archivedFile in zip:files() do
 		local pathRel = archivedFile.filename
@@ -1275,24 +1284,73 @@ function unzip(zipPath, targetDir, unwrapRoot)
 
 		-- Directory.
 		elseif pathRel:find"/$" then
-			pathRel = pathRel:sub(1, #pathRel-1)
+			pathRel            = pathRel:sub(1, #pathRel-1)
+			local pathRelFinal = unwrapRoot and pathRel:gsub("^[^/]+/", "") or pathRel
 
-			local path = targetDir.."/"..(unwrapRoot and pathRel:gsub("^[^/]+/", "") or pathRel)
-			assert(createDirectory(path))
+			if not filter or filter(pathRelFinal) then
+				local path = targetDir.."/"..pathRelFinal
+				assert(createDirectory(path))
+			end
 
 		-- File.
 		else
-			local file     = assert(zip:open(pathRel))
-			local contents = file:read"*a"
-			file:close()
+			local pathRelFinal = unwrapRoot and pathRel:gsub("^[^/]+/", "") or pathRel
 
-			local path = targetDir.."/"..(unwrapRoot and pathRel:gsub("^[^/]+/", "") or pathRel)
-			assert(writeFile(path, contents))
+			if not filter or filter(pathRelFinal) then
+				local file     = assert(zip:open(pathRel))
+				local contents = file:read"*a"
+				file:close()
+
+				local path = targetDir.."/"..pathRelFinal
+				assert(writeFile(path, contents))
+			end
 		end
 	end
 
 	zip:close()
 	return true
+end
+
+
+
+function updater_getUnzipDir()
+	return DIR_TEMP.."/LatestVersion"
+end
+
+do
+	local function moveFiles(isMain, dangerModeActive)
+		traverseDirectory(updater_getUnzipDir(), function(pathOld, pathRel, name, mode)
+			local pathNew = DIR_APP.."/"..pathRel
+
+			if (pathRel == "misc/Update" or pathRel:find"^misc/Update/" ~= nil) == isMain then
+				-- Skip for now.
+
+			elseif mode == "directory" then
+				if dangerModeActive then
+					logprint(nil, "Creating %s", pathNew)
+					assert(createDirectory(pathNew))
+				else
+					logprint("Sim", "Create directory: %s", pathNew)
+				end
+
+			else
+				if dangerModeActive then
+					logprint(nil, "Moving %s", pathNew)
+					assert(renameFile(pathOld, pathNew))
+				else
+					logprint("Sim", "Move file to: %s", pathNew)
+				end
+			end
+		end)
+	end
+
+	function updater_moveFilesAfterUnzipMain(dangerModeActive)
+		moveFiles(true, dangerModeActive)
+	end
+
+	function updater_moveFilesAfterUnzipUpdater(dangerModeActive)
+		moveFiles(false, dangerModeActive)
+	end
 end
 
 

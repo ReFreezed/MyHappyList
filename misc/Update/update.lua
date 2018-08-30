@@ -12,11 +12,13 @@
 --=
 --============================================================]]
 
-assert(loadfile"src/loadBasic.lua")()
+DIR_EXE = "."
+
+require"src.loadBasic"
 
 package.cpath
-	= "./misc/Update/?.dll;"
-	.."./misc/Update/?51.dll;"
+	= DIR_EXE.."/misc/Update/?.dll;"
+	..DIR_EXE.."/misc/Update/?51.dll;"
 
 require"load"
 
@@ -40,11 +42,11 @@ local function update()
 	end
 
 	-- path = "D:/Projects/Lua/MyHappyList/local/archive/MyHappyList_1.0.4_Win32.zip" -- DEBUG
-	local UNZIP_DIR = DIR_TEMP.."/LatestVersion"
-	if isDirectory(UNZIP_DIR) then
-		assert(removeDirectoryAndChildren(UNZIP_DIR, false))
+	local unzipDir = updater_getUnzipDir()
+	if isDirectory(unzipDir) then
+		assert(removeDirectoryAndChildren(unzipDir, false))
 	end
-	unzip(path, UNZIP_DIR, true)
+	assert(unzip(path, unzipDir, true))
 
 	-- Start doing dangerous stuff.
 	--==============================================================
@@ -96,6 +98,7 @@ local function update()
 		"bin",
 		"gfx",
 		"lib",
+		"misc/AppIcon", -- Don't try to remove misc/Update!
 		"src",
 		"utils",
 	} do
@@ -117,26 +120,7 @@ local function update()
 	-- Move new files.
 	--------------------------------
 
-	traverseDirectory(UNZIP_DIR, function(pathOld, pathRel, name, mode)
-		local pathNew = DIR_APP.."/"..pathRel
-
-		if mode == "directory" then
-			if dangerModeActive then
-				logprint(nil, "Creating %s", pathNew)
-				assert(createDirectory(pathNew))
-			else
-				logprint("Sim", "Create directory: %s", pathNew)
-			end
-
-		else
-			if dangerModeActive then
-				logprint(nil, "Moving %s", pathNew)
-				assert(renameFile(pathOld, pathNew))
-			else
-				logprint("Sim", "Move file to: %s", pathNew)
-			end
-		end
-	end)
+	updater_moveFilesAfterUnzipMain(dangerModeActive)
 
 	--==============================================================
 

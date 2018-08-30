@@ -55,6 +55,25 @@ logStart("output")
 appIcons   = wxIconBundle("gfx/appicon.ico", wxBITMAP_TYPE_ANY)
 fontTitle  = wxFont(1.2*wxFONT_NORMAL.PointSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD)
 
+-- Update updater.
+local unzipDir = updater_getUnzipDir()
+if isDirectory(unzipDir) then
+	logprint(nil, "Finishing update: Updating updater...")
+
+	local dangerModeActive = (appZip ~= nil)
+
+	if dangerModeActive then
+		table.insert(WRITABLE_DIRS, DIR_APP)
+	end
+	updater_moveFilesAfterUnzipUpdater(dangerModeActive)
+	if dangerModeActive then
+		table.remove(WRITABLE_DIRS)
+	end
+
+	assert(removeDirectoryAndChildren(unzipDir, false))
+	logprint(nil, "Finishing update: Updating updater... done!")
+end
+
 
 
 -- Top frame.
