@@ -150,6 +150,7 @@ traverseFiles("misc/Update", function(path, pathRel, filename, ext)
 end)
 
 -- Various files.
+outputFile("misc/AppIcon/AppIcon0128.png") -- Used in readme.
 outputFile("utils/rhash.exe")
 for name in directoryItems"." do
 	if isAny(getExtension(name), "dll","exe","lua","txt","md") and name ~= "lua5.1.exe" then

@@ -6,6 +6,11 @@
 
 [Forum thread](https://anidb.net/thread83307)
 
+- [Features](#features)
+- [Download](#download)
+- [How to Update](#how-to-update)
+- [Issues](#issues)
+
 
 
 ## Features
@@ -33,5 +38,17 @@ Move the `cache` and `local` folders from the old program folder to the new one 
 These folders will automatically be moved to your
 [`%APPDATA%`](https://www.microsoft.com/en-us/wdsi/help/folder-variables#appdata)
 folder next time you run MyHappyList, so you only ever have to do this once.
+
+
+
+## Issues
+
+### Program does not start and there's no error message
+There may be issues if there are special characters in the path to the program.
+Try placing the program folder in `C:\Program Files`.
+
+### Other issue
+You can report the issue on [GitHub](https://github.com/ReFreezed/MyHappyList/issues)
+or in the [forum thread](https://anidb.net/thread83307).
 
 
