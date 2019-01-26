@@ -90,6 +90,8 @@ appSettings = {
 	["fileColumnWidth"..FILE_COLUMN_SIZE]   = 80,
 	["fileColumnWidth"..FILE_COLUMN_VIEWED] = 80,
 	["fileColumnWidth"..FILE_COLUMN_STATUS] = 120,
+
+	serverResponseTimeout = DEFAULT_SERVER_RESPONSE_TIMEOUT,
 }
 
 dialogs = require"dialogs"
@@ -127,7 +129,7 @@ function addFileInfo(pathOrFi)
 			folder       = "",
 
 			ed2k         = "",
-			size         = getFileSize(path),
+			size         = assert(getFileSize(path)),
 			fid          = -1,
 
 			mylistStatus = MYLIST_STATUS_UNKNOWN,
@@ -609,7 +611,7 @@ do
 
 	local function checkFile(fileInfo, i)
 		local pathOld = fileInfo.path
-		if isFile(pathOld) then  return  end
+		if isFile(pathOld) then  return false  end
 
 		if appSettings.autoRemoveDeletedFiles then
 			removeFileInfo(fileInfo)
@@ -621,9 +623,8 @@ do
 		if not pathNew then
 			-- Leave fileInfo as-is. (Should we mark it so we don't ask for a new path again?)
 			return false
-		end
 
-		if pathNew == "" then
+		elseif pathNew == "" then
 			removeFileInfo(fileInfo)
 			anidb:reportLocalFileDeleted(pathOld)
 			return true

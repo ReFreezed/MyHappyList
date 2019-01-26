@@ -531,7 +531,7 @@ end
 function dialogs.settings()
 	local dialog       = wxDialog(topFrame, wxID_ANY, "Settings")
 	local sizerDialog  = wxBoxSizer(wxVERTICAL)
-	local sizerGrid    = wxGridBagSizer(MARGIN_L, MARGIN_L) -- 2x2
+	local sizerGrid    = wxGridBagSizer(MARGIN_L, MARGIN_L) -- 2x3
 
 	on(dialog, "CHAR_HOOK", function(e, kc)
 		if kc == KC_ESCAPE then
@@ -566,6 +566,43 @@ function dialogs.settings()
 
 	sizerGrid:Add(sizerBox, wxGBPosition(0, 0), wxGBSpan(1, 1), wxGROW)
 
+	-- Advanced.
+	----------------------------------------------------------------
+
+	local sizerBox = wxStaticBoxSizer(wxVERTICAL, dialog, "Advanced")
+	sizerBox.StaticBox.Font = fontTitle
+
+	------ Timeout.
+	local sizerBoxSub = wxBoxSizer(wxHORIZONTAL)
+
+	local textObj = wxStaticText(dialog, wxID_ANY, "Server response timeout:")
+	textObj:SetToolTip(F("Default is %d seconds", DEFAULT_SERVER_RESPONSE_TIMEOUT))
+	sizerBoxSub:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL + wxRIGHT, MARGIN_XS)
+
+	local validator = wxTextValidator(wxFILTER_INCLUDE_CHAR_LIST)
+	validator:SetIncludes{"0","1","2","3","4","5","6","7","8","9"}
+
+	local timeoutInput = wxTextCtrl(
+		dialog, wxID_ANY,
+		F("%d", appSettings.serverResponseTimeout),
+		wxDEFAULT_POSITION, wxDEFAULT_SIZE, 0, validator
+	)
+	timeoutInput:SetSizeHints(50, getHeight(timeoutInput))
+
+	-- Highest number is 999 means almost 17 minutes which should be enough for any situation, I think.
+	timeoutInput.MaxLength = 3
+
+	timeoutInput:SetToolTip(textObj.ToolTip.Tip)
+	sizerBoxSub:Add(timeoutInput, 0, wxRIGHT, MARGIN_XS)
+
+	local textObj = wxStaticText(dialog, wxID_ANY, "seconds")
+	sizerBoxSub:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL)
+
+	sizerBox:Add(sizerBoxSub, 0, wxGROW)
+	------
+
+	sizerGrid:Add(sizerBox, wxGBPosition(1, 0), wxGBSpan(1, 1), wxGROW)
+
 	-- File extensions.
 	----------------------------------------------------------------
 
@@ -585,11 +622,11 @@ function dialogs.settings()
 
 	local extensionsInput = wxTextCtrl(
 		dialog, wxID_ANY, table.concat(appSettings.movieExtensions, "\n"),
-		wxDEFAULT_POSITION, wxSize(100, 200), wxTE_MULTILINE
+		wxDEFAULT_POSITION, wxSize(100, 140), wxTE_MULTILINE
 	)
 	sizerBox:Add(extensionsInput, 0, wxGROW)
 
-	sizerGrid:Add(sizerBox, wxGBPosition(1, 0), wxGBSpan(1, 1), wxGROW)
+	sizerGrid:Add(sizerBox, wxGBPosition(2, 0), wxGBSpan(1, 1), wxGROW)
 
 	-- MyList defaults.
 	----------------------------------------------------------------
@@ -605,7 +642,7 @@ function dialogs.settings()
 		otherCheckbox,   otherInput
 		= addMylistaddFields(dialog, sizerBox, appSettings.mylistDefaults)
 
-	sizerGrid:Add(sizerBox, wxGBPosition(0, 1), wxGBSpan(2, 1), wxGROW)
+	sizerGrid:Add(sizerBox, wxGBPosition(0, 1), wxGBSpan(3, 1), wxGROW)
 
 	----------------------------------------------------------------
 
@@ -660,6 +697,8 @@ function dialogs.settings()
 
 		sortNatural(exts)
 
+		local timeout = clamp((tonumber(timeoutInput.Value) or DEFAULT_SERVER_RESPONSE_TIMEOUT), 10, 999)
+
 		setSetting("autoAddToMylist",        autoAddToMylistCheckbox:IsChecked())
 		setSetting("autoHash",               autoHashCheckbox:IsChecked())
 		setSetting("autoRemoveDeletedFiles", autoRemoveDeletedFilesCheckbox:IsChecked())
@@ -668,6 +707,7 @@ function dialogs.settings()
 		setSetting("movieExtensions",        exts)
 
 		setSetting("mylistDefaults",         mylistDefaults)
+		setSetting("serverResponseTimeout",  timeout)
 
 		checkFileInfos()
 		updateFileList()

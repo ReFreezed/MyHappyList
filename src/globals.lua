@@ -56,7 +56,7 @@ CLIENT_VERSION                      = 2
 DEFAULT_PING_DELAY                  = DEBUG_LOCAL and 20 or 60
 DELAY_BETWEEN_REQUESTS_LONG         = 4
 DELAY_BETWEEN_REQUESTS_SHORT        = 2
-SERVER_RESPONSE_TIMEOUT             = 90   -- Firefox's default HTTP connection timeout is 90 seconds.
+DEFAULT_SERVER_RESPONSE_TIMEOUT     = 120  -- Firefox's default HTTP response timeout used to be 120 seconds at some point.
 DELAY_BEFORE_RESENDING              = {30, 2*60, 5*60, 10*60, 30*60, 1*60*60, 2*60*60, last=3*60*60}
 
 NAT_LIMIT_MIN                       = 10

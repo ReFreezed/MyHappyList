@@ -117,7 +117,7 @@ end
 function directoryItems(dirPath)
 	local dirObj = wxDir(dirPath)
 
-	local ok, nameNext = dirObj:GetFirst()
+	local ok, nameNext = dirObj:GetFirst("", wxDIR_FILES)
 	if not ok then  nameNext = nil  end
 
 	return function()
@@ -258,11 +258,13 @@ end
 
 
 
+-- fileSize, errorMessage = getFileSize( path )
 function getFileSize(path)
-	-- Note: We can't use wxFileSize() because it returns an int32, which is just unbelievable. Why, people, why? Sigh!
+	-- Note: We can't use wxFileSize() because it returns an int32, which is too
+	-- small and just unbelievable. Why, people, why?! Sigh!
 
 	local file = wxFile(path)
-	if not file:IsOpened() then  return nil  end
+	if not file:IsOpened() then  return nil, F("Could not open '%s'.", path)  end
 
 	local size = file:Length()
 	file:Close()

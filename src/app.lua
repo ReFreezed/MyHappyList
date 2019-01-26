@@ -10,6 +10,9 @@
 --=
 --============================================================]]
 
+math.randomseed(os.time())
+math.random()
+
 require"appEnvironment"
 
 
@@ -95,7 +98,7 @@ on(topFrame, "CLOSE_WINDOW", function(e)
 	if
 		e:CanVeto()
 		and anidb:getActiveMessageCount() > 0
-		and not confirm("Exit", "The task queue is not empty. Data may get lost. Exit anyway?", "Exit")
+		and not confirm("Exit", "The task queue is not empty. Data may get lost. Exit anyway?", "Exit", nil, nil, true)
 	then
 		e:Veto()
 		return
@@ -680,7 +683,7 @@ wxGetApp():MainLoop()
 --= Exit =======================================================
 --==============================================================
 
--- saveSettings() -- No, do this in CLOSE_WINDOW instead.
+-- saveSettings() -- No, do this in CLOSE_WINDOW instead!
 
 processStopAll(true) -- May take some time as we try to end the processes gracefully.
 

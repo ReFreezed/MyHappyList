@@ -308,9 +308,12 @@ end
 function receive(self)
 	return function()
 		local data, err = self.udp:receive()
+
 		if err == "timeout" then  return nil  end
 
+		-- The only possible values for err should be nil and "timeout".
 		check(data, err)
+
 		if data then  return data  end
 	end
 end
@@ -1728,7 +1731,7 @@ function Anidb:init()
 	assert(self.udp:setsockname("*", LOCAL_PORT))
 	assert(self.udp:setpeername(SERVER_ADDRESS, SERVER_PORT))
 
-	self.udp:settimeout(0)
+	self.udp:settimeout(0) -- By default udp:receive() is blocking - we don't want that!
 
 	loadBlackout(self)
 	loadNatInfo(self)
@@ -2113,8 +2116,8 @@ function Anidb:update(force)
 	-- Time-out old messages.
 	if not isPaused() then
 		for _, msg in ipairsr(self.messages) do
-			if msg.stage == MESSAGE_STAGE_SENT and time-msg.timeSent > SERVER_RESPONSE_TIMEOUT then
-				_logprinterror("%s message timed out.", msg.command)
+			if msg.stage == MESSAGE_STAGE_SENT and time-msg.timeSent > appSettings.serverResponseTimeout then
+				_logprinterror("%s message timed out. (%s)", msg.command, msg.tag)
 
 				msg.stage = MESSAGE_STAGE_RESPONSE_TIMEOUT
 				removeMessage(self, msg)

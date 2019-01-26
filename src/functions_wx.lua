@@ -593,14 +593,23 @@ function showError(caption, message)
 	wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_ERROR, topFrame)
 end
 
--- bool = confirm( caption, message [, okLabel="OK", cancelLabel="Cancel", icon=wxICON_QUESTION ] )
-function confirm(caption, message, okLabel, cancelLabel, icon)
+-- bool = confirm( caption, message [, okLabel="OK", cancelLabel="Cancel", icon=wxICON_QUESTION, logResult=false ] )
+function confirm(caption, message, okLabel, cancelLabel, icon, logResult)
 	okLabel     = okLabel     or "OK"
 	cancelLabel = cancelLabel or "Cancel"
 	icon        = icon        or wxICON_QUESTION
 
-	local i = showButtonDialog(caption, message, {okLabel, cancelLabel}, icon)
-	return i == 1
+	if logResult then
+		log("Confirm: %s / %s", caption, message)
+	end
+
+	local i  = showButtonDialog(caption, message, {okLabel, cancelLabel}, icon)
+	local ok = (i == 1)
+
+	if logResult then
+		log("    Answer: %s", (ok and "ok" or "cancel"))
+	end
+	return ok
 end
 
 
