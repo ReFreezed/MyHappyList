@@ -2,7 +2,8 @@
 # "{...}" in texts are value placeholders.
 # "&" in menuItem texts indicate mnemonics/access keys.
 
-language_title = Svenska
+language_title       = Svenska
+language_translators = Marcus 'ReFreezed' Thunström
 
 error_anidb_accessDenied             = AniDB nekade åtkomsten när vi skickade ett {command}-kommando.
 error_anidb_badCommand               = AniDB känner inte igen ett {command}-kommando.

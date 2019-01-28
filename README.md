@@ -9,6 +9,7 @@
 - [Features](#features)
 - [Download](#download)
 - [How to Update](#how-to-update)
+- [Translations](#translations)
 - [Issues](#issues)
 
 
@@ -38,6 +39,17 @@ Move the `cache` and `local` folders from the old program folder to the new one 
 These folders will automatically be moved to your
 [`%APPDATA%`](https://www.microsoft.com/en-us/wdsi/help/folder-variables#appdata)
 folder next time you run MyHappyList, so you only ever have to do this once.
+
+
+
+## Translations
+MyHappyList currently supports English and Swedish.
+
+If you want to help translating the program into your language you can make a copy of
+[languages/en-US.txt](languages/en-US.txt) and edit the lines.
+When you're done you can [submit a pull request](https://github.com/ReFreezed/MyHappyList/compare) or
+send me the file in a [PM on AniDB](https://anidb.net/perl-bin/animedb.pl?show=msg&do.new=1&msg.to=ReFreezed)
+and the translation will be in the next release.
 
 
 
