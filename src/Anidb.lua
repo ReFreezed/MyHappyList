@@ -259,7 +259,7 @@ function parseEpisodes(epList)
 			local prefixTo, to = epTo   :match"^(%D*)(%d+)$"
 
 			if not prefix or prefixTo ~= prefix then
-				_logprinterror("Canot parse episode list: "..epSeq)
+				_logprinterror("Cannot parse episode list: "..epSeq)
 
 			else
 				for ep = tonumber(from), tonumber(to) do
@@ -405,7 +405,7 @@ do
 			if ok then
 				resendMessage(self, msg)
 			else
-				eventQueue:addEvent("error", "Failed "..msg.command.." command because we couldn't log in.")
+				eventQueue:addEvent("error", T("error_failedCommandAfterFailedLogin", {command=msg.command}))
 			end
 		end)
 
@@ -458,7 +458,7 @@ do
 		if not (statusCode or ""):find"^%d%d%d$" then
 			_logprinterror("Server response misses a code: %s", makePrintable(data))
 
-			eventQueue:addEvent("error", "Bad format of response from the server for "..msg.command.." command.")
+			eventQueue:addEvent("error", T(T"error_badResponseFormat", {command=msg.command}))
 			msg:callback(self, false)
 			return false
 		end
@@ -497,13 +497,13 @@ do
 
 		-- ACCESS DENIED
 		elseif statusCode == 502 then
-			local err = "AniDB denied access when we sent a "..msg.command.." command."
+			local err = T("error_anidb_accessDenied", {command=msg.command})
 			_logprinterror(err)
 			eventQueue:addEvent("error", err)
 
 		-- ILLEGAL INPUT OR ACCESS DENIED
 		elseif statusCode == 505 then
-			local err = "AniDB got bad data when we sent a "..msg.command.." command. There may be a bug in MyHappyList."
+			local err = F("error_anidb_badData", {command=msg.command})
 			_logprinterror(err)
 			eventQueue:addEvent("error", err)
 
@@ -520,7 +520,7 @@ do
 
 		-- UNKNOWN COMMAND
 		elseif statusCode == 598 then
-			eventQueue:addEvent("error", "AniDB does not recognize a "..msg.command.." command.")
+			eventQueue:addEvent("error", T("error_anidb_badCommand", {command=msg.command}))
 
 		-- Fatal error.
 		-- Note: 6XX messages do not always return the tag given with the command which caused the error!
@@ -532,20 +532,18 @@ do
 
 			local function errorEvent(eName, err)
 				if errServer ~= "" then
-					err = F("%s\nError message: %s", err, errServer)
+					err = F("%s\n%s: %s", err, T"error_message", errServer)
 				end
 				eventQueue:addEvent(eName, err)
 			end
 
 			local function pleaseReport()
-				return F(
-					" Please report the error to AniDB (code %d, timestamp %s).",
-					statusCode, os.date"!%Y-%m-%dT%H:%M:%SZ"
-				)
+				local timestamp = os.date"!%Y-%m-%dT%H:%M:%SZ"
+				return F(" %s (Code %d, timestamp %s)", T"error_anidbFatal_reportErrorToAnidb", statusCode, timestamp)
 			end
 
-			local function haltConnections(duration)
-				return " Connections halted by MyHappyList for "..duration.."."
+			local function haltConnections(durationString)
+				return " "..T("error_anidbFatal_haltedConnections", {duration=durationString})
 			end
 
 			-- INTERNAL SERVER ERROR
@@ -555,21 +553,21 @@ do
 				-- @Robustness: We can probably handle this better by keeping track of how
 				-- the 600 errors happen - if they happen for all commands etc.
 
-				errorEvent("error", "Internal server error."..pleaseReport()..haltConnections"2 hours")
+				errorEvent("error", T"error_anidbFatal_internalServer"..pleaseReport()..haltConnections(T("label_numHours", {n=2})))
 
 			-- ANIDB OUT OF SERVICE - TRY AGAIN LATER
 			elseif statusCode == 601 then
 				dropSession(self) -- We can probably assume all sessions drop during service time.
 				blackout(self, 30*60) -- Minimum 30 minutes.
 
-				errorEvent("erroroutofservice", "AniDB temporarily out of service."..haltConnections"30 minutes")
+				errorEvent("erroroutofservice", T"error_anidbFatal_outOfService"..haltConnections(T("label_numMinutes", {n=30})))
 
 			-- SERVER BUSY - TRY AGAIN LATER
 			elseif statusCode == 602 then
 				dropSession(self)
 				blackout(self, 15*60)
 
-				errorEvent("errorbusy", "AniDB is currently busy."..haltConnections"15 minutes")
+				errorEvent("errorbusy", T"error_anidbFatal_busy"..haltConnections(T("label_numMinutes", {n=15})))
 
 			-- TIMEOUT - DELAY AND RESUBMIT
 			elseif statusCode == 604 then
@@ -577,10 +575,10 @@ do
 					resendMessage(self, msg, true)
 					return true
 				end
-				errorEvent("errortimeout", "Connection timed out."..pleaseReport())
+				errorEvent("errortimeout", T"error_anidbFatal_connectionTimeout"..pleaseReport())
 
 			else
-				errorEvent("error", "Fatal server error."..pleaseReport())
+				errorEvent("error", T"error_anidbFatal_other"..pleaseReport())
 			end
 		end
 
@@ -668,11 +666,11 @@ end
 function blackout(self, duration)
 	local durationStr
 	if duration < 2*60 then
-		durationStr = F("%d seconds", duration)
+		durationStr = T("label_numSeconds", {n=duration})
 	elseif duration < 2*3600 then
-		durationStr = F("%d minutes", math.floor(duration/60))
+		durationStr = T("label_numMinutes", {n=math.floor(duration/60)})
 	else
-		durationStr = F("%d hours", math.floor(duration/3600))
+		durationStr = T("label_numHours",   {n=math.floor(duration/3600)})
 	end
 	_logprint("Blackout for %s.", durationStr)
 
@@ -1262,7 +1260,7 @@ responseHandlers = {
 
 	["PING"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			eventQueue:addEvent("ping_fail", "Something went wrong while sending ping. Check the log.")
+			eventQueue:addEvent("ping_fail", T"error_response_ping")
 
 		-- 300 PONG
 		elseif statusCode == 300 then
@@ -1278,7 +1276,7 @@ responseHandlers = {
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			eventQueue:addEvent("ping_fail", "AniDB error "..statusCode..": "..statusText)
+			eventQueue:addEvent("ping_fail", F("AniDB error %d: %s", statusCode, statusText))
 		end
 	end,
 
@@ -1286,7 +1284,7 @@ responseHandlers = {
 
 	["AUTH"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			eventQueue:addEvent("login_fail", "Something went wrong while logging in. Check the log.")
+			eventQueue:addEvent("login_fail", T"error_response_auth")
 			self.onLogin(false)
 
 		-- 200 session_key LOGIN ACCEPTED
@@ -1326,20 +1324,20 @@ responseHandlers = {
 
 		-- 503 CLIENT VERSION OUTDATED
 		elseif statusCode == 503 then
-			eventQueue:addEvent("login_fail", "MyHappyList is outdated. Please download the newest version.")
+			eventQueue:addEvent("login_fail", T"error_appOutdated")
 			self.onLogin(false)
 
 		-- 504 CLIENT BANNED - reason
 		elseif statusCode == 504 then
 			local reason = trim(statusText:match"%- (.+)" or "")
-			reason       = reason == "" and "No reason given." or "Reason: "..reason
+			reason       = reason == "" and T"error_missingReason" or T"label_reason"..": "..reason
 
-			eventQueue:addEvent("login_fail", "The client has been banned from AniDB.\n"..reason)
+			eventQueue:addEvent("login_fail", T"error_appBannedFromAnidb".."\n"..reason)
 			self.onLogin(false)
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			eventQueue:addEvent("login_fail", "AniDB error "..statusCode..": "..statusText)
+			eventQueue:addEvent("login_fail", F("AniDB error %d: %s", statusCode, statusText))
 			self.onLogin(false)
 		end
 	end,
@@ -1348,7 +1346,7 @@ responseHandlers = {
 
 	["LOGOUT"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			eventQueue:addEvent("logoutfail", "Something went wrong while logging out. Check the log.")
+			eventQueue:addEvent("logoutfail", T"error_response_logout")
 
 		-- 203 LOGGED OUT
 		elseif statusCode == 203 then
@@ -1363,7 +1361,7 @@ responseHandlers = {
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			eventQueue:addEvent("logoutfail", "AniDB error "..statusCode..": "..statusText)
+			eventQueue:addEvent("logoutfail", F("AniDB error %d: %s", statusCode, statusText))
 		end
 	end,
 
@@ -1371,7 +1369,7 @@ responseHandlers = {
 
 	["MYLIST"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			eventQueue:addEvent("mylistget_fail", "Something went wrong while retrieving mylist entries. Check the log.")
+			eventQueue:addEvent("mylistget_fail", T"error_response_mylist")
 
 		-- 221 MYLIST\nint4 lid|int fid|int eid|int aid|int gid|int date|int state|int viewdate|str storage|str source|str other|int filestate
 		elseif statusCode == 221 then
@@ -1453,7 +1451,7 @@ responseHandlers = {
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			eventQueue:addEvent("mylistget_fail", "AniDB error "..statusCode..": "..statusText)
+			eventQueue:addEvent("mylistget_fail", F("AniDB error %d: %s", statusCode, statusText))
 		end
 	end,
 
@@ -1461,7 +1459,7 @@ responseHandlers = {
 
 	["MYLISTADD"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			eventQueue:addEvent("mylistadd_fail", "Something went wrong while adding mylist entries. Check the log.")
+			eventQueue:addEvent("mylistadd_fail", T"error_response_mylistadd")
 
 		-- 210 MYLIST ENTRY ADDED\nint mylist id of new entry
 		-- 210 MYLIST ENTRY ADDED\nint number of entries added
@@ -1615,19 +1613,19 @@ responseHandlers = {
 
 		-- 330 NO SUCH ANIME
 		elseif statusCode == 330 and msg.params.aid then
-			eventQueue:addEvent("mylistadd_fail", "No anime on AniDB with ID %d.", msg.params.aid)
+			eventQueue:addEvent("mylistadd_fail", T("error_anidb_noMatch_aid", {id=msg.params.aid}))
 
 		-- 350 NO SUCH GROUP
 		elseif statusCode == 350 and msg.params.gid then
-			eventQueue:addEvent("mylistadd_fail", "No group on AniDB with ID %d.", msg.params.gid)
+			eventQueue:addEvent("mylistadd_fail", T("error_anidb_noMatch_gid", {id=msg.params.gid}))
 
 		-- 411 NO SUCH MYLIST ENTRY
 		elseif statusCode == 411 then
-			eventQueue:addEvent("mylistadd_fail", "No mylist entry with ID %d.", msg.params.lid)
+			eventQueue:addEvent("mylistadd_fail", T("error_anidb_noMatch_lid", {id=msg.params.lid}))
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			eventQueue:addEvent("mylistadd_fail", "AniDB error "..statusCode..": "..statusText)
+			eventQueue:addEvent("mylistadd_fail", F("AniDB error %d: %s", statusCode, statusText))
 		end
 	end,
 
@@ -1635,7 +1633,7 @@ responseHandlers = {
 
 	["MYLISTDEL"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			eventQueue:addEvent("mylistdelete_fail", "Something went wrong while deleting mylist entries. Check the log.")
+			eventQueue:addEvent("mylistdelete_fail", T"error_response_mylistdel")
 
 		-- 211 MYLIST ENTRY DELETED\nint number of entries
 		elseif statusCode == 211 then
@@ -1688,11 +1686,11 @@ responseHandlers = {
 
 		-- 411 NO SUCH MYLIST ENTRY
 		elseif statusCode == 411 then
-			eventQueue:addEvent("mylistdelete_fail", "No mylist entry with ID %d.", msg.params.lid)
+			eventQueue:addEvent("mylistdelete_fail", T("error_anidb_noMatch_lid", {id=msg.params.lid}))
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			eventQueue:addEvent("mylistdelete_fail", "AniDB error "..statusCode..": "..statusText)
+			eventQueue:addEvent("mylistdelete_fail", F("AniDB error %d: %s", statusCode, statusText))
 		end
 	end,
 

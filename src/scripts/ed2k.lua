@@ -29,7 +29,7 @@ end
 
 local ed2kHash = output:match"%S+"
 if not ed2kHash or #ed2kHash ~= 32 or ed2kHash:find"[^%da-f]" then
-	errorf("%s: %s", path, "rhash: "..output)
+	errorf("%s: rhash: %s", path, output)
 end
 
 print("ed2k: "..ed2kHash)

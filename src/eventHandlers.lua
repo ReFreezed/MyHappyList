@@ -24,7 +24,7 @@ eHandlers["message_count"] = function(msgCount)
 	if msgCount == 0 then
 		statusBarSetField(statusBar, STATUS_BAR_FIELD_MESSAGE_QUEUE, "")
 	else
-		statusBarSetField(statusBar, STATUS_BAR_FIELD_MESSAGE_QUEUE, "Task queue: %d", msgCount)
+		statusBarSetField(statusBar, STATUS_BAR_FIELD_MESSAGE_QUEUE, T("label_taskQueue", {count=msgCount}))
 	end
 end
 
@@ -66,7 +66,7 @@ end
 
 eHandlers["login_badlogin"] = function()
 	pause("badlogin")
-	showError("Bad Login", "The username and/or password is incorrect.")
+	showError(T"error_badLogin", T"error_badUsernameOrPassword")
 	unpause("badlogin")
 
 	anidb.canAskForCredentials = false -- Prevent a need_credentials event.
@@ -206,21 +206,17 @@ eHandlers["new_version_available"] = function(userMessage)
 	updateAvailableMessageReceived = true
 
 	-- @UX: A less intrusive "Update Available" notification.
-	showMessage("Update Available", "A new version of MyHappyList is available.")
+	showMessage(T"label_updateAvailable", T"message_newVersionAvailable")
 end
 
 eHandlers["message"] = function(userMessage)
-	showMessage("Message", userMessage)
+	showMessage(T"label_message", userMessage)
 end
 
 
 
 eHandlers["error_response_timeout"] = function(command)
-	showError(
-		"Timeout",
-		"Got no response from AniDB in time. Maybe the server is offline or your Internet connection is down?"
-			.."\n\nCommand: "..command
-	)
+	showError("label_timeout", F("%s\n\n%s: %s", error_messageResponseTimeout, T"label_command", command))
 end
 
 

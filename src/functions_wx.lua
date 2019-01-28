@@ -27,7 +27,7 @@
 	clipboardSetText
 
 	listCtrlGetSelectedRows, listCtrlGetFirstSelectedRow
-	listCtrlInsertColumn
+	listCtrlInsertColumn, listCtrlSetColumn
 	listCtrlInsertRow
 	listCtrlPopupMenu
 	listCtrlSelectRows
@@ -121,6 +121,17 @@ function listCtrlInsertColumn(listCtrl, wxCol, heading, w)
 
 	wxCol = listCtrl:InsertColumn(wxCol, heading, wxLIST_FORMAT_LEFT, w or -1)
 	return wxCol
+end
+
+-- success = listCtrlSetColumn( listCtrl, wxColumn [, newHeading, newWidth ] )
+function listCtrlSetColumn(listCtrl, wxCol, heading, w)
+	local columnInfo = wxListItem()
+	if not listCtrl:GetColumn(wxCol, columnInfo) then  return false  end
+
+	if heading then  columnInfo:SetText(heading)  end
+	if w       then  columnInfo:SetWidth(w)       end
+
+	return listCtrl:SetColumn(wxCol, columnInfo)
 end
 
 -- wxRow = listCtrlInsertRow( listCtrl [, wxRow=end ], item1, ... )
@@ -593,10 +604,12 @@ function showError(caption, message)
 	wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_ERROR, topFrame)
 end
 
--- bool = confirm( caption, message [, okLabel="OK", cancelLabel="Cancel", icon=wxICON_QUESTION, logResult=false ] )
+-- bool = confirm(
+--    caption, message [, okLabel=T"label_ok", cancelLabel=T"label_cancel", icon=wxICON_QUESTION, logResult=false ]
+-- )
 function confirm(caption, message, okLabel, cancelLabel, icon, logResult)
-	okLabel     = okLabel     or "OK"
-	cancelLabel = cancelLabel or "Cancel"
+	okLabel     = okLabel     or T"label_ok"
+	cancelLabel = cancelLabel or T"label_cancel"
 	icon        = icon        or wxICON_QUESTION
 
 	if logResult then

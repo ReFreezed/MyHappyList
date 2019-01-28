@@ -41,8 +41,6 @@ MYLIST_STATUS_NO               = 1
 MYLIST_STATUS_YES              = 2
 MYLIST_STATUS_INVALID          = 3 -- AniDB don't know of the file (ed2k+size missing).  @Incomplete: Use this!
 
-DROP_FILES_TO_ADD_MESSAGE      = "Drop files here to add them!"
-
 STATUS_BAR_FIELD_MESSAGE_QUEUE = 1
 
 
@@ -91,6 +89,7 @@ appSettings = {
 	["fileColumnWidth"..FILE_COLUMN_VIEWED] = 80,
 	["fileColumnWidth"..FILE_COLUMN_STATUS] = 120,
 
+	language              = "en-US",
 	serverResponseTimeout = DEFAULT_SERVER_RESPONSE_TIMEOUT,
 }
 
@@ -167,7 +166,7 @@ function removeFileInfo(fileInfo)
 	fileList:DeleteItem(wxRow)
 
 	if noFileInfos() then
-		listCtrlInsertRow(fileList, DROP_FILES_TO_ADD_MESSAGE)
+		listCtrlInsertRow(fileList, T"message_dropFilesHereInList")
 		listCtrlSelectRows(fileList)
 		fileList:Enable(false)
 	end
@@ -326,7 +325,7 @@ do
 			if ln == 1 then
 				local ver = tonumber(line)
 				if not (isInt(ver) and ver >= 1 and ver <= FILE_INFO_VERSION) then
-					errorf("%s:%d: Missing or invalid version number.", path, ln)
+					errorf("%s:%d: %s", path, ln, T"error_badFileVersion")
 				end
 
 			elseif line == "" then
@@ -429,12 +428,12 @@ end
 function getFileStatus(fileInfo)
 	return
 		nil
-		or fileInfo.isHashing                              and "Calculating hash"
-		or fileInfo.mylistStatus == MYLIST_STATUS_INVALID  and "Not on AniDB"
-		or fileInfo.mylistStatus == MYLIST_STATUS_YES      and "In MyList"
-		or fileInfo.mylistStatus == MYLIST_STATUS_NO       and "Not in MyList"
-		or fileInfo.ed2k         ~= ""                     and "Hashed"
-		or "Not hashed"
+		or fileInfo.isHashing                              and T"message_calculatingHash"
+		or fileInfo.mylistStatus == MYLIST_STATUS_INVALID  and T"label_notOnAnidb"
+		or fileInfo.mylistStatus == MYLIST_STATUS_YES      and T"label_inMylist"
+		or fileInfo.mylistStatus == MYLIST_STATUS_NO       and T"label_notInMylist"
+		or fileInfo.ed2k         ~= ""                     and T"label_hashed"
+		or T"label_notHashed"
 end
 
 function getFileViewed(fileInfo)
@@ -445,7 +444,7 @@ function getFileViewed(fileInfo)
 	if not mylistEntry then  return "?"  end
 
 	local time = mylistEntry.viewdate
-	return time == 0 and "No" or os.date("%Y-%m-%d", time)
+	return time == 0 and T"label_no" or os.date("%Y-%m-%d", time)
 end
 
 
@@ -630,13 +629,19 @@ do
 			return true
 		end
 
-		local fileSize = getFileSize(pathNew)
+		local fileSizeNew = getFileSize(pathNew)
 
-		if fileSize ~= fileInfo.size then
-			showError("Different File", F(
-				"The size of the file on the old path was different than the file on the new path.\n\n"
-				.."%.0f bytes (old)\n%.0f bytes (new)\n\n%s", fileInfo.size, fileSize, pathNew
-			))
+		if fileSizeNew ~= fileInfo.size then
+			showError(
+				T"label_fileIsDifferent",
+				F(
+					"%s\n\n%s\n%s\n\n%s",
+					T("error_fileSizeMismatch1"),
+					T("error_fileSizeMismatch2", {n=F("%.0f", fileInfo.size)}),
+					T("error_fileSizeMismatch3", {n=F("%.0f", fileSizeNew)}),
+					pathNew
+				)
+			)
 
 			return checkFile(fileInfo, i)
 		end
@@ -711,7 +716,7 @@ function openContainingFolder(path)
 	if isDirectory(getDirectory(path)) then
 		showFileInExplorer(path)
 	else
-		showError("Error", F("Folder does not exist.\n\n%s", path))
+		showError("Error", F("%s\n\n%s", T"error_missingDirectory", path))
 		checkFileInfos()
 	end
 end

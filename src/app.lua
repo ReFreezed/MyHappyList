@@ -77,6 +77,9 @@ if isDirectory(unzipDir) then
 	logprint(nil, "Finishing update: Updating updater... done!")
 end
 
+-- We need to load settings early for translations to work everywhere.
+loadSettings()
+
 
 
 -- Top frame.
@@ -98,7 +101,7 @@ on(topFrame, "CLOSE_WINDOW", function(e)
 	if
 		e:CanVeto()
 		and anidb:getActiveMessageCount() > 0
-		and not confirm("Exit", "The task queue is not empty. Data may get lost. Exit anyway?", "Exit", nil, nil, true)
+		and not confirm(T"label_exit", T"message_confirmExitDuringTask", T"label_exit", nil, nil, true)
 	then
 		e:Veto()
 		return
@@ -141,7 +144,7 @@ on(topFrame, "DROP_FILES", function(e, paths)
 		end
 
 		if pathsToAdd[MAX_DROPPED_FILES+1] then
-			showError("Error", F("Too many dropped files. (Max is %d)", MAX_DROPPED_FILES))
+			showError("Error", T("error_tooManyDroppedFiles", {n=MAX_DROPPED_FILES}))
 			return
 		end
 	end
@@ -228,55 +231,55 @@ local menuDebug = DEBUG and wxMenu() or nil
 -- File.
 --------------------------------
 
-newMenuItem(menuFile, topFrame, "&Settings"..(DEBUG and "\tAlt+S" or ""), "Change settings", function(e)
+newMenuItem(menuFile, topFrame, T"menuItem_settings"..(DEBUG and "\tAlt+S" or ""), T"menuItem_settings_tip", function(e)
 	dialogs.settings()
 end)
 
 if appZip or DEBUG then
 	newMenuItemSeparator(menuFile)
 
-	newMenuItem(menuFile, topFrame, "&Update Program", "Update MyHappyList to the latest version", function(e)
+	newMenuItem(menuFile, topFrame, T"menuItem_updateProgram", T"menuItem_updateProgram_tip", function(e)
 		dialogs.updateApp()
 	end)
 end
 
 newMenuItemSeparator(menuFile)
 
-newMenuItem(menuFile, topFrame, wxID_EXIT, "E&xit\tCtrl+Q", "Quit the program", function(e)
+newMenuItem(menuFile, topFrame, wxID_EXIT, T"menuItem_exit".."\tCtrl+Q", T"menuItem_exit_tip", function(e)
 	maybeQuit()
 end)
 
 -- Help.
 --------------------------------
 
-newMenuItem(menuHelp, topFrame, "&Changes", "View the changelog", function(e)
+newMenuItem(menuHelp, topFrame, T"menuItem_changelog", T"menuItem_changelog_tip", function(e)
 	dialogs.changelog()
 end)
 
-newMenuItem(menuHelp, topFrame, "&Log", "Open the text log in Notepad", function(e)
+newMenuItem(menuHelp, topFrame, T"menuItem_log", T"menuItem_log_tip", function(e)
 	-- @UX: Show a window with the log instead of using Notepad.
 	openFileInNotepad(logFilePath)
 end)
 
 newMenuItemSeparator(menuHelp)
 
-newMenuItem(menuHelp, topFrame, "&Forum Thread", "Go to MyHappyList's forum thread on AniDB", function(e)
+newMenuItem(menuHelp, topFrame, T"menuItem_forumThread", T"menuItem_forumThread_tip", function(e)
 	local url = "https://anidb.net/perl-bin/animedb.pl?show=cmt&id=83307"
 	if not wxLaunchDefaultBrowser(url) then
-		showError("Error", "Could not launch default browser.\n\n"..url)
+		showError("Error", F("%s\n\n%s", T"error_launchDefaultBrowser", url))
 	end
 end)
 
-newMenuItem(menuHelp, topFrame, "&Repository", "Go to MyHappyList's repository on GitHub", function(e)
+newMenuItem(menuHelp, topFrame, T"menuItem_repository", T"menuItem_repository_tip", function(e)
 	local url = "https://github.com/ReFreezed/MyHappyList"
 	if not wxLaunchDefaultBrowser(url) then
-		showError("Error", "Could not launch default browser.\n\n"..url)
+		showError("Error", F("%s\n\n%s", T"error_launchDefaultBrowser", url))
 	end
 end)
 
 newMenuItemSeparator(menuHelp)
 
-newMenuItem(menuHelp, topFrame, wxID_ABOUT, "&About", "About MyHappyList", function(e)
+newMenuItem(menuHelp, topFrame, wxID_ABOUT, T"menuItem_about", T"menuItem_about_tip", function(e)
 	dialogs.about()
 end)
 
@@ -342,9 +345,9 @@ end
 
 local menuBar = wxMenuBar()
 
-menuBar:Append(menuFile, "&File")
+menuBar:Append(menuFile, T"menuItem_file")
 if DEBUG then  menuBar:Append(menuDebug, "&Debug")  end
-menuBar:Append(menuHelp, "&Help")
+menuBar:Append(menuHelp, T"menuItem_help")
 
 topFrame.MenuBar = menuBar
 
@@ -358,7 +361,7 @@ local sizerMain = wxBoxSizer(wxVERTICAL)
 -- Bars above file list.
 --==============================================================
 
-loginButton = newButton(topPanel, wxID_ANY, "Log In", function(e)
+loginButton = newButton(topPanel, wxID_ANY, T"label_logIn", function(e)
 	dialogs.credentials()
 end)
 loginButton:SetSizeHints(getWidth(loginButton), 1.4*getHeight(loginButton))
@@ -377,13 +380,13 @@ fileList = wxListCtrl(
 )
 sizerMain:Add(fileList, 1, wxGROW)
 
-assert(listCtrlInsertColumn(fileList, "File",    100) == FILE_COLUMN_FILE-1)
-assert(listCtrlInsertColumn(fileList, "Folder",  100) == FILE_COLUMN_FOLDER-1)
-assert(listCtrlInsertColumn(fileList, "Size",    100) == FILE_COLUMN_SIZE-1)
-assert(listCtrlInsertColumn(fileList, "Watched", 100) == FILE_COLUMN_VIEWED-1)
-assert(listCtrlInsertColumn(fileList, "Status",  100) == FILE_COLUMN_STATUS-1)
+assert(listCtrlInsertColumn(fileList, T"label_file",      appSettings["fileColumnWidth"..FILE_COLUMN_FILE])   == FILE_COLUMN_FILE-1)
+assert(listCtrlInsertColumn(fileList, T"label_directory", appSettings["fileColumnWidth"..FILE_COLUMN_FOLDER]) == FILE_COLUMN_FOLDER-1)
+assert(listCtrlInsertColumn(fileList, T"label_fileSize",  appSettings["fileColumnWidth"..FILE_COLUMN_SIZE])   == FILE_COLUMN_SIZE-1)
+assert(listCtrlInsertColumn(fileList, T"label_watched",   appSettings["fileColumnWidth"..FILE_COLUMN_VIEWED]) == FILE_COLUMN_VIEWED-1)
+assert(listCtrlInsertColumn(fileList, T"label_status",    appSettings["fileColumnWidth"..FILE_COLUMN_STATUS]) == FILE_COLUMN_STATUS-1)
 
-listCtrlInsertRow(fileList, DROP_FILES_TO_ADD_MESSAGE)
+listCtrlInsertRow(fileList, T"message_dropFilesHereInList")
 fileList:Enable(false)
 
 on(fileList, "COMMAND_LIST_ITEM_ACTIVATED", function(e, wxRow)
@@ -392,7 +395,7 @@ on(fileList, "COMMAND_LIST_ITEM_ACTIVATED", function(e, wxRow)
 	if isFile(path) then
 		openFileExternally(path)
 	else
-		showError("Error", F("File does not exist.\n\n%s", path))
+		showError("Error", F("%s\n\n%s", T"error_missingFile", path))
 		checkFileInfos()
 	end
 end)
@@ -493,21 +496,21 @@ on(fileList, "CONTEXT_MENU", function(e)
 	----------------------------------------------------------------
 
 	if fileInfosSelected[2] then
-		newMenuItemLabel(popupMenu, #fileInfosSelected.." Files Selected")
+		newMenuItemLabel(popupMenu, T("label_numFilesSelected", {n=#fileInfosSelected}))
 		newMenuItemSeparator(popupMenu)
 	end
 
-	newMenuItem(popupMenu, fileList, "&Play\tEnter", "Open the file", function(e)
+	newMenuItem(popupMenu, fileList, T"menuItem_play".."\tEnter", T"menuItem_play_tip", function(e)
 		local path = fileInfosSelected[1].path
 		if isFile(path) then
 			openFileExternally(path)
 		else
-			showError("Error", F("File does not exist.\n\n%s", path))
+			showError("Error", F("%s\n\n%s", T"error_missingFile", path))
 			checkFileInfos()
 		end
 	end)
 
-	newMenuItem(popupMenu, fileList, "Mark as &Watched", "Mark selected files as watched", function(e)
+	newMenuItem(popupMenu, fileList, T"menuItem_markAsWatched", T"menuItem_markAsWatched_tip", function(e)
 		local values = {viewed=true}
 
 		for _, fileInfo in ipairs(fileInfosSelected) do
@@ -520,18 +523,18 @@ on(fileList, "CONTEXT_MENU", function(e)
 		end
 	end):Enable(anyIsPossiblyOnAnidb)
 
-	newMenuItem(popupMenu, fileList, "Open &Containing Folder\tCtrl+Shift+O", "Open the folder containing the file", function(e)
+	newMenuItem(popupMenu, fileList, T"menuItem_openContainingFolder".."\tCtrl+Shift+O", T"menuItem_openContainingFolder_tip", function(e)
 		openContainingFolder(fileInfosSelected[1].path)
 	end)
 
-	newMenuItem(popupMenu, fileList, "&Remove from List\tDelete", "Remove selected files from the list", function(e)
+	newMenuItem(popupMenu, fileList, T"menuItem_removeFromList".."\tDelete", T"menuItem_removeFromList_tip", function(e)
 		removeSelectedFileInfos()
 	end)
 
 	----------------------------------------------------------------
 	newMenuItemSeparator(popupMenu)
 
-	newMenuItem(popupMenu, fileList, "Add to / &Edit MyList\tF2", "Add file to, or edit, MyList", function(e)
+	newMenuItem(popupMenu, fileList, T"menuItem_addToOrEditMylist".."\tF2", T"menuItem_addToOrEditMylist_tip", function(e)
 		dialogs.addmylist(getSelectedFileInfos(true))
 	end):Enable(anyIsHashed and anyIsPossiblyOnAnidb)
 
@@ -541,23 +544,23 @@ on(fileList, "CONTEXT_MENU", function(e)
 	local submenu = wxMenu()
 
 	newMenuItem(
-		submenu, topFrame, "Copy &ed2k to Clipboard", "Copy ed2k hash to clipboard",
+		submenu, topFrame, T"menuItem_copyEd2kToClipboard", T"menuItem_copyEd2kToClipboard_tip",
 		function(e)
 			if fileInfosSelected[2] then
 				local ed2ks = getColumn(fileInfosSelected, "ed2k")
 				clipboardSetText(table.concat(ed2ks, "\n"))
-				setStatusText("Copied ed2k hashes of %d files to clipboard", #fileInfosSelected)
+				setStatusText(T("message_ed2kCopiedToClipboard", {n=#fileInfosSelected}))
 			else
 				local fileInfo = fileInfosSelected[1]
 				clipboardSetText(fileInfo.ed2k)
-				setStatusText("Copied ed2k hash of '%s' to clipboard", fileInfo.name)
+				setStatusText(T("message_ed2kCopiedToClipboard_single", {filename=fileInfo.name}))
 			end
 		end
 	):Enable(anyIsHashed)
 
 	newMenuItemSeparator(submenu)
 
-	newMenuItem(submenu, fileList, "&Refresh Status", "Manually update the status of the file", function(e)
+	newMenuItem(submenu, fileList, T"menuItem_refreshStatus", T"menuItem_refreshStatus_tip", function(e)
 		for _, fileInfo in ipairs(fileInfosSelected) do
 			softUpdateFileInfo(fileInfo, true)
 		end
@@ -566,8 +569,8 @@ on(fileList, "CONTEXT_MENU", function(e)
 
 	newMenuItemSeparator(submenu)
 
-	newMenuItem(submenu, fileList, "&Delete from MyList", "Delete file from MyList", function(e)
-		if not confirm("Delete from MyList", "Delete the selected files from MyList?", "Delete") then  return  end
+	newMenuItem(submenu, fileList, T"menuItem_deleteFromMylist", T"menuItem_deleteFromMylist_tip", function(e)
+		if not confirm(T"label_deleteFromMylist", T"message_deleteFromMylist", T"label_delete") then  return  end
 
 		for _, fileInfo in ipairs(fileInfosSelected) do
 			if fileInfo.lid ~= -1 then
@@ -576,7 +579,7 @@ on(fileList, "CONTEXT_MENU", function(e)
 		end
 	end):Enable(anyIsInMylist)
 
-	newMenuItem(popupMenu, fileList, "&More", submenu)
+	newMenuItem(popupMenu, fileList, T"menuItem_more", submenu)
 
 	----------------------------------------------------------------
 	if DEBUG then
@@ -634,14 +637,9 @@ end)
 --= Load Stuff =================================================
 --==============================================================
 
-loadSettings()
-loadFileInfos()
+-- Note: The settings file has already been loaded here above.
 
-fileList:SetColumnWidth(FILE_COLUMN_FILE-1,   appSettings["fileColumnWidth"..FILE_COLUMN_FILE])
-fileList:SetColumnWidth(FILE_COLUMN_FOLDER-1, appSettings["fileColumnWidth"..FILE_COLUMN_FOLDER])
-fileList:SetColumnWidth(FILE_COLUMN_SIZE-1,   appSettings["fileColumnWidth"..FILE_COLUMN_SIZE])
-fileList:SetColumnWidth(FILE_COLUMN_VIEWED-1, appSettings["fileColumnWidth"..FILE_COLUMN_VIEWED])
-fileList:SetColumnWidth(FILE_COLUMN_STATUS-1, appSettings["fileColumnWidth"..FILE_COLUMN_STATUS])
+loadFileInfos()
 
 if not (appSettings.windowSizeX == -1 and appSettings.windowSizeY == -1) then
 	topFrame:SetSize(appSettings.windowSizeX, appSettings.windowSizeY)

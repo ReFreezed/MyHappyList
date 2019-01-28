@@ -33,18 +33,18 @@ local APPROX_BASE_MESSAGE_LENGTH = 150
 local SAFETY_MESSAGE_LENGTH      = 20
 
 local VIEWED_STATES = {
-	{value=nil,   title=""},
-	{value=true,  title="Yes"},
-	{value=false, title="No"},
+	{value=nil},
+	{value=true},
+	{value=false},
 }
 
 local MYLIST_STATES = {
-	{value=nil,                           title=""},
-	{value=MYLIST_STATE_UNKNOWN,          title="Unknown / unspecified"},
-	{value=MYLIST_STATE_INTERNAL_STORAGE, title="Internal storage (HDD/SSD)"},
-	{value=MYLIST_STATE_EXTERNAL_STORAGE, title="External storage (CD, DVD etc.)"},
-	-- {value=MYLIST_STATE_REMOTE_STORAGE,   title="Remote storage (NAS, cloud etc.)"}, -- AniDB complains! :/
-	{value=MYLIST_STATE_DELETED,          title="Deleted"},
+	{value=nil},
+	{value=MYLIST_STATE_UNKNOWN},
+	{value=MYLIST_STATE_INTERNAL_STORAGE},
+	{value=MYLIST_STATE_EXTERNAL_STORAGE},
+	-- {value=MYLIST_STATE_REMOTE_STORAGE}, -- AniDB complains! :/
+	{value=MYLIST_STATE_DELETED},
 }
 
 local dialogs = {}
@@ -65,11 +65,16 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 	-- Viewed.
 	----------------------------------------------------------------
 
-	local labels = getColumn(VIEWED_STATES, "title")
-	labels[1] = valuesCurrent and "(default)" or "(don't change)"
+	local labels = {}
+	for i, state in ipairs(VIEWED_STATES) do
+		if state.value ~= nil then
+			labels[i] = T(state.value and "label_yes" or "label_no")
+		end
+	end
+	labels[1] = valuesCurrent and T"label_option_default" or T"label_option_doNotChange"
 
 	local viewedRadio = wxRadioBox(
-		parent, wxID_ANY, "Watched", wxDEFAULT_POSITION, wxDEFAULT_SIZE,
+		parent, wxID_ANY, T"label_watched", wxDEFAULT_POSITION, wxDEFAULT_SIZE,
 		labels, 0, wxRA_SPECIFY_ROWS -- @Incomplete: Allow direct editing of viewdate.
 	)
 	sizerParent:Add(viewedRadio, 0, wxGROW)
@@ -83,11 +88,16 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 
 	sizerParent:AddSpacer(MARGIN_S)
 
-	local labels = getColumn(MYLIST_STATES, "title")
-	labels[1] = valuesCurrent and "(default)" or "(don't change)"
+	local labels = {}
+	for i, state in ipairs(MYLIST_STATES) do
+		if state.value then
+			labels[i] = T("label_mylistState_"..state.value)
+		end
+	end
+	labels[1] = valuesCurrent and T"label_option_default" or T"label_option_doNotChange"
 
 	local mylistStateRadio = wxRadioBox(
-		parent, wxID_ANY, "State", wxDEFAULT_POSITION, wxDEFAULT_SIZE,
+		parent, wxID_ANY, T"label_state", wxDEFAULT_POSITION, wxDEFAULT_SIZE,
 		labels, 0, wxRA_SPECIFY_ROWS
 	)
 	sizerParent:Add(mylistStateRadio, 0, wxGROW)
@@ -104,9 +114,9 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 	local panel      = wxPanel(parent, wxID_ANY)
 	local sizerPanel = wxBoxSizer(wxHORIZONTAL)
 
-	local sourceCheckbox = wxCheckBox(panel, wxID_ANY, "Source:")
-	sourceCheckbox:SetSizeHints(60, getHeight(sourceCheckbox))
-	sourceCheckbox:SetToolTip("I.e. ed2k, DC, FTP or IRC")
+	local sourceCheckbox = wxCheckBox(panel, wxID_ANY, T"label_source"..":")
+	sourceCheckbox:SetSizeHints(80, getHeight(sourceCheckbox))
+	sourceCheckbox:SetToolTip(T"label_source_tip")
 	sourceCheckbox.Value = (valuesCurrent ~= nil and valuesCurrent.source ~= nil)
 	sizerPanel:Add(sourceCheckbox, 0, wxGROW)
 
@@ -146,9 +156,9 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 	local panel      = wxPanel(parent, wxID_ANY)
 	local sizerPanel = wxBoxSizer(wxHORIZONTAL)
 
-	local storageCheckbox = wxCheckBox(panel, wxID_ANY, "Storage:")
-	storageCheckbox:SetSizeHints(60, getHeight(storageCheckbox))
-	storageCheckbox:SetToolTip("I.e. the label of the CD with this file")
+	local storageCheckbox = wxCheckBox(panel, wxID_ANY, T"label_storage"..":")
+	storageCheckbox:SetSizeHints(80, getHeight(storageCheckbox))
+	storageCheckbox:SetToolTip(T"label_storage_tip")
 	storageCheckbox.Value = (valuesCurrent ~= nil and valuesCurrent.storage ~= nil)
 	sizerPanel:Add(storageCheckbox, 0, wxGROW)
 
@@ -188,8 +198,8 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 	local panel      = wxPanel(parent, wxID_ANY)
 	local sizerPanel = wxBoxSizer(wxHORIZONTAL)
 
-	local otherCheckbox = wxCheckBox(panel, wxID_ANY, "Note:")
-	otherCheckbox:SetSizeHints(60, getHeight(otherCheckbox))
+	local otherCheckbox = wxCheckBox(panel, wxID_ANY, T"label_note"..":")
+	otherCheckbox:SetSizeHints(80, getHeight(otherCheckbox))
 	otherCheckbox.Value = (valuesCurrent ~= nil and valuesCurrent.other ~= nil)
 	sizerPanel:Add(otherCheckbox)
 
@@ -255,13 +265,13 @@ function dialogs.about()
 		= "MyHappyList "..APP_VERSION
 
 	local copyright
-		= "Copyright © 2018 Marcus 'ReFreezed' Thunström. MIT license."
+		= F("Copyright © 2018-%s Marcus 'ReFreezed' Thunström. MIT license.", os.date"%Y")
 
 	local desciption
 		= "MyHappyList is made using Lua, wxLua, LuaSocket, LuaZip, LuaSec and rhash. "
 		.."The executable is built using srlua, ResourceHacker and ImageMagick."
 
-	local dialog = wxDialog(topFrame, wxID_ANY, "About MyHappyList")
+	local dialog = wxDialog(topFrame, wxID_ANY, T"label_aboutApp")
 	local sizer  = wxBoxSizer(wxVERTICAL)
 
 	-- Icon.
@@ -293,7 +303,7 @@ function dialogs.about()
 	sizer:AddSpacer(MARGIN_L)
 
 	-- Close button.
-	local button = newButton(dialog, wxID_OK, "Close")
+	local button = newButton(dialog, wxID_OK, T"label_close")
 	button:SetSizeHints(100, getHeight(button)+2*3)
 	sizer:Add(button, 0, wxALIGN_CENTRE_HORIZONTAL)
 
@@ -320,15 +330,15 @@ function dialogs.addmylist(fileInfosToAddOrEdit)
 		mylistEntry = anidb:getCacheMylist(fileInfoFirst.lid)
 	end
 
-	local dialog       = wxDialog(topFrame, wxID_ANY, "Add to / Edit MyList")
+	local dialog       = wxDialog(topFrame, wxID_ANY, T"label_addToOrEditMylist")
 	local sizerDialog  = wxBoxSizer(wxVERTICAL)
 
 	-- File count text.
 	----------------------------------------------------------------
 
-	local textObj = newText(dialog, F(
-		"Adding/editing %d file%s.",
-		#fileInfosToAddOrEdit, (#fileInfosToAddOrEdit == 1 and "" or "s")
+	local textObj = newText(dialog, T(
+		"message_editingNumFiles"..(#fileInfosToAddOrEdit == 1 and "_single" or ""),
+		{n=#fileInfosToAddOrEdit}
 	))
 	sizerDialog:Add(textObj)
 
@@ -362,7 +372,7 @@ function dialogs.addmylist(fileInfosToAddOrEdit)
 
 	local sizerButtons = wxStdDialogButtonSizer()
 
-	local button = newButton(dialog, wxID_OK, "Add / Edit", function(e)
+	local button = newButton(dialog, wxID_OK, T"label_addOrEdit", function(e)
 		local viewed  = VIEWED_STATES[viewedRadio.Selection+1].value
 		local state   = MYLIST_STATES[mylistStateRadio.Selection+1].value
 		local storage = storageCheckbox:IsChecked() and storageInput.Value or nil
@@ -373,12 +383,10 @@ function dialogs.addmylist(fileInfosToAddOrEdit)
 
 		if APPROX_BASE_MESSAGE_LENGTH + totalStrLen > MAX_UDP_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH then
 			showWarning(
-				"Too Long Texts",
-				F(
-					"The combined length of the storage, source and note texts is too long to send over the network. "
-						.."The supported maximum length is around %d characters.",
-					MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH
-				)
+				T("error_tooLongTexts"),
+				T("error_tooLongTexts_text", {
+					maxChars = MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH
+				})
 			)
 			return -- Don't close the dialog.
 		end
@@ -406,7 +414,7 @@ function dialogs.addmylist(fileInfosToAddOrEdit)
 	end)
 	sizerButtons.AffirmativeButton = button
 
-	local button = newButton(dialog, wxID_CANCEL, "Cancel")
+	local button = newButton(dialog, wxID_CANCEL, T"label_cancel")
 	sizerButtons.CancelButton = button
 
 	sizerButtons:Realize()
@@ -429,7 +437,7 @@ end
 
 
 function dialogs.credentials()
-	local dialog       = wxDialog(topFrame, wxID_ANY, "Credentials to AniDB")
+	local dialog       = wxDialog(topFrame, wxID_ANY, T"label_anidbCredentials")
 	local sizerDialog  = wxBoxSizer(wxVERTICAL)
 
 	-- Inputs.
@@ -440,8 +448,8 @@ function dialogs.credentials()
 	-- Username. 3-16 characters. A-Z, a-z, 0-9, - and _ only.
 	local sizerSection = wxBoxSizer(wxHORIZONTAL)
 
-	local textObj = wxStaticText(dialog, wxID_ANY, "Username:")
-	textObj:SetSizeHints(60, getHeight(textObj))
+	local textObj = wxStaticText(dialog, wxID_ANY, T"label_username"..":")
+	textObj:SetSizeHints(90, getHeight(textObj))
 	sizerSection:Add(textObj)
 
 	local userInput = wxTextCtrl(dialog, wxID_ANY, (user or ""))
@@ -455,8 +463,8 @@ function dialogs.credentials()
 	-- Password. 4-64 characters. ASCII only.
 	local sizerSection = wxBoxSizer(wxHORIZONTAL)
 
-	local textObj = wxStaticText(dialog, wxID_ANY, "Password:")
-	textObj:SetSizeHints(60, getHeight(textObj))
+	local textObj = wxStaticText(dialog, wxID_ANY, T"label_password"..":")
+	textObj:SetSizeHints(90, getHeight(textObj))
 	sizerSection:Add(textObj)
 
 	local passInput = wxTextCtrl(dialog, wxID_ANY, (pass or ""), wxDEFAULT_POSITION, wxDEFAULT_SIZE, wxTE_PASSWORD)
@@ -470,7 +478,7 @@ function dialogs.credentials()
 
 	sizerDialog:AddSpacer(MARGIN_M)
 
-	local textObj = wxStaticText(dialog, wxID_ANY, F("Note: These credentials will be saved here:\n%s/login", DIR_CONFIG))
+	local textObj = wxStaticText(dialog, wxID_ANY, F("%s:\n%s/login", T"message_anidbCredentialsLocation", DIR_CONFIG))
 	sizerDialog:Add(textObj, 0, wxGROW)
 
 	-- Buttons.
@@ -480,18 +488,18 @@ function dialogs.credentials()
 
 	local sizerButtons = wxStdDialogButtonSizer()
 
-	local button = newButton(dialog, wxID_OK, "Save", function(e)
+	local button = newButton(dialog, wxID_OK, T"label_save", function(e)
 		local user = userInput.Value
 		local pass = passInput.Value
 
 		-- Username. 3-16 characters. A-Z, a-z, 0-9, - and _ only.
 		if #user < 3 or #user > 16 or user:find"[^-%w_]" then
-			showMessage("Username", "The username is invalid.")
+			showMessage(T"label_username", T"error_badUsername")
 			userInput:SetFocus()
 
 		-- Password. 4-64 characters. ASCII only.
 		elseif #pass < 4 or #pass > 64 or pass:find"[%z\1-\31\128-\255]" then
-			showMessage("Password", "The password is invalid.")
+			showMessage(T"label_password", T"error_badPassword")
 			passInput:SetFocus()
 
 		else
@@ -502,7 +510,7 @@ function dialogs.credentials()
 	end)
 	sizerButtons.AffirmativeButton = button
 
-	local button = newButton(dialog, wxID_CANCEL, "Cancel")
+	local button = newButton(dialog, wxID_CANCEL, T"label_cancel")
 	sizerButtons.CancelButton = button
 
 	sizerButtons:Realize()
@@ -528,8 +536,10 @@ end
 
 
 
+local FILE_EXTENSIONS_INPUT_HEIGHT = 120
+
 function dialogs.settings()
-	local dialog       = wxDialog(topFrame, wxID_ANY, "Settings")
+	local dialog       = wxDialog(topFrame, wxID_ANY, T"label_settings")
 	local sizerDialog  = wxBoxSizer(wxVERTICAL)
 	local sizerGrid    = wxGridBagSizer(MARGIN_L, MARGIN_L) -- 2x3
 
@@ -545,22 +555,46 @@ function dialogs.settings()
 	-- General.
 	----------------------------------------------------------------
 
-	local sizerBox = wxStaticBoxSizer(wxVERTICAL, dialog, "General")
+	local sizerBox = wxStaticBoxSizer(wxVERTICAL, dialog, T"label_general")
 	sizerBox.StaticBox.Font = fontTitle
 
-	local autoHashCheckbox = wxCheckBox(dialog, wxID_ANY, "Start hashing files automatically")
-	autoHashCheckbox.Value = appSettings.autoHash
-	sizerBox:Add(autoHashCheckbox)
+	------ Language.
+	local translations     = getTranslations()
+	local currentLangTitle = itemWith(translations, "code", appSettings.language).title
 
-	local autoAddToMylistCheckbox = wxCheckBox(dialog, wxID_ANY, "Automatically add files to MyList")
+	local sizerBoxSub = wxBoxSizer(wxHORIZONTAL)
+
+	local textObj = wxStaticText(dialog, wxID_ANY, T"label_language"..":")
+	sizerBoxSub:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL + wxRIGHT, MARGIN_XS)
+
+	local languageList = wxComboBox(
+		dialog,
+		wxID_ANY,
+		currentLangTitle,
+		wxDEFAULT_POSITION,
+		wxDEFAULT_SIZE,
+		getColumn(translations, "title"),
+		wxCB_DROPDOWN + wxCB_READONLY
+	)
+	languageList:SetSizeHints(140, getHeight(languageList))
+	sizerBoxSub:Add(languageList, 0, wxGROW)
+
+	sizerBox:Add(sizerBoxSub, 0, wxGROW)
+	------
+
+	local autoHashCheckbox = wxCheckBox(dialog, wxID_ANY, T"label_autoHashFiles")
+	autoHashCheckbox.Value = appSettings.autoHash
+	sizerBox:Add(autoHashCheckbox, 0, wxTOP, MARGIN_S)
+
+	local autoAddToMylistCheckbox = wxCheckBox(dialog, wxID_ANY, T"label_autoAddFilesToMylist")
 	autoAddToMylistCheckbox.Value = appSettings.autoAddToMylist
 	sizerBox:Add(autoAddToMylistCheckbox, 0, wxTOP, MARGIN_S)
 
-	local autoRemoveDeletedFilesCheckbox = wxCheckBox(dialog, wxID_ANY, "Automatically remove moved/deleted files from list")
+	local autoRemoveDeletedFilesCheckbox = wxCheckBox(dialog, wxID_ANY, T"label_autoRemoveFilesFromList")
 	autoRemoveDeletedFilesCheckbox.Value = appSettings.autoRemoveDeletedFiles
 	sizerBox:Add(autoRemoveDeletedFilesCheckbox, 0, wxTOP, MARGIN_S)
 
-	local truncateFoldersCheckbox = wxCheckBox(dialog, wxID_ANY, "Show truncated folder paths")
+	local truncateFoldersCheckbox = wxCheckBox(dialog, wxID_ANY, T"label_truncateFolders")
 	truncateFoldersCheckbox.Value = appSettings.truncateFolders
 	sizerBox:Add(truncateFoldersCheckbox, 0, wxTOP, MARGIN_M)
 
@@ -569,14 +603,14 @@ function dialogs.settings()
 	-- Advanced.
 	----------------------------------------------------------------
 
-	local sizerBox = wxStaticBoxSizer(wxVERTICAL, dialog, "Advanced")
+	local sizerBox = wxStaticBoxSizer(wxVERTICAL, dialog, T"label_advanced")
 	sizerBox.StaticBox.Font = fontTitle
 
 	------ Timeout.
 	local sizerBoxSub = wxBoxSizer(wxHORIZONTAL)
 
-	local textObj = wxStaticText(dialog, wxID_ANY, "Server response timeout:")
-	textObj:SetToolTip(F("Default is %d seconds", DEFAULT_SERVER_RESPONSE_TIMEOUT))
+	local textObj = wxStaticText(dialog, wxID_ANY, T"label_serverResponseTimeout"..":")
+	textObj:SetToolTip(T("label_serverResponseTimeout_tip", {n=DEFAULT_SERVER_RESPONSE_TIMEOUT}))
 	sizerBoxSub:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL + wxRIGHT, MARGIN_XS)
 
 	local validator = wxTextValidator(wxFILTER_INCLUDE_CHAR_LIST)
@@ -587,7 +621,7 @@ function dialogs.settings()
 		F("%d", appSettings.serverResponseTimeout),
 		wxDEFAULT_POSITION, wxDEFAULT_SIZE, 0, validator
 	)
-	timeoutInput:SetSizeHints(50, getHeight(timeoutInput))
+	timeoutInput:SetSizeHints(40, getHeight(timeoutInput))
 
 	-- Highest number is 999 means almost 17 minutes which should be enough for any situation, I think.
 	timeoutInput.MaxLength = 3
@@ -595,7 +629,7 @@ function dialogs.settings()
 	timeoutInput:SetToolTip(textObj.ToolTip.Tip)
 	sizerBoxSub:Add(timeoutInput, 0, wxRIGHT, MARGIN_XS)
 
-	local textObj = wxStaticText(dialog, wxID_ANY, "seconds")
+	local textObj = wxStaticText(dialog, wxID_ANY, T"label_seconds")
 	sizerBoxSub:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL)
 
 	sizerBox:Add(sizerBoxSub, 0, wxGROW)
@@ -606,23 +640,20 @@ function dialogs.settings()
 	-- File extensions.
 	----------------------------------------------------------------
 
-	local sizerBox = wxStaticBoxSizer(wxVERTICAL, dialog, "File Extensions")
+	local sizerBox = wxStaticBoxSizer(wxVERTICAL, dialog, T"label_fileExtensions")
 	sizerBox.StaticBox.Font = fontTitle
 
-	local textObj = wxStaticText(
-		dialog, wxID_ANY,
-		"Only files with these extensions will get added when you drag files or folders into the window."
-	)
+	local textObj = wxStaticText(dialog, wxID_ANY, T"message_fileExtensionsInfo")
 	textObj:Wrap(250)
 	sizerBox:Add(textObj, 0, wxGROW_ALL, MARGIN_S)
 
-	local textObj = wxStaticText(dialog, wxID_ANY, "One extension per line.")
+	local textObj = wxStaticText(dialog, wxID_ANY, T"message_oneFileExtensionPerLine")
 	textObj:Wrap(250)
 	sizerBox:Add(textObj, 0, wxGROW_ALL, MARGIN_S)
 
 	local extensionsInput = wxTextCtrl(
 		dialog, wxID_ANY, table.concat(appSettings.movieExtensions, "\n"),
-		wxDEFAULT_POSITION, wxSize(100, 140), wxTE_MULTILINE
+		wxDEFAULT_POSITION, wxSize(100, FILE_EXTENSIONS_INPUT_HEIGHT), wxTE_MULTILINE
 	)
 	sizerBox:Add(extensionsInput, 0, wxGROW)
 
@@ -631,7 +662,7 @@ function dialogs.settings()
 	-- MyList defaults.
 	----------------------------------------------------------------
 
-	local sizerBox = wxStaticBoxSizer(wxVERTICAL, dialog, "MyList Defaults")
+	local sizerBox = wxStaticBoxSizer(wxVERTICAL, dialog, T"label_mylistDefaults")
 	sizerBox.StaticBox.Font = fontTitle
 
 	local
@@ -655,7 +686,7 @@ function dialogs.settings()
 
 	local sizerButtons = wxStdDialogButtonSizer()
 
-	local button = newButton(dialog, wxID_OK, "Save", function(e)
+	local button = newButton(dialog, wxID_OK, T"label_save", function(e)
 		local viewed  = VIEWED_STATES[viewedRadio.Selection+1].value
 		local state   = MYLIST_STATES[mylistStateRadio.Selection+1].value
 		local storage = storageCheckbox:IsChecked() and storageInput.Value or nil
@@ -666,15 +697,18 @@ function dialogs.settings()
 
 		if APPROX_BASE_MESSAGE_LENGTH + totalStrLen > MAX_UDP_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH then
 			showWarning(
-				"Too Long Texts",
-				F(
-					"The combined length of the storage, source and note texts is too long to send over the network. "
-						.."The supported maximum length is around %d characters.",
-					MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH
-				)
+				T("error_tooLongTexts"),
+				T("error_tooLongTexts_text", {
+					maxChars = MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH
+				})
 			)
 			return -- Don't close the dialog.
 		end
+
+		local langCode        = itemWith(translations, "title", languageList:GetValue()).code
+		local languageChanged = langCode ~= appSettings.language
+
+		local timeout         = clamp((tonumber(timeoutInput.Value) or DEFAULT_SERVER_RESPONSE_TIMEOUT), 10, 999)
 
 		local mylistDefaults = {
 			viewed  = viewed,
@@ -697,17 +731,21 @@ function dialogs.settings()
 
 		sortNatural(exts)
 
-		local timeout = clamp((tonumber(timeoutInput.Value) or DEFAULT_SERVER_RESPONSE_TIMEOUT), 10, 999)
-
 		setSetting("autoAddToMylist",        autoAddToMylistCheckbox:IsChecked())
 		setSetting("autoHash",               autoHashCheckbox:IsChecked())
 		setSetting("autoRemoveDeletedFiles", autoRemoveDeletedFilesCheckbox:IsChecked())
 		setSetting("truncateFolders",        truncateFoldersCheckbox:IsChecked())
 
-		setSetting("movieExtensions",        exts)
-
-		setSetting("mylistDefaults",         mylistDefaults)
+		setSetting("language",               langCode)
 		setSetting("serverResponseTimeout",  timeout)
+
+		setSetting("movieExtensions",        exts)
+		setSetting("mylistDefaults",         mylistDefaults)
+
+		if languageChanged then
+			-- This message should be in the newly chosen language.
+			showMessage(T"label_language", T"message_restartAfterLanguageChange")
+		end
 
 		checkFileInfos()
 		updateFileList()
@@ -715,7 +753,7 @@ function dialogs.settings()
 	end)
 	sizerButtons.AffirmativeButton = button
 
-	local button = newButton(dialog, wxID_CANCEL, "Cancel")
+	local button = newButton(dialog, wxID_CANCEL, T"label_cancel")
 	sizerButtons.CancelButton = button
 
 	sizerButtons:Realize()
@@ -767,7 +805,10 @@ function dialogs.missingFile(path)
 			wxFILE_SELECTOR_PROMPT_STR,
 			topmostExistingDir,
 			getFilename(path),
-			F("*.%s|*.%s|Movie files (%s)|%s|All files (*.*)|*.*", ext, ext, movieExtensionList, movieExtensionList),
+			F(
+				"*.%s|*.%s|%s (%s)|%s|%s (*.*)|*.*",
+				ext, ext, T"label_files_movie", movieExtensionList, movieExtensionList, T"label_files_all"
+			),
 			wxDEFAULT_DIALOG_STYLE + wxRESIZE_BORDER + wxFILE_MUST_EXIST
 		)
 
@@ -785,11 +826,11 @@ function dialogs.missingFile(path)
 	end
 
 	local labels = {
-		wxID_OK,     "Choose New Location", chooseNewLocation,
-		wxID_REMOVE, "Remove from List",
-		wxID_CANCEL, "Cancel",
+		wxID_OK,     T"label_chooseNewLocation", chooseNewLocation,
+		wxID_REMOVE, T"label_removeFromList",
+		wxID_CANCEL, T"label_cancel",
 	}
-	local id = showButtonDialog("File Missing", "File has been moved or deleted:\n\n"..path, labels)
+	local id = showButtonDialog(T"label_fileIsMissing", F("%s:\n\n%s", T"message_fileMovedOrDeleted", path), labels)
 
 	if id == wxID_OK then
 		return pathNew
@@ -805,7 +846,7 @@ end
 
 
 function dialogs.changelog()
-	local dialog = wxDialog(topFrame, wxID_ANY, "Changelog")
+	local dialog = wxDialog(topFrame, wxID_ANY, T"label_changelog")
 	local sizer  = wxBoxSizer(wxVERTICAL)
 
 	local changelog = getFileContents"Changelog.txt":gsub("\r", "")
@@ -816,7 +857,7 @@ function dialogs.changelog()
 	)
 	sizer:Add(textCtrl, 0, wxGROW)
 
-	local button = newButton(dialog, wxID_OK, "Close")
+	local button = newButton(dialog, wxID_OK, T"label_close")
 	button:SetSizeHints(100, getHeight(button)+2*3)
 	sizer:Add(button, 0, wxALIGN_CENTRE_HORIZONTAL + wxALL, MARGIN_M)
 
@@ -860,7 +901,7 @@ do
 
 				if not _latestVersion then
 					logprinterror("getLatestVersionNumber", output)
-					eventQueue:addEvent("git:version_fail", "getLatestVersionNumber: Internal script error.")
+					eventQueue:addEvent("git:version_fail", "getLatestVersionNumber: "..T"error_script_internal")
 					return
 				end
 
@@ -878,21 +919,21 @@ do
 
 				if status == ":error_request" then
 					err = trim(body)
-					eventQueue:addEvent("git:version_fail", F("Error while trying to send request to GitHub: %s", err))
+					eventQueue:addEvent("git:version_fail", F("%s: %s", T"error_github_request", err))
 
 				elseif status == ":error_http" then
 					local statusCode, statusText = matchLines(body, 2)
-					err = F("Bad response from GitHub: %s", statusText)
+					err = F("%s: %s", T"error_github_badResponse", statusText)
 
 				elseif status == ":error_malformed_response" then
 					err = trim(body)
 					if err == "" then  err = "?"  end
-					err = F("Malformed response from GitHub: %s", err)
+					err = F("%s: %s", T"error_github_malformedResponse", err)
 
 				else
 					err = trim(output)
 					if err == "" then  err = "?"  end
-					err = F("Unknown error while trying to send request to GitHub: %s", err)
+					err = F("%s: %s", T"error_github_unknown", err)
 				end
 
 				logprinterror("getLatestVersionNumber", output)
@@ -901,7 +942,7 @@ do
 		end)
 
 		if not ok then
-			showError("Error", "getLatestVersionNumber: Could not run script.")
+			showError("Error", "getLatestVersionNumber: "..T"error_script_failedRun")
 			return false
 		end
 
@@ -912,13 +953,13 @@ do
 		local eventHandlers = require"eventHandlers"
 
 		eventHandlers["git:version_up_to_date"] = function()
-			textObj.Label = "You have the latest version!"
+			textObj.Label = T"message_haveLatestVersion"
 			dialog:Fit()
 			dialog:Layout()
 		end
 
 		eventHandlers["git:version_new_available"] = function(_latestVersion, _downloadUrl)
-			textObj.Label = F("Version %s avaliable. You have version %s.", _latestVersion, APP_VERSION)
+			textObj.Label = T("message_newVersionAvailable_numbers", {newVersion=_latestVersion, currentVersion=APP_VERSION})
 			updateButton:Enable(true)
 			dialog:Fit()
 			dialog:Layout()
@@ -941,7 +982,7 @@ do
 	function dialogs.updateApp()
 		if not maybeGetLatestVersionNumber() then  return  end
 
-		local dialog       = wxDialog(topFrame, wxID_ANY, "Update MyHappyList")
+		local dialog       = wxDialog(topFrame, wxID_ANY, T"label_updateApp")
 		local sizerDialog  = wxBoxSizer(wxVERTICAL)
 
 		local updateButton, cancelButton
@@ -958,7 +999,7 @@ do
 		----------------------------------------------------------------
 
 		local textObj = wxStaticText(
-			dialog, wxID_ANY, "Checking for a newer version...",
+			dialog, wxID_ANY, T"message_checkingVersion",
 			wxDEFAULT_POSITION, wxDEFAULT_SIZE, wxTE_CENTRE
 		)
 		textObj:SetSizeHints(300, getHeight(textObj))
@@ -969,7 +1010,7 @@ do
 
 		local sizerButtons = wxStdDialogButtonSizer()
 
-		updateButton = newButton(dialog, wxID_OK, "Update", function(e)
+		updateButton = newButton(dialog, wxID_OK, T"label_update", function(e)
 			local path = DIR_TEMP.."/LatestVersion.zip"
 
 			local ok = scriptCaptureAsync("download", function(output)
@@ -980,13 +1021,13 @@ do
 				if status ~= ":success" then
 					logprinterror("download", "Could not download '%s' to '%s':\n%s", downloadUrl, path, output)
 					dialog:EndModal(wxID_CANCEL)
-					showError("Error", "Could not download the latest version.")
+					showError("Error", T"error_updater_download")
 					return
 				end
 
 				if not cmdDetached("misc/Update/wlua5.1.exe", "misc/Update/update.lua", path, wxGetProcessId()) then
 					dialog:EndModal(wxID_CANCEL)
-					showError("Error", "Could not start updater.")
+					showError("Error", T"error_updater_run")
 					return
 				end
 
@@ -999,13 +1040,13 @@ do
 			end, downloadUrl, path)
 
 			if not ok then
-				showError("Error", "download: Could not run script.")
+				showError("Error", "download: "..T"error_script_failedRun")
 				e:Skip()
 				return
 			end
 
 			isDownloading = true
-			updateButton.Label = "Updating..." -- @Incomplete: Show an animated working indicator when updating.
+			updateButton.Label = T"label_updating" -- @Incomplete: Show an animated working indicator when updating.
 			updateButton:Enable(false)
 			cancelButton:Enable(false)
 			-- pause("updating") -- Bad! We need events to flow!
@@ -1013,7 +1054,7 @@ do
 		updateButton:Enable(false)
 		sizerButtons.AffirmativeButton = updateButton
 
-		cancelButton = newButton(dialog, wxID_CANCEL, "Cancel")
+		cancelButton = newButton(dialog, wxID_CANCEL, T"label_cancel")
 		sizerButtons.CancelButton = cancelButton
 
 		sizerButtons:Realize()

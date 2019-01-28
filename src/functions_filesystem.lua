@@ -485,7 +485,7 @@ function openFile(path, modeFull)
 					errorf("Bad type of read format (string or number expected, got %s)", type(offset))
 
 				-- Read line.
-				elseif readFormat:find"^*l" then
+				elseif readFormat:find"^%*l" then
 					if file:Eof() then  return nil  end
 
 					local chars = {}
@@ -514,7 +514,7 @@ function openFile(path, modeFull)
 					return table.concat(chars)
 
 				-- Read rest of file.
-				elseif readFormat:find"^*a" then
+				elseif readFormat:find"^%*a" then
 					local _, s = file:Read(file:Length()-file:Tell()) -- Length may go past EOF, but that doesn't matter.
 
 					if not binary then
@@ -524,7 +524,7 @@ function openFile(path, modeFull)
 					return s, read(...)
 
 				-- Read number (and return a number instead of a string).
-				elseif readFormat:find"^*n" then
+				elseif readFormat:find"^%*n" then
 					error("Cannot read numbers - file:read() is not fully implemented.") -- @Incomplete
 
 				else

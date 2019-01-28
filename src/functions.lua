@@ -55,6 +55,7 @@
 	sort
 	sortNatural, compareNatural
 	splitString
+	T, getText, getTranslations
 	tablePathGet, tablePathSet
 	trim, trimNewlines
 	unzip
@@ -108,9 +109,10 @@ function handleError(err)
 	if isApp and not DEBUG then
 	 	local dialog = wxTextEntryDialog(
 	 		wxNULL,
-	 		"An error ocurred and the program crashed! Sorry about that.\n"
-	 			.."The log file may have more information.\n\n"
-	 			.."Log file: "..logFilePath.."\n\nMessage:",
+	 		F(
+	 			"%s\n%s\n\n%s: %s\n\n%s:",
+	 			T"error_appCrash1", T"error_appCrash2", T"label_logFile", logFilePath, T"label_message"
+	 		),
 	 		"Error",
 	 		errWithStack,
 	 		wxOK + wxCENTRE + wxTE_MULTILINE + wxTE_DONTWRAP
@@ -371,7 +373,7 @@ function formatBytes(n)
 	elseif n >= 1024           then
 		return F("%.2f KB",  n/(1024))
 	else
-		return F("%d bytes", n)
+		return T("label_numBytes", {n=n})
 	end
 end
 
@@ -1351,6 +1353,90 @@ do
 	function updater_moveFilesAfterUnzipUpdater(dangerModeActive)
 		moveFiles(false, dangerModeActive)
 	end
+end
+
+
+
+local DEFAULT_LANGUAGE = "en-US"
+local textTables       = nil
+
+local function loadTexts()
+	textTables = {}
+
+	traverseFiles("languages", function(path, pathRel, filename, ext)
+		if ext ~= "txt" then  return  end
+
+		local file = assert(openFile(path, "r"))
+		local ln   = 0
+
+		local langCode = filename:sub(1, -5) -- Remove ".txt"
+		assert(langCode ~= "")
+
+		local textTable = {language_code=langCode}
+
+		table.insert(textTables, textTable)
+		textTables[langCode] = textTable
+
+		for line in file:lines() do
+			ln   = ln+1
+			line = trim(line:gsub("#.*", ""))
+
+			if line == "" then
+				-- void
+			else
+				local textKey, text = line:match"^([%w_]+)%s*=%s*(.*)$"
+
+				if not textKey then
+					logprinterror("i18n", "%s:%d: Bad line format: %s", path, ln, line)
+				elseif text ~= "" then
+					textTable[textKey] = text
+				end
+			end
+		end
+
+		file:close()
+		textTable.language_title = textTable.language_title or langCode
+	end)
+end
+
+function T(textKey, values)
+	return getText(appSettings.language, textKey, values, DEFAULT_LANGUAGE)
+end
+
+-- text = getText( languageCode, textKey [, values, fallbackLanguageCode ] )
+function getText(langCode, textKey, values, fallback)
+	if not textTables then
+		loadTexts()
+	end
+
+	local text
+		=  textTables[langCode][textKey]
+		or fallback and textTables[fallback][textKey]
+		or F("<%s>", textKey)
+
+	if values then
+		text = text:gsub("{([%w_.]+)}", function(k)
+			return values[k] or "{UNKNOWN_VALUE}"
+		end)
+	end
+
+	return text
+end
+
+-- translations = getTranslations( )
+-- translation = { code=languageCode, title=languageTitle }
+function getTranslations()
+	if not textTables then
+		loadTexts()
+	end
+
+	local translations = {}
+
+	for _, textTable in ipairs(textTables) do
+		table.insert(translations, {code=textTable.language_code, title=textTable.language_title})
+	end
+
+	return translations
 end
 
 
