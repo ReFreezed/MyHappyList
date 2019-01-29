@@ -160,6 +160,11 @@ on(topFrame, "DROP_FILES", function(e, paths)
 	saveFileInfos()
 	listCtrlSelectRows(fileList, range(previousLastWxRow+1, fileList.ItemCount-1))
 	updateFileList()
+
+	local wxRow = listCtrlGetFirstSelectedRow(fileList)
+	if wxRow then
+		fileList:EnsureVisible(wxRow)
+	end
 end)
 
 -- Note: The SIZE event fires even when the size hasn't changed (which is silly).
