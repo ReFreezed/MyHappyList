@@ -63,6 +63,23 @@ local unzipDir = updater_getUnzipDir()
 if isDirectory(unzipDir) then
 	logprint(nil, "Finishing update: Updating updater...")
 
+	local pid = nil
+	for i, arg in ipairs(args) do
+		if arg == "--afterupdate" then
+			pid = tonumber(args[i+1])
+			break
+		end
+	end
+
+	if pid then
+		logprint(nil, "Waiting for process %d to stop.", pid)
+
+		local timeout = os.time()+10
+		while wxProcess.Exists(pid) and os.time() < timeout do
+			wxMilliSleep(100)
+		end
+	end
+
 	local dangerModeActive = (appZip ~= nil)
 
 	if dangerModeActive then

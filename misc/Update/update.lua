@@ -32,11 +32,13 @@ local function update()
 	local path, pid = unpack(args)
 	assert(path, "no path")
 
-	if pid then
-		pid = tonumber(pid)
+	pid = tonumber(pid)
 
-		-- @Robustness: Timeout the wait.
-		while wxProcess.Exists(pid) do
+	if pid then
+		logprint(nil, "Waiting for process %d to stop.", pid)
+
+		local timeout = os.time()+10
+		while wxProcess.Exists(pid) and os.time() < timeout do
 			wxMilliSleep(100)
 		end
 	end
@@ -124,7 +126,7 @@ local function update()
 
 	--==============================================================
 
-	if not cmdDetached("MyHappyList.exe", "--updated") then -- @Incomplete: Use --updated for something?
+	if not cmdDetached("MyHappyList.exe", "--afterupdate", wxGetProcessId()) then
 		error("Could not start MyHappyList.exe.")
 	end
 

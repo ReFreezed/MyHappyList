@@ -117,7 +117,7 @@ end
 function directoryItems(dirPath)
 	local dirObj = wxDir(dirPath)
 
-	local ok, nameNext = dirObj:GetFirst("", wxDIR_FILES)
+	local ok, nameNext = dirObj:GetFirst("", wxDIR_FILES + wxDIR_DIRS)
 	if not ok then  nameNext = nil  end
 
 	return function()
@@ -705,9 +705,9 @@ function removeDirectoryAndChildren(dirPath, continueOnError)
 	assertarg(1, dirPath,         "string")
 	assertarg(2, continueOnError, "boolean")
 
-	if not isDirectoryRemovable(dirPath) then  return false  end
+	if not isDirectoryRemovable(dirPath)            then  return false  end
+	if not emptyDirectory(dirPath, continueOnError) then  return false  end
 
-	emptyDirectory(dirPath, continueOnError)
 	return removeDirectory(dirPath)
 end
 
