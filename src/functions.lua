@@ -1379,9 +1379,9 @@ local function loadTexts()
 
 		for line in file:lines() do
 			ln   = ln+1
-			line = trim(line:gsub("#.*", ""))
+			line = trim(line)
 
-			if line == "" then
+			if line == "" or line:find"^#" then
 				-- void
 			else
 				local textKey, text = line:match"^([%w_]+)%s*=%s*(.*)$"
