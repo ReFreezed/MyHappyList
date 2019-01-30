@@ -65,22 +65,6 @@ assert(emptyDirectory(DIR_CONTENT_WIN32, false))
 logprint("Build", "Preparing folders... done!")
 
 ----------------------------------------------------------------
-logprint("Build", "Updating readme...")
-
-local contents0 = getFileContents"README.md"
-local contents  = contents0:gsub(
-	"!%[version %d+%.%d+%.%d+%]%(https://img%.shields%.io/badge/version%-%d+%.%d+%.%d+%-green%.svg%)",
-	function(badge)
-		return (badge:gsub("%d+%.%d+%.%d+", require"version"))
-	end
-)
-if contents ~= contents0 then
-	writeFile("README.md", contents)
-end
-
-logprint("Build", "Updating readme... done!")
-
-----------------------------------------------------------------
 logprint("Build", "Making ico...")
 run(PATH_IM, "misc/AppIcon/AppIcon0*.png", "gfx/appicon.ico")
 logprint("Build", "Making ico... done!")

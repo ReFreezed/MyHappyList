@@ -920,17 +920,17 @@ function renameFile(pathOld, pathNew, overwrite)
 	-- The paths may point to different drives, in which case wxRenameFile() fails (I think).
 	-- Try copying the file manually instead.
 
-	if wxCopyFile(pathOld, pathNew, overwrite) then  return true  end
+	if not wxCopyFile(pathOld, pathNew, overwrite) then
+		return false, F("Could not copy '%s' to '%s' while moving.", pathOld, pathNew)
+	end
 
 	-- @Incomplete: Preserve timestamps.
 
-	local ok = deleteFile(pathOld)
-	if not ok then
-		err = F("Could not delete '%s' while moving.", pathOld)
-		return false
+	if not deleteFile(pathOld) then
+		return false, F("Could not delete '%s' while moving.", pathOld)
 	end
 
-	return false, F("Could not rename '%s' to '%s'.", pathOld, pathNew)
+	return true
 end
 
 -- success, errorMessage = renameDirectory( oldPath, newPath [, overwrite=false ] )

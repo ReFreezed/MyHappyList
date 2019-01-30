@@ -652,7 +652,7 @@ local updateTimer = newTimer(function(e)
 	end
 
 	if anidb:getActiveMessageCount() == 0 then
-		statusBarProgressGauge.Value = 1 -- Just setting th value to 0 leaves the indeterminate gauge effect,
+		statusBarProgressGauge.Value = 1 -- Just setting the value to 0 leaves the indeterminate gauge effect,
 		statusBarProgressGauge.Value = 0 -- so we gotta do this in two steps... sigh.
 	else
 		statusBarProgressGauge:Pulse()
