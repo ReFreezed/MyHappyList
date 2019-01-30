@@ -11,7 +11,7 @@
 --==============================================================
 
 	pause, unpause, isPaused
-	setSetting, loadSettings, saveSettings, scheduleSaveSettings, scheduleSaveSettingsIfNeeded, setSettingsChanged
+	setSetting, loadSettings, saveSettings, scheduleSaveSettings, scheduleSaveSettingsIfNeeded, setSettingsChanged, restoreDefaultSettings
 	setStatusText
 
 	addFileInfo, removeFileInfo, removeSelectedFileInfos
@@ -43,25 +43,7 @@ MYLIST_STATUS_INVALID          = 3 -- AniDB don't know of the file (ed2k+size mi
 
 STATUS_BAR_FIELD_MESSAGE_QUEUE = 1
 
-
-
-anidb            = nil
-appIcons         = nil
-eventQueue       = nil
-fontTitle        = nil
-
-topFrame         = nil
-statusBar        = nil
-topPanel         = nil
-loginButton      = nil
-fileList         = nil
-
-fileInfos        = {}
-lastFileId       = 0 -- Local ID, not fid on AniDB.
-
-updateAvailableMessageReceived = false
-
-appSettings = {
+DEFAULT_APP_SETTINGS = {
 	autoAddToMylist        = true,
 	autoHash               = true,
 	autoRemoveDeletedFiles = false,
@@ -92,6 +74,28 @@ appSettings = {
 	language              = "en-US",
 	serverResponseTimeout = DEFAULT_SERVER_RESPONSE_TIMEOUT,
 }
+
+
+
+anidb       = nil
+appIcons    = nil
+eventQueue  = nil
+fontTitle   = nil
+
+topFrame    = nil
+statusBar   = nil
+topPanel    = nil
+loginButton = nil
+fileList    = nil
+
+fileInfos   = {}
+lastFileId  = 0 -- Local ID, not fid on AniDB.
+
+appSettings = copyTable(DEFAULT_APP_SETTINGS, true)
+
+updateAvailableMessageReceived = false
+
+
 
 dialogs = require"dialogs"
 
@@ -590,6 +594,19 @@ do
 
 	function setSettingsChanged()
 		saveScheduled = true
+	end
+
+	function restoreDefaultSettings()
+		logprint("App", "Restoring default settings.")
+
+		local langCode = appSettings.language
+
+		appSettings = copyTable(DEFAULT_APP_SETTINGS, true)
+		appSettings.language = langCode
+
+		anidb:resetSettings()
+
+		scheduleSaveSettings()
 	end
 end
 

@@ -841,6 +841,21 @@ function dialogs.settings()
 	local button = newButton(dialog, wxID_CANCEL, T"label_cancel")
 	sizerButtons.CancelButton = button
 
+	local button = newButton(dialog, wxID_RESET, T"label_restoreDefaultSettings", function(e)
+		if not confirm(
+			T"label_restoreDefaultSettings", T"message_restoreDefaultSettings",
+			T"label_restoreDefaultSettings", nil, wxICON_EXCLAMATION
+		) then
+			return
+		end
+
+		restoreDefaultSettings()
+
+		showMessage(T"label_restoreDefaultSettings", T"message_restartForChangesToTakeEffect")
+		dialog:Close()
+	end)
+	sizerButtons.NegativeButton = button
+
 	sizerButtons:Realize()
 	sizerDialog:Add(sizerButtons, 0, wxGROW)
 

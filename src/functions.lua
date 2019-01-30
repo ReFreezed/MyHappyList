@@ -14,6 +14,7 @@
 	clamp
 	cleanupPath
 	cmdAsync, cmdSync, cmdDetached, cmdCapture, scriptCaptureAsync, scriptRunDetached, isScriptRunning, cmdEscapeArgs, run
+	copyTable
 	cwdPush, cwdPop
 	eatSpaces
 	encodeHtmlEntities
@@ -1437,6 +1438,42 @@ function getTranslations()
 	end
 
 	return translations
+end
+
+
+
+-- copy = copyTable( table [, deep=false ] )
+do
+	local function deepCopy(t, copy, tableCopies)
+		for k, v in pairs(t) do
+			if type(v) == "table" then
+				local vCopy = tableCopies[v]
+
+				if vCopy then
+					copy[k] = vCopy
+				else
+					vCopy          = {}
+					tableCopies[v] = vCopy
+					copy[k]        = deepCopy(v, vCopy, tableCopies)
+				end
+
+			else
+				copy[k] = v
+			end
+		end
+		return copy
+	end
+
+	function copyTable(t, deep)
+		if deep then
+			return deepCopy(t, {}, {})
+		end
+
+		local copy = {}
+		for k, v in pairs(t) do  copy[k] = v  end
+
+		return copy
+	end
 end
 
 

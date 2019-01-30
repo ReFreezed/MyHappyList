@@ -22,6 +22,7 @@
 	isLoggedIn, dropSession
 	isSendingAnyMessage, getActiveMessageCount, getQueuedMessageCount
 	reportFileDeleted, reportFileMoved
+	resetSettings
 	update
 
 	-- Server communication.
@@ -81,6 +82,11 @@ local BOOL_TRUE                       = "1"
 local ED2K_STATE_IN_PROGRESS          = 1
 local ED2K_STATE_SUCCESS              = 2
 local ED2K_STATE_ERROR                = 3
+
+local PATH_BLACKOUT                   = DIR_CACHE.."/blackout"
+local PATH_ED2KS                      = DIR_CACHE.."/ed2ks"
+local PATH_NAT                        = DIR_CACHE.."/nat"
+local PATH_SESSION                    = DIR_CACHE.."/session"
 
 
 
@@ -147,12 +153,12 @@ local Anidb = {
 
 	username                = "",
 	password                = "",
-	sessionKey              = "", -- This indicates whether we're logged in or not.
+	sessionKey              = "",    -- This also indicates whether we're logged in or not.
 
-	enableSending           = true,
-	canAskForCredentials    = true,
+	enableSending           = true,  -- For temporarily disabling communication with AniDB.
+	canAskForCredentials    = true,  -- This is to prevent "You need to log in!" spam.
 
-	blackoutUntil           = -1, -- Note: No fractions!
+	blackoutUntil           = -1,    -- Note: No fractions!
 	isInBlackout            = false,
 
 	natMode                 = NAT_MODE_UNKNOWN,
@@ -160,7 +166,7 @@ local Anidb = {
 	pingDelay               = DEFAULT_PING_DELAY,
 	natLimitLower           = -1,
 	natLimitUpper           = -1,
-	lastPublicPort          = -1, -- Port seen by the server.
+	lastPublicPort          = -1,    -- Port seen by the server.
 
 	responseTimeLast        = 0.00,
 	responseTimePrevious    = 0.00,
@@ -210,7 +216,7 @@ do
 	}
 	function paramStringEncode(s)
 		assert(type(s) == "string", s)
-		return (s:gsub("[&<>\"\n]", ENCODES))
+		return (s:gsub('[&<>"\n]', ENCODES))
 	end
 
 	local DECODES = {
@@ -681,14 +687,14 @@ function blackout(self, duration)
 	self.blackoutUntil = math.floor(getTime()+duration)
 	self.isInBlackout  = true
 
-	local ok, err = writeFile(DIR_CACHE.."/blackout", F("%d", self.blackoutUntil))
+	local ok, err = writeFile(PATH_BLACKOUT, F("%d", self.blackoutUntil))
 	if not ok then
-		_logprinterror("Could not write to file '%s/blackout': %s", DIR_CACHE, err)
+		_logprinterror("Could not write to file '%s': %s", PATH_BLACKOUT, err)
 	end
 end
 
 function loadBlackout(self)
-	self.blackoutUntil = tonumber(getFileContents(DIR_CACHE.."/blackout") or 0)
+	self.blackoutUntil = tonumber(getFileContents(PATH_BLACKOUT) or 0)
 	self.isInBlackout  = getTime() < self.blackoutUntil
 end
 
@@ -747,9 +753,9 @@ function updateNatInfo(self, port)
 			self.natLimitUpper = natLimitUp
 			_logprint("Ping delay: %d seconds", self.pingDelay)
 
-			local ok, err = writeFile(DIR_CACHE.."/nat", F("%d %d %d", pingDelay, natLimitLo, natLimitUp))
+			local ok, err = writeFile(PATH_NAT, F("%d %d %d", pingDelay, natLimitLo, natLimitUp))
 			if not ok then
-				_logprinterror("Could not write to file '%s/nat': %s", DIR_CACHE, err)
+				_logprinterror("Could not write to file '%s': %s", PATH_NAT, err)
 			end
 		end
 	end
@@ -758,7 +764,7 @@ function updateNatInfo(self, port)
 end
 
 function loadNatInfo(self)
-	local contents = getFileContents(DIR_CACHE.."/nat")
+	local contents = getFileContents(PATH_NAT)
 	if not contents then
 		_logprint("Ping delay: %d seconds", self.pingDelay)
 		return
@@ -766,7 +772,7 @@ function loadNatInfo(self)
 
 	local pingDelay, natLimitLower, natLimitUpper = contents:match"^(%d+) (%-?%d+) (%-?%d+)$"
 	if not pingDelay then
-		_logprinterror("Bad format of file '%s/nat'.", DIR_CACHE)
+		_logprinterror("Bad format of file '%s'.", PATH_NAT)
 		_logprint("Ping delay: %d seconds", self.pingDelay)
 		return
 	end
@@ -820,7 +826,7 @@ function startSession(self, session)
 	self.sessionKey = session
 	_logprint("Started session. (%s)", session)
 
-	writeFile(DIR_CACHE.."/session", session)
+	writeFile(PATH_SESSION, session)
 end
 
 -- success = dropSession( self )
@@ -833,12 +839,12 @@ function dropSession(self)
 	-- because AniDB notified us of it. That means a new port has opened!
 	-- self.isActive = false -- Bad!
 
-	deleteFile(DIR_CACHE.."/session")
+	deleteFile(PATH_SESSION)
 	return true
 end
 
 function loadSession(self)
-	self.sessionKey = getFileContents(DIR_CACHE.."/session") or ""
+	self.sessionKey = getFileContents(PATH_SESSION) or ""
 end
 
 
@@ -998,7 +1004,7 @@ do
 	local function saveEd2ks()
 		if DEBUG_DISABLE_VARIOUS_FILE_SAVING then  return  end
 
-		local file = assert(openFile(DIR_CACHE.."/ed2ks", "w"))
+		local file = assert(openFile(PATH_ED2KS, "w"))
 
 		for path, ed2kHash in pairsSorted(pathEd2ks) do
 			if ed2kHash ~= "" then
@@ -1013,7 +1019,7 @@ do
 	local function loadEd2ks()
 		isLoaded = true
 
-		local file = openFile(DIR_CACHE.."/ed2ks", "r")
+		local file = openFile(PATH_ED2KS, "r")
 		if not file then  return  end
 
 		local ln = 0
@@ -1025,7 +1031,7 @@ do
 			fileSize = tonumber(fileSize)
 
 			if not ed2kHash then
-				_logprinterror("%s:%d: Bad line format: %s", DIR_CACHE.."/ed2ks", ln, line)
+				_logprinterror("%s:%d: Bad line format: %s", PATH_ED2KS, ln, line)
 			else
 				pathEd2ks[path]     = ed2kHash
 				pathSizes[path]     = fileSize
@@ -2275,6 +2281,16 @@ function Anidb:reportLocalFileMoved(pathOld, pathNew)
 	end
 
 	ed2kChangePath(pathOld, pathNew)
+end
+
+
+
+function Anidb:resetSettings()
+	self.pingDelay     = DEFAULT_PING_DELAY
+	self.natLimitLower = -1
+	self.natLimitUpper = -1
+
+	deleteFile(PATH_NAT)
 end
 
 

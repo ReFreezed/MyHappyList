@@ -5,8 +5,8 @@
 language_title       = English
 language_translators = Marcus 'ReFreezed' Thunström
 
-error_anidb_accessDenied             = AniDB denied access when we sent a {command} command.
-error_anidb_badCommand               = AniDB does not recognize a {command} command.
+error_anidb_accessDenied              = AniDB denied access when we sent a {command} command.
+error_anidb_badCommand                = AniDB does not recognize a {command} command.
 error_anidb_badData                  = AniDB got bad data when we sent a {command} command. There may be a bug in MyHappyList.
 error_anidb_noMatch_aid              = No anime on AniDB with ID {id}.
 error_anidb_noMatch_gid              = No group on AniDB with ID {id}.
@@ -109,6 +109,7 @@ label_option_doNotChange             = (don't change)
 label_password                       = Password
 label_reason                         = Reason
 label_removeFromList                 = Remove from Local List
+label_restoreDefaultSettings          = Restore Default Settings
 label_save                           = Save
 label_seconds                        = seconds
 label_serverResponseTimeout          = Server response timeout
@@ -185,3 +186,5 @@ message_newVersionAvailable          = A new version of MyHappyList is available
 message_newVersionAvailable_numbers  = Version {newVersion} avaliable. You have version {currentVersion}.
 message_oneFileExtensionPerLine      = One extension per line.
 message_restartAfterLanguageChange   = The program must be restarted for the language to change everywhere.
+message_restartForChangesToTakeEffect = The program must be restarted for all changes to take effect.
+message_restoreDefaultSettings        = Restore settings to their default values?
