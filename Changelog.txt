@@ -1,3 +1,11 @@
+v1.2.0 (2019-01-30)
+- Added support for translations.
+- Added setting: Server response timeout. Try increasing this if you keep getting timeout errors.
+- Added button for restoring default settings.
+- Files can now have the "remote storage" state in MyList, just like on the website.
+- View date can now be specified for files.
+- Fixed issue with the updater not being able to start the program after an update.
+
 v1.1.1 (2018-08-30)
 - Fixed updater not working properly.
 - Fixed startup error if the 'Open' button was used in Windows Explorer.
