@@ -231,14 +231,13 @@ statusBar = topFrame:CreateStatusBar()
 statusBarInitFields(statusBar, {-1, 120, GAUGE_WIDTH+2*GAUGE_MARGIN})
 statusBarSetField(statusBar, STATUS_BAR_FIELD_MESSAGE_QUEUE, "")
 
-local progressGauge = wxGauge(
+statusBarProgressGauge = wxGauge(
 	statusBar, wxID_ANY, 100, wxDEFAULT_POSITION, wxSize(GAUGE_WIDTH, getHeight(statusBar)-2*GAUGE_MARGIN), wxGA_SMOOTH
 )
--- progressGauge.Value = 50
 
 on(statusBar, "SIZE", function(e, w, h)
 	e:Skip()
-	progressGauge:Move(w-getWidth(progressGauge)-GAUGE_MARGIN, GAUGE_MARGIN)
+	statusBarProgressGauge:Move(w-getWidth(statusBarProgressGauge)-GAUGE_MARGIN, GAUGE_MARGIN)
 end)
 
 
@@ -650,6 +649,13 @@ local updateTimer = newTimer(function(e)
 		else
 			logprinterror("App", "Unhandled event '%s'.", eName)
 		end
+	end
+
+	if anidb:getActiveMessageCount() == 0 then
+		statusBarProgressGauge.Value = 1 -- Just setting th value to 0 leaves the indeterminate gauge effect,
+		statusBarProgressGauge.Value = 0 -- so we gotta do this in two steps... sigh.
+	else
+		statusBarProgressGauge:Pulse()
 	end
 end)
 

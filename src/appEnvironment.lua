@@ -77,21 +77,22 @@ DEFAULT_APP_SETTINGS = {
 
 
 
-anidb       = nil
-appIcons    = nil
-eventQueue  = nil
-fontTitle   = nil
+anidb                          = nil
+appIcons                       = nil
+eventQueue                     = nil
+fontTitle                      = nil
 
-topFrame    = nil
-statusBar   = nil
-topPanel    = nil
-loginButton = nil
-fileList    = nil
+topFrame                       = nil
+statusBar                      = nil
+statusBarProgressGauge         = nil
+topPanel                       = nil
+loginButton                    = nil
+fileList                       = nil
 
-fileInfos   = {}
-lastFileId  = 0 -- Local ID, not fid on AniDB.
+fileInfos                      = {}
+lastFileId                     = 0 -- Local ID, not fid on AniDB.
 
-appSettings = copyTable(DEFAULT_APP_SETTINGS, true)
+appSettings                    = copyTable(DEFAULT_APP_SETTINGS, true)
 
 updateAvailableMessageReceived = false
 
