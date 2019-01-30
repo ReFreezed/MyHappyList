@@ -33,9 +33,10 @@ local APPROX_BASE_MESSAGE_LENGTH = 150
 local SAFETY_MESSAGE_LENGTH      = 20
 
 local VIEWED_STATES = {
-	{value=nil},
-	{value=true},
-	{value=false},
+	{value=nil,   separateDate=false},
+	{value=false, separateDate=false},
+	{value=true,  separateDate=false},
+	{value=true,  separateDate=true},
 }
 
 local MYLIST_STATES = {
@@ -68,19 +69,68 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 	local labels = {}
 	for i, state in ipairs(VIEWED_STATES) do
 		if state.value ~= nil then
-			labels[i] = T(state.value and "label_yes" or "label_no")
+			labels[i] = T(
+				state.value
+				and (
+					valuesCurrent
+					and "label_yes"
+					or  (state.separateDate and "label_yesAtDate" or "label_yesNow")
+				)
+				or "label_no"
+			)
 		end
 	end
 	labels[1] = valuesCurrent and T"label_option_default" or T"label_option_doNotChange"
+	if valuesCurrent then
+		labels[#labels] = nil
+	end
 
 	local viewedRadio = wxRadioBox(
-		parent, wxID_ANY, T"label_watched", wxDEFAULT_POSITION, wxDEFAULT_SIZE,
-		labels, 0, wxRA_SPECIFY_ROWS -- @Incomplete: Allow direct editing of viewdate.
+		parent, wxID_ANY, T"label_watched", wxDEFAULT_POSITION, wxDEFAULT_SIZE, labels, 0, wxRA_SPECIFY_ROWS
 	)
 	sizerParent:Add(viewedRadio, 0, wxGROW)
 
 	if valuesCurrent and valuesCurrent.viewed ~= nil then
 		viewedRadio.Selection = indexWith(VIEWED_STATES, "value", valuesCurrent.viewed)-1
+	end
+
+	-- View date.
+	local viewDateInput = nil
+
+	if not valuesCurrent then
+		local panel      = wxPanel(parent, wxID_ANY)
+		local sizerPanel = wxBoxSizer(wxHORIZONTAL)
+
+		local textObj = wxStaticText(panel, wxID_ANY, T"label_viewDate".." (YYYY-MM-DD):")
+		sizerPanel:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL + wxRIGHT, MARGIN_XS)
+
+		local validator = wxTextValidator(wxFILTER_INCLUDE_CHAR_LIST)
+		validator:SetIncludes{"0","1","2","3","4","5","6","7","8","9"," ","-","/",":"}
+
+		viewDateInput = wxTextCtrl(
+			panel, wxID_ANY,
+			(mylistEntry and mylistEntry.viewdate ~= 0 and os.date("%Y-%m-%d %H:%M:%S", mylistEntry.viewdate) or ""),
+			wxDEFAULT_POSITION, wxDEFAULT_SIZE, 0, validator
+		)
+		viewDateInput:SetSizeHints(130, getHeight(viewDateInput))
+		viewDateInput:Enable(false)
+		sizerPanel:Add(viewDateInput)
+
+		on({panel,textObj}, "LEFT_DOWN", function(e)
+			if not viewDateInput:IsEnabled() then
+				viewedRadio:SetSelection(indexWith(VIEWED_STATES, "separateDate",true)-1)
+				viewDateInput:Enable(true)
+				viewDateInput:SetFocus()
+			end
+		end)
+
+		on(viewedRadio, "COMMAND_RADIOBOX_SELECTED", function(e, wxIndex)
+			viewDateInput:Enable(VIEWED_STATES[wxIndex+1].separateDate)
+		end)
+
+		panel.AutoLayout = true
+		panel.Sizer      = sizerPanel
+		sizerParent:Add(panel, 0, wxGROW + wxTOP, MARGIN_S)
 	end
 
 	-- MyList state.
@@ -121,7 +171,7 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 	sizerPanel:Add(sourceCheckbox, 0, wxGROW)
 
 	local sourceInput = wxTextCtrl(panel, wxID_ANY, (valuesCurrent and valuesCurrent.source or ""))
-	sourceInput:SetSizeHints(200, getHeight(sourceInput))
+	sourceInput:SetSizeHints(220, getHeight(sourceInput))
 	sourceInput.MaxLength = MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH
 	sourceInput:SetToolTip(sourceCheckbox.ToolTip.Tip)
 	sizerPanel:Add(sourceInput, 0, wxGROW)
@@ -163,7 +213,7 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 	sizerPanel:Add(storageCheckbox, 0, wxGROW)
 
 	local storageInput = wxTextCtrl(panel, wxID_ANY, (valuesCurrent and valuesCurrent.storage or ""))
-	storageInput:SetSizeHints(200, getHeight(storageInput))
+	storageInput:SetSizeHints(220, getHeight(storageInput))
 	storageInput.MaxLength = MAX_UDP_MESSAGE_LENGTH - APPROX_BASE_MESSAGE_LENGTH - SAFETY_MESSAGE_LENGTH
 	storageInput:SetToolTip(storageCheckbox.ToolTip.Tip)
 	sizerPanel:Add(storageInput, 0, wxGROW)
@@ -205,7 +255,7 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 
 	local otherInput = wxTextCtrl(
 		panel, wxID_ANY, (valuesCurrent and valuesCurrent.other or ""),
-		wxDEFAULT_POSITION, wxSize(200, 100), wxTE_MULTILINE
+		wxDEFAULT_POSITION, wxSize(220, 100), wxTE_MULTILINE
 	)
 	local colorOn  = otherInput.BackgroundColour
 	local colorOff = wxSystemSettings.GetColour(wxSYS_COLOUR_3DFACE)
@@ -247,7 +297,7 @@ function addMylistaddFields(parent, sizerParent, valuesCurrent, mylistEntry)
 	----------------------------------------------------------------
 
 	return
-		viewedRadio,
+		viewedRadio,     viewDateInput,
 		mylistStateRadio,
 		storageCheckbox, storageInput,
 		sourceCheckbox,  sourceInput,
@@ -353,7 +403,7 @@ function dialogs.addmylist(fileInfosToAddOrEdit)
 	sizerDialog:AddSpacer(MARGIN_S)
 
 	local
-		viewedRadio,
+		viewedRadio,     viewDateInput,
 		mylistStateRadio,
 		storageCheckbox, storageInput,
 		sourceCheckbox,  sourceInput,
@@ -373,11 +423,12 @@ function dialogs.addmylist(fileInfosToAddOrEdit)
 	local sizerButtons = wxStdDialogButtonSizer()
 
 	local button = newButton(dialog, wxID_OK, T"label_addOrEdit", function(e)
-		local viewed  = VIEWED_STATES[viewedRadio.Selection+1].value
-		local state   = MYLIST_STATES[mylistStateRadio.Selection+1].value
-		local storage = storageCheckbox:IsChecked() and storageInput.Value or nil
-		local source  = sourceCheckbox:IsChecked()  and sourceInput.Value  or nil
-		local other   = otherCheckbox:IsChecked()   and otherInput.Value   or nil
+		local viewed      = VIEWED_STATES[viewedRadio.Selection+1].value
+		local viewdateStr = viewDateInput.Value
+		local state       = MYLIST_STATES[mylistStateRadio.Selection+1].value
+		local storage     = storageCheckbox:IsChecked() and storageInput.Value or nil
+		local source      = sourceCheckbox:IsChecked()  and sourceInput.Value  or nil
+		local other       = otherCheckbox:IsChecked()   and otherInput.Value   or nil
 
 		local totalStrLen = #(storage or "") + #(source or "") + #(other or ""):gsub("\n", "<br />")
 
@@ -391,12 +442,46 @@ function dialogs.addmylist(fileInfosToAddOrEdit)
 			return -- Don't close the dialog.
 		end
 
+		local viewdate = nil
+
+		if viewed and VIEWED_STATES[viewedRadio.Selection+1].separateDate and viewdateStr then
+			viewdateStr = trim(viewdateStr)
+
+			local year, month, day, hour, min, sec        = viewdateStr:match"^(%d%d%d%d)[-/](%d%d?)[-/](%d%d?) +(%d%d?):(%d%d?):(%d%d?)$"
+			if not year then  year, month, day, hour, min = viewdateStr:match"^(%d%d%d%d)[-/](%d%d?)[-/](%d%d?) +(%d%d?):(%d%d?)$"  end
+			if not year then  year, month, day            = viewdateStr:match"^(%d%d%d%d)[-/](%d%d?)[-/](%d%d?)$"                   end
+			if not year then  year, month                 = viewdateStr:match"^(%d%d%d%d)[-/](%d%d?)$"                              end
+			if not year then  year                        = viewdateStr:match"^(%d%d%d%d)$"                                         end
+
+			if not year then
+				showWarning(T"label_viewDate", "Error: "..T"error_dateInvalid")
+				viewDateInput:SetFocus()
+				return -- Don't close the dialog.
+			end
+
+			year  = tonumber(year)
+			month = tonumber(month) or 1
+			day   = tonumber(day)   or 1
+			hour  = tonumber(hour)  or 0
+			min   = tonumber(min)   or 0
+			sec   = tonumber(sec)   or 0
+
+			viewdate = os.time{year=year, month=month, day=day, hour=hour, min=min, sec=sec}
+
+			if os.date("%Y%m%d%H%M%S", viewdate) ~= F("%04d%02d%02d%02d%02d%02d", year,month,day,hour,min,sec) then
+				showWarning(T"label_viewDate", "Error: "..T"error_dateOutOfRange")
+				viewDateInput:SetFocus()
+				return -- Don't close the dialog.
+			end
+		end
+
 		local values = {
-			viewed  = viewed,
-			state   = state,
-			storage = storage,
-			source  = source,
-			other   = other,
+			viewed   = viewed,
+			viewdate = viewdate,
+			state    = state,
+			storage  = storage,
+			source   = source,
+			other    = other,
 		}
 
 		for _, fileInfo in ipairs(fileInfosToAddOrEdit) do
@@ -562,10 +647,10 @@ function dialogs.settings()
 	local translations     = getTranslations()
 	local currentLangTitle = itemWith(translations, "code", appSettings.language).title
 
-	local sizerBoxSub = wxBoxSizer(wxHORIZONTAL)
+	local sizerRow = wxBoxSizer(wxHORIZONTAL)
 
 	local textObj = wxStaticText(dialog, wxID_ANY, T"label_language"..":")
-	sizerBoxSub:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL + wxRIGHT, MARGIN_XS)
+	sizerRow:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL + wxRIGHT, MARGIN_XS)
 
 	local languageList = wxComboBox(
 		dialog,
@@ -577,9 +662,9 @@ function dialogs.settings()
 		wxCB_DROPDOWN + wxCB_READONLY
 	)
 	languageList:SetSizeHints(140, getHeight(languageList))
-	sizerBoxSub:Add(languageList, 0, wxGROW)
+	sizerRow:Add(languageList, 0, wxGROW)
 
-	sizerBox:Add(sizerBoxSub, 0, wxGROW)
+	sizerBox:Add(sizerRow, 0, wxGROW)
 	------
 
 	local autoHashCheckbox = wxCheckBox(dialog, wxID_ANY, T"label_autoHashFiles")
@@ -607,11 +692,11 @@ function dialogs.settings()
 	sizerBox.StaticBox.Font = fontTitle
 
 	------ Timeout.
-	local sizerBoxSub = wxBoxSizer(wxHORIZONTAL)
+	local sizerRow = wxBoxSizer(wxHORIZONTAL)
 
 	local textObj = wxStaticText(dialog, wxID_ANY, T"label_serverResponseTimeout"..":")
 	textObj:SetToolTip(T("label_serverResponseTimeout_tip", {n=DEFAULT_SERVER_RESPONSE_TIMEOUT}))
-	sizerBoxSub:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL + wxRIGHT, MARGIN_XS)
+	sizerRow:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL + wxRIGHT, MARGIN_XS)
 
 	local validator = wxTextValidator(wxFILTER_INCLUDE_CHAR_LIST)
 	validator:SetIncludes{"0","1","2","3","4","5","6","7","8","9"}
@@ -627,12 +712,12 @@ function dialogs.settings()
 	timeoutInput.MaxLength = 3
 
 	timeoutInput:SetToolTip(textObj.ToolTip.Tip)
-	sizerBoxSub:Add(timeoutInput, 0, wxRIGHT, MARGIN_XS)
+	sizerRow:Add(timeoutInput, 0, wxRIGHT, MARGIN_XS)
 
 	local textObj = wxStaticText(dialog, wxID_ANY, T"label_seconds")
-	sizerBoxSub:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL)
+	sizerRow:Add(textObj, 0, wxALIGN_CENTRE_VERTICAL)
 
-	sizerBox:Add(sizerBoxSub, 0, wxGROW)
+	sizerBox:Add(sizerRow, 0, wxGROW)
 	------
 
 	sizerGrid:Add(sizerBox, wxGBPosition(1, 0), wxGBSpan(1, 1), wxGROW)
@@ -666,12 +751,12 @@ function dialogs.settings()
 	sizerBox.StaticBox.Font = fontTitle
 
 	local
-		viewedRadio,
+		viewedRadio,     viewDateInput,
 		mylistStateRadio,
 		storageCheckbox, storageInput,
 		sourceCheckbox,  sourceInput,
 		otherCheckbox,   otherInput
-		= addMylistaddFields(dialog, sizerBox, appSettings.mylistDefaults)
+		= addMylistaddFields(dialog, sizerBox, appSettings.mylistDefaults, nil)
 
 	sizerGrid:Add(sizerBox, wxGBPosition(0, 1), wxGBSpan(3, 1), wxGROW)
 

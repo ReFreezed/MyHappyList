@@ -332,33 +332,32 @@ end
 
 
 
--- callbackWrapper = on( eventHandler, [ id, ] eventType, callback )  -- @Cleanup: Move id to after eventType.
+-- callbackWrapper = on( eventHandler,  [ id, ] eventType, callback )  -- @Cleanup: Move id to after eventType.
+-- callbackWrapper = on( eventHandlers, [ id, ] eventType, callback )
 -- callback( event, eventSpecificArgument1, ... )
 do
 	local EVENT_EXPANDERS = {
-		["CHAR_HOOK"] -- keycode
-		= function(e)  return e.KeyCode  end,
-		["COMMAND_LIST_COL_END_DRAG"] -- wxColumn, width
-		= function(e)  return e.Column, e.Item.Width  end,
-		["COMMAND_LIST_ITEM_ACTIVATED"] -- wxRow
-		= function(e)  return e.Index  end,
-		["DROP_FILES"] -- filePaths
-		= function(e)  return e.Files  end,
-		["END_PROCESS"] -- exitCode, pid
-		= function(e)  return e.ExitCode, e.Pid  end,
-		["GRID_COL_SIZE"] -- wxColumn, x
-		= function(e)  return e.RowOrCol, e.Position.X  end,
-		["GRID_ROW_SIZE"] -- wxRow, y
-		= function(e)  return e.RowOrCol, e.Position.Y  end,
-		["KEY_DOWN"] -- keycode
-		= function(e)  return e.KeyCode  end,
-		["MOVE"] -- x, y
-		= function(e)  return e.Position:GetXY()  end,
-		["MOVING"] -- x, y
-		= function(e)  return e.Position:GetXY()  end,
-		["SIZE"] -- width, height
-		= function(e)  local size = e.Size  return size.Width, size.Height  end,
+		["CHAR_HOOK"]                   = function(e)  return e.KeyCode                 end, -- keycode
+		["COMMAND_LIST_COL_END_DRAG"]   = function(e)  return e.Column, e.Item.Width    end, -- wxColumn, width
+		["COMMAND_LIST_ITEM_ACTIVATED"] = function(e)  return e.Index                   end, -- wxRow
+		["COMMAND_RADIOBOX_SELECTED"]   = function(e)  return e.Int                     end, -- wxIndex
+		["DROP_FILES"]                  = function(e)  return e.Files                   end, -- filePaths
+		["END_PROCESS"]                 = function(e)  return e.ExitCode, e.Pid         end, -- exitCode, pid
+		["GRID_COL_SIZE"]               = function(e)  return e.RowOrCol, e.Position.X  end, -- wxColumn, x
+		["GRID_ROW_SIZE"]               = function(e)  return e.RowOrCol, e.Position.Y  end, -- wxRow, y
+		["KEY_DOWN"]                    = function(e)  return e.KeyCode                 end, -- keycode
+		["MOVE"]                        = function(e)  return e.Position:GetXY()        end, -- x, y
+		["MOVING"]                      = function(e)  return e.Position:GetXY()        end, -- x, y
+		["SIZE"]                        = function(e)  return getSize(e)                end, -- width, height
 	}
+
+	local function connect(eHandler, eCode, id, cbWrapper)
+		if id then
+			eHandler:Connect(id, eCode, cbWrapper)
+		else
+			eHandler:Connect(eCode, cbWrapper)
+		end
+	end
 
 	function on(eHandler, id, eType, cb)
 		if type(id) == "string" then
@@ -374,10 +373,12 @@ do
 			return cb(e, expander(e))
 		end)
 
-		if id then
-			eHandler:Connect(id, eCode, cbWrapper)
+		if type(eHandler) == "table" then
+			for _, eHandler in ipairs(eHandler) do
+				connect(eHandler, eCode, id, cbWrapper)
+			end
 		else
-			eHandler:Connect(eCode, cbWrapper)
+			connect(eHandler, eCode, id, cbWrapper)
 		end
 
 		return cbWrapper
