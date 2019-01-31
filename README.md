@@ -37,7 +37,7 @@ or manually download the latest version and simply replace the old program folde
 ### Updating from 1.0.x to 1.1 or Later
 Move the `cache` and `local` folders from the old program folder to the new one to preserve settings etc.
 These folders will automatically be moved to your
-[`%APPDATA%`](https://www.microsoft.com/en-us/wdsi/help/folder-variables#appdata)
+[`%APPDATA%`](https://en.wikipedia.org/wiki/Special_folder#File_system_directories)
 folder next time you run MyHappyList, so you only ever have to do this once.
 
 
