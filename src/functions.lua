@@ -1339,7 +1339,7 @@ do
 			else
 				if dangerModeActive then
 					logprint(nil, "Moving %s", pathNew)
-					assert(renameFile(pathOld, pathNew))
+					assert(renameFile(pathOld, pathNew, true))
 				else
 					logprint("Sim", "Move file to: %s", pathNew)
 				end

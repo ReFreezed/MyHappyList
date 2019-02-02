@@ -1,3 +1,6 @@
+v1.2.1 (2019-02-02)
+- Fixed error on startup after an update.
+
 v1.2.0 (2019-01-30)
 - Added support for translations.
 - Added setting: Server response timeout. Try increasing this if you keep getting timeout errors.
