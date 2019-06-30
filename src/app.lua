@@ -15,6 +15,8 @@ math.random()
 
 require"appEnvironment"
 
+local updateTimerSlow
+
 
 
 --==============================================================
@@ -124,8 +126,8 @@ on(topFrame, "CLOSE_WINDOW", function(e)
 		return
 	end
 
-	-- Must do this here because of callbacks that reference wxWindow objects.
-	saveSettings()
+	updateTimerSlow:Notify() -- Make sure certain settings are saved.
+	saveSettings() -- Must do this here because of callbacks that reference wxWindow objects.
 
 	-- Begin destruction!
 	--------------------------------
@@ -629,7 +631,7 @@ topFrame.DefaultItem = fileList
 topPanel.AutoLayout  = true
 topPanel.Sizer       = sizerMain
 
-local updateTimer = newTimer(function(e)
+local updateTimerFast = newTimer(function(e)
 	anidb:update()
 
 	local eHandlers = require"eventHandlers"
@@ -659,6 +661,16 @@ local updateTimer = newTimer(function(e)
 	end
 end)
 
+updateTimerSlow = newTimer(function(e)
+	local fileListScroll = fileList:GetTopItem()
+	setSetting("fileListScroll", fileListScroll)
+
+	local wxIndices = listCtrlGetSelectedRows(fileList)
+	wxIndices[1]    = wxIndices[1] or 0
+	table.sort(wxIndices)
+	setSetting("fileListSelection", wxIndices)
+end)
+
 
 
 --==============================================================
@@ -681,8 +693,10 @@ topFrame:Maximize(appSettings.windowMaximized)
 
 if anyFileInfos() then
 	fileList:SetFocus()
-	listCtrlSelectRows(fileList, {0})
+	listCtrlSelectRows(fileList, appSettings.fileListSelection)
 end
+
+fileList:EnsureVisible(appSettings.fileListScroll + fileList:GetCountPerPage() - 1)
 
 -- Right when topFrame is visible.
 newTimer(0, true, function()
@@ -697,7 +711,8 @@ end)
 
 topFrame:Show(true)
 
-updateTimer:Start(1000/20)
+updateTimerFast:Start(1000/20)
+updateTimerSlow:Start(10*1000)
 
 settingsAreFrozen = false
 

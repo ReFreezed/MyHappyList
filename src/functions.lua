@@ -14,6 +14,7 @@
 	clamp
 	cleanupPath
 	cmdAsync, cmdSync, cmdDetached, cmdCapture, scriptCaptureAsync, scriptRunDetached, isScriptRunning, cmdEscapeArgs, run
+	compareTables
 	copyTable
 	cwdPush, cwdPop
 	eatSpaces
@@ -1478,6 +1479,22 @@ do
 
 		return copy
 	end
+end
+
+
+
+-- tablesAreEqual = compareTables( table1, table2 [, deep=false ] )
+function compareTables(t1, t2, deep)
+	for k, v1 in pairs(t1) do
+		local v2 = t2[k]
+		if v1 ~= v2 and not (deep and type(v1) == "table" and type(v2) == "table" and compareTables(v1, v2, true)) then
+			return false
+		end
+	end
+	for k, v2 in pairs(t2) do
+		if t1[k] == nil then  return false  end
+	end
+	return true
 end
 
 

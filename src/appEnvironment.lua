@@ -73,6 +73,9 @@ DEFAULT_APP_SETTINGS = {
 
 	language              = "en-US",
 	serverResponseTimeout = DEFAULT_SERVER_RESPONSE_TIMEOUT,
+
+	fileListScroll    = 0,
+	fileListSelection = {0},
 }
 
 
@@ -533,15 +536,26 @@ do
 	-- setSetting( key, callback [, startSaveTimer=true ] )
 	-- Note: The callback is called twice - immediately and before saving.
 	function setSetting(k, vOrCb, startSaveTimer)
-		if settingsAreFrozen       then  return  end
-		if appSettings[k] == vOrCb then  return  end
+		if settingsAreFrozen then  return  end
 
-		if type(vOrCb) == "function" then
-			callbacks[k]   = vOrCb
-			appSettings[k] = vOrCb()
+		local vOld = appSettings[k]
+		if vOld == vOrCb then  return  end
+
+		local vOrCbType = type(vOrCb)
+
+		if vOrCbType == "table" and type(vOld) == "table" then
+			local t = vOrCb
+			if compareTables(t, vOld, true) then  return  end
+		end
+
+		if vOrCbType == "function" then
+			local cb       = vOrCb
+			callbacks[k]   = cb
+			appSettings[k] = cb()
 		else
+			local v        = vOrCb
 			callbacks[k]   = nil
-			appSettings[k] = vOrCb
+			appSettings[k] = v
 		end
 
 		if startSaveTimer == false then
