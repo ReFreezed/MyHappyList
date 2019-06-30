@@ -464,7 +464,7 @@ do
 		if not (statusCode or ""):find"^%d%d%d$" then
 			_logprinterror("Server response misses a code: %s", makePrintable(data))
 
-			eventQueue:addEvent("error", T(T"error_badResponseFormat", {command=msg.command}))
+			eventQueue:addEvent("error", T("error_badResponseFormat", {command=msg.command}))
 			msg:callback(self, false)
 			return false
 		end
@@ -509,7 +509,7 @@ do
 
 		-- ILLEGAL INPUT OR ACCESS DENIED
 		elseif statusCode == 505 then
-			local err = F("error_anidb_badData", {command=msg.command})
+			local err = T("error_anidb_badData", {command=msg.command})
 			_logprinterror(err)
 			eventQueue:addEvent("error", err)
 
@@ -1731,9 +1731,20 @@ function Anidb:init()
 	}
 
 	self.udp = assert(socket.udp())
-
 	assert(self.udp:setsockname("*", LOCAL_PORT))
-	assert(self.udp:setpeername(SERVER_ADDRESS, SERVER_PORT))
+
+	local ok, err = self.udp:setpeername(SERVER_ADDRESS, SERVER_PORT)
+	if not ok then
+		if err == "Valid name, no data record of requested type" then
+			error(
+				"Some kind of network error ocurred."
+				.." It's possible the host name '"..SERVER_ADDRESS.."' could not get resolved,"
+				.." or there's no network connection. ("..err..")"
+			) -- @i18n
+		else
+			error("udp.setpeername: "..err)
+		end
+	end
 
 	self.udp:settimeout(0) -- By default udp:receive() is blocking - we don't want that!
 

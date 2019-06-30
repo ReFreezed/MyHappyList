@@ -216,7 +216,7 @@ end
 
 
 eHandlers["error_response_timeout"] = function(command)
-	showError("label_timeout", F("%s\n\n%s: %s", error_messageResponseTimeout, T"label_command", command))
+	showError("label_timeout", F("%s\n\n%s: %s", T"error_messageResponseTimeout", T"label_command", command))
 end
 
 

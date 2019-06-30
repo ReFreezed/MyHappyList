@@ -1069,6 +1069,10 @@ end
 
 -- success = showFileInExplorer( path )
 function showFileInExplorer(path)
+	-- This *sometimes* seem to leave a lingering explorer process for some reason, even
+	-- after MyHappyList closes. Need confirmation on this. Most of the time the process
+	-- stops after some time though. The command looks something like this:
+	-- C:\Windows\explorer.exe /factory,{75(...)4b} -Embedding
 	return cmdDetached("explorer", "/select,"..toShortPath(path, true))
 end
 
