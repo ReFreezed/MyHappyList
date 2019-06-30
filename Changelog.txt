@@ -1,3 +1,7 @@
+v1.2.2 (2019-06-30)
+- Fixed localization related crash.
+- Improved a network error message on startup.
+
 v1.2.1 (2019-02-02)
 - Fixed error on startup after an update.
 
