@@ -737,5 +737,6 @@ end
 
 logprint(nil, "Exiting normally.")
 logEnd()
+os.exit(0)
 
 

@@ -132,6 +132,8 @@ local function update()
 
 	logprint(nil, "All done.")
 	logEnd()
+	os.exit(0)
 end
 
 xpcall(update, handleError)
+os.exit(9) -- We should never get here!

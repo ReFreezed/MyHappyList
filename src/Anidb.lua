@@ -145,6 +145,7 @@ local PATH_SESSION                    = DIR_CACHE.."/session"
 
 local Anidb = {
 	udp                     = nil,
+	localPort               = 0,     -- Will be either LOCAL_PORT, LOCAL_PORT_FALLBACK or an ephemeral port.
 
 	responses               = nil,
 	messages                = nil,
@@ -704,10 +705,10 @@ function updateNatInfo(self, port)
 	assertarg(1, self, "table")
 	assertarg(2, port, "number")
 
-	port = DEBUG_FORCE_NAT_OFF and LOCAL_PORT or port
+	if DEBUG_FORCE_NAT_OFF then  port = LOCAL_PORT  end
 
 	if self.natMode == NAT_MODE_UNKNOWN then
-		if port == LOCAL_PORT then
+		if port == self.localPort then
 			_logprint("NAT seem absent.")
 			self.natMode = NAT_MODE_OFF
 		else
@@ -1731,7 +1732,27 @@ function Anidb:init()
 	}
 
 	self.udp = assert(socket.udp())
-	assert(self.udp:setsockname("*", LOCAL_PORT))
+
+	local localPortTitle, ok, err
+
+	localPortTitle = "default"
+	self.localPort = LOCAL_PORT
+	ok, err        = check(self.udp:setsockname("*", self.localPort))
+
+	if not ok then
+		localPortTitle = "fallback"
+		self.localPort = LOCAL_PORT_FALLBACK
+		ok, err        = check(self.udp:setsockname("*", self.localPort))
+	end
+
+	if not ok then
+		localPortTitle = "ephemeral"
+		assert(self.udp:setsockname("*", 0)) -- As a last resort, let the system choose an ephemeral port.
+		local localAddress;localAddress, self.localPort = self.udp:getsockname()
+		if not localAddress then  error("Failed getsockname.")  end
+	end
+
+	_logprint("Local port: %d (%s)", self.localPort, localPortTitle)
 
 	local ok, err = self.udp:setpeername(SERVER_ADDRESS, SERVER_PORT)
 	if not ok then

@@ -48,6 +48,7 @@ MARGIN_XS         = 2
 SERVER_ADDRESS                      = DEBUG_LOCAL and "localhost" or "api.anidb.net"
 SERVER_PORT                         = 9000
 LOCAL_PORT                          = DEBUG_LOCAL and 9000 or 24040
+LOCAL_PORT_FALLBACK                 = DEBUG_LOCAL and 9001 or 25050
 
 PROTOCOL_VERSION                    = 3
 CLIENT_NAME                         = "myhappylist"

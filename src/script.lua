@@ -23,6 +23,8 @@ local scriptName = table.remove(args, 1)
 xpcall(
 	function()
 		require("scripts."..scriptName)
+		os.exit(0)
 	end,
 	handleError
 )
+os.exit(9) -- We should never get here!
