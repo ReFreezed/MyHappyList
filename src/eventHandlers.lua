@@ -52,7 +52,8 @@ end
 eHandlers["ed2k_fail"] = function(path)
 	for _, fileInfo in ipairs(fileInfos) do
 		if fileInfo.isHashing and fileInfo.path == path then
-			-- @Incomplete: Show an error message.
+			-- @UX: Don't show the error message as a popup, as there may be many!
+			showError("Error", F("%s\n\n%s", T"error_failedHashingFile", path))
 			setFileInfo(fileInfo, "isHashing", false)
 			break
 		end
@@ -216,7 +217,7 @@ end
 
 
 eHandlers["error_response_timeout"] = function(command)
-	showError("label_timeout", F("%s\n\n%s: %s", T"error_messageResponseTimeout", T"label_command", command))
+	showError(T"label_timeout", F("%s\n\n%s: %s", T"error_messageResponseTimeout", T"label_command", command))
 end
 
 

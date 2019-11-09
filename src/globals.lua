@@ -140,7 +140,7 @@ MYLIST_FILESTATE_OTHER                = 100 -- normal
 
 -- Modules.
 
-local ok, _socket = pcall(require, "socket")
+local ok, _socket = pcall(require, "socket") -- Why the pcall? 2019-11-09
 if ok then
 	socket = _socket
 	require"socket.url"

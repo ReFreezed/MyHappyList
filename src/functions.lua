@@ -61,7 +61,10 @@
 	tablePathGet, tablePathSet
 	trim, trimNewlines
 	unzip
-	updater_getUnzipDir, updater_moveFilesAfterUnzipMain, updater_moveFilesAfterUnzipUpdater
+	utf8IsValid
+
+	updater_getUnzipDir
+	updater_moveFilesAfterUnzipMain, updater_moveFilesAfterUnzipUpdater
 
 --============================================================]]
 
@@ -163,29 +166,46 @@ do
 	local values     = {}
 	local oncePrints = {}
 
-	function print(...)
-		_print(...)
-
+	local function printArgsToString(...)
 		local argCount = select("#", ...)
 		for i = 1, argCount do
 			values[i] = tostring(select(i, ...))
 		end
+		return table.concat(values, "\t", 1, argCount)
+	end
 
-		log(table.concat(values, "\t", 1, argCount))
+	local function safePrintUtf8(s)
+		local ok, errPos = utf8IsValid(s)
+
+		if not ok then
+			local errPositions = {}
+
+			repeat
+				errPositions[errPos] = true
+				ok, errPos           = utf8IsValid(s, errPos+1)
+			until ok
+
+			s = s:gsub("()(.)", function(pos, c)
+				return errPositions[pos] and "?" or c
+			end)
+		end
+
+		_print(s)
+	end
+
+	function print(...)
+		local s = printArgsToString(...)
+		safePrintUtf8(s)
+		log(s)
 	end
 
 	function printOnce(...)
-		local argCount = select("#", ...)
-		for i = 1, argCount do
-			values[i] = tostring(select(i, ...))
-		end
-
-		local s = table.concat(values, "\t", 1, argCount)
+		local s = printArgsToString(...)
 
 		if oncePrints[s] then  return  end
 		oncePrints[s] = true
 
-		_print(...)
+		safePrintUtf8(s)
 		log(s)
 	end
 end
@@ -1494,6 +1514,34 @@ function compareTables(t1, t2, deep)
 	for k, v2 in pairs(t2) do
 		if t1[k] == nil then  return false  end
 	end
+	return true
+end
+
+
+
+-- isValid, errorPosition = utf8IsValid( string [, startBytePosition=1 ] )
+-- https://github.com/kikito/utf8_validator.lua/blob/master/utf8_validator.lua
+function utf8IsValid(s, ptr)
+	ptr = ptr or 1
+
+	local len  = #s
+	local find = string.find
+
+	while ptr <= len do
+		if     ptr == find(s, "[%z\1-\127]", ptr) then ptr = ptr + 1
+		elseif ptr == find(s, "[\194-\223][\128-\191]", ptr) then ptr = ptr + 2
+		elseif ptr == find(s,        "\224[\160-\191][\128-\191]", ptr)
+		    or ptr == find(s, "[\225-\236][\128-\191][\128-\191]", ptr)
+		    or ptr == find(s,        "\237[\128-\159][\128-\191]", ptr)
+		    or ptr == find(s, "[\238-\239][\128-\191][\128-\191]", ptr) then ptr = ptr + 3
+		elseif ptr == find(s,        "\240[\144-\191][\128-\191][\128-\191]", ptr)
+		    or ptr == find(s, "[\241-\243][\128-\191][\128-\191][\128-\191]", ptr)
+		    or ptr == find(s,        "\244[\128-\143][\128-\191][\128-\191]", ptr) then ptr = ptr + 4
+		else
+			return false, ptr
+		end
+	end
+
 	return true
 end
 

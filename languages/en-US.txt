@@ -57,6 +57,7 @@ error_tooLongTexts_text              = The combined length of the storage, sourc
 error_tooManyDroppedFiles            = Too many dropped files. (Max is {n})
 error_updater_download               = Could not download the latest version.
 error_updater_run                    = Could not start updater.
+error_failedHashingFile              = Failed hashing file. Check the log for details.
 label_aboutApp                       = About MyHappyList
 label_addOrEdit                      = Add / Edit
 label_addToOrEditMylist              = Add to / Edit MyList

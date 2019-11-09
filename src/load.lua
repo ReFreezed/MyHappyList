@@ -30,7 +30,7 @@ if appZip then
 					local contents = file:read"*a"
 					file:close()
 
-					local chunk = assert(loadstring(contents, path))
+					local chunk = assert(loadstring(contents, "@"..path))
 					return chunk(moduleName)
 				end
 			end

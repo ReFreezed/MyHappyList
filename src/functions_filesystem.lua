@@ -725,6 +725,11 @@ end
 
 -- path = toShortPath( path [, asWindowsPath=false ] )
 -- Note: May return the path as-is if the file doesn't exist.
+--
+-- Possibly relevant info to look into:
+--   https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2012-R2-and-2012/ff621566(v=ws.11)
+--   https://stackoverflow.com/questions/18479322/how-to-check-programatically-that-8-3-short-path-name-is-enabled-on-system
+--
 function toShortPath(path, asWindowsPath)
 	path = wxFileName(path).ShortPath
 
@@ -757,9 +762,9 @@ function parseSimpleKv(line, path, ln)
 		return nil
 	end
 
-	local chunk, err = loadstring("return "..v, "")
+	local chunk, err = loadstring("return "..v, "@")
 	if not chunk then
-		err = err :gsub('^%[string ""%]:1: ', "") :gsub("<eof>", "<eol>")
+		err = err :gsub("^:1: ", "") :gsub("<eof>", "<eol>")
 		logprinterror("FS", "%s:%d: Malformed value: %s. ('%s')", path, ln, err, line)
 		return nil
 	end

@@ -938,10 +938,18 @@ function processReadEnded(process, exitCode, isText)
 	assertarg(2, exitCode, "number")
 	assertarg(3, isText,   "boolean","nil")
 
-	local stream = exitCode ~= 0 and process:IsErrorAvailable() and process.ErrorStream or process.InputStream
-	local s      = streamRead(stream, isText)
+	local stream = nil
 
-	return s
+	if exitCode ~= 0 and process:IsErrorAvailable() then
+		stream = process.ErrorStream or process:GetErrorStream()
+		if not stream then  return "processReadEnded: Error: Could not get error stream."  end
+
+	elseif process:IsInputAvailable() then
+		stream = process.InputStream or process:GetInputStream()
+		if not stream then  return "processReadEnded: Error: Could not get input stream."  end
+	end
+
+	return stream and streamRead(stream, isText) or "processReadEnded: Error: No stream available."
 end
 
 

@@ -57,6 +57,7 @@ error_tooLongTexts_text              = Den kombinerade längden av lagrings-, k�
 error_tooManyDroppedFiles            = Fär många släppta filer. (Max är {n})
 error_updater_download               = Kunde inte ladda ner den senaste versionen.
 error_updater_run                    = Kunde inte starta uppdateraren.
+error_failedHashingFile              = Kunde inte hasha fil. Kolla loggen för detaljer.
 label_aboutApp                       = Om MyHappyList
 label_addOrEdit                      = Lägg Till / Redigera
 label_addToOrEditMylist              = Lägg Till / Redigera MyList

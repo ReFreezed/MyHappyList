@@ -1043,6 +1043,8 @@ do
 		file:close()
 	end
 
+	local tempFileN = 0
+
 	local function processNextQueueItem()
 		local queueItem = table.remove(ed2kQueue, 1)
 		if not queueItem then  return  end
@@ -1051,7 +1053,16 @@ do
 
 		local self, path, fileSize, cb = unpack(queueItem)
 
+		tempFileN      = tempFileN+1
+		local tempPath = DIR_TEMP.."/ed2kPath"..tempFileN
+		assert(writeFile(tempPath, path)) -- @UX: Show an error message instead of crashing if this fails.
+
 		scriptCaptureAsync("ed2k", function(output)
+			if not deleteFile(tempPath) then
+				_logprinterror("Could not delete temporary file: %s", tempPath)
+				-- Continue...
+			end
+
 			ed2kHash = output:match"^ed2k: ([%da-f]+)"
 
 			if not ed2kHash then
@@ -1095,7 +1106,7 @@ do
 
 			isProcessing = false
 			processNextQueueItem()
-		end, toShortPath(path))
+		end, tempPath, path)
 	end
 
 	function ed2kGet(self, path, cb)
