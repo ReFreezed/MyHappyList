@@ -2310,7 +2310,7 @@ end
 function Anidb:reportLocalFileDeleted(path)
 	-- @Incomplete: Maybe change some stuff. I don't think reacting to deletions is too important. [LOW]
 
-	-- Note: Don't remove ed2ks, in case files are moved back.
+	-- Note: Don't remove ed2ks, in case files are moved back!
 end
 
 function Anidb:reportLocalFileMoved(pathOld, pathNew)

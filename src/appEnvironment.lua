@@ -645,19 +645,30 @@ do
 		if isFile(pathOld) then  return false  end
 
 		if appSettings.autoRemoveDeletedFiles then
+			-- @Incomplete: Add a setting to also mark removed files as 'deleted' in MyList,
+			-- like the user can when autoRemoveDeletedFiles is off. (Not sure if this is
+			-- such a good idea. Seems error-prone.)
 			removeFileInfo(fileInfo)
 			anidb:reportLocalFileDeleted(pathOld)
 			return true
 		end
 
-		local pathNew = dialogs.missingFile(pathOld)
+		local showMylistOptions           = (fileInfo.lid ~= -1)
+		local pathNew, setMylistToDeleted = dialogs.missingFile(pathOld, showMylistOptions)
+
 		if not pathNew then
-			-- Leave fileInfo as-is. (Should we mark it so we don't ask for a new path again?)
+			-- Leave fileInfo as-is. (Should we mark it so we don't ask for a new path again? @UX)
 			return false
 
 		elseif pathNew == "" then
+			if showMylistOptions and setMylistToDeleted then
+				anidb:editMylist(fileInfo.lid, {state=MYLIST_STATE_DELETED})
+				-- @Robustness: Don't do the below stuff until the update on AniDB is confirmed.
+			end
+
 			removeFileInfo(fileInfo)
 			anidb:reportLocalFileDeleted(pathOld)
+
 			return true
 		end
 

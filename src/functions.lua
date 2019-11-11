@@ -33,6 +33,7 @@
 	handleError, wrapCall
 	iff
 	indexOf, itemWith, itemWithAll, indexWith
+	insertMultiple, removeItem
 	ipairsr, iprev
 	isAny
 	isHost
@@ -50,7 +51,6 @@
 	print, printOnce, printf, printfOnce, printobj
 	quit, maybeQuit
 	range
-	removeItem
 	round
 	serializeLua
 	setAndInsert, setAndInsertIfNew, unsetAndRemove
@@ -641,6 +641,16 @@ function isAny(v, ...)
 end
 
 
+
+-- insertMultiple( array, value1, ...)
+function insertMultiple(t, ...)
+	local insert = table.insert
+	local select = select
+
+	for i = 1, select("#", ...) do
+		insert(t, (select(i, ...)))
+	end
+end
 
 -- anyItemGotRemoved = removeItem( array, value1, ... )
 function removeItem(t, ...)

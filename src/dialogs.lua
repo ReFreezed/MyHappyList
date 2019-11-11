@@ -875,11 +875,11 @@ end
 
 
 
--- newPath = dialogs.missingFile( path )
+-- newPath, setMylistToDeleted = dialogs.missingFile( path [, showMylistOptions=false ] )
 -- newPath == string -- Chosen new path.
 -- newPath == ""     -- Remove file from list.
 -- newPath == nil    -- No new path chosen / Abort.
-function dialogs.missingFile(path)
+function dialogs.missingFile(path, showMylistOptions)
 	local pathNew = ""
 
 	local function chooseNewLocation(e)
@@ -925,22 +925,21 @@ function dialogs.missingFile(path)
 		e:Skip() -- Continue closing the dialog.
 	end
 
+	local idRemoveAndUpdateMylist = wxNewId()
+
 	local labels = {
-		wxID_OK,     T"label_chooseNewLocation", chooseNewLocation,
-		wxID_REMOVE, T"label_removeFromList",
-		wxID_CANCEL, T"label_cancel",
+		wxID_OK,                 T"label_chooseNewLocation",             chooseNewLocation,
+		wxID_REMOVE,             T"label_removeFromList",                --
+		idRemoveAndUpdateMylist, T"label_removeFromListAndUpdateMylist", showMylistOptions,
+		wxID_CANCEL,             T"label_cancel",                        --
 	}
+
 	local id = showButtonDialog(T"label_fileIsMissing", F("%s:\n\n%s", T"message_fileMovedOrDeleted", path), labels)
 
-	if id == wxID_OK then
-		return pathNew
-
-	elseif id == wxID_REMOVE then
-		return ""
-
-	else
-		return nil
-	end
+	if     id == wxID_OK                 then  return pathNew, false
+	elseif id == wxID_REMOVE             then  return "",      false
+	elseif id == idRemoveAndUpdateMylist then  return "",      true
+	else                                       return nil,     false  end
 end
 
 

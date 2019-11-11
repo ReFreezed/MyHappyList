@@ -462,12 +462,12 @@ end
 -- showButtonDialog
 --
 -- Method 1:
---    index = showButtonDialog( caption, message, buttonInfo [, icon=wxART_INFORMATION ] )
---    buttonInfo = { label1, [ onPress1, ] ... }
+--    index      = showButtonDialog( caption, message, buttonInfo [, icon=wxART_INFORMATION ] )
+--    buttonInfo = { label1, [ onPress1|enabled1, ] ... }
 --
 -- Method 2:
---    id    = showButtonDialog( caption, message, buttonInfo [, icon=wxART_INFORMATION ] )
---    buttonInfo = { id1, label1, [ onPress1, ] ... }
+--    id         = showButtonDialog( caption, message, buttonInfo [, icon=wxART_INFORMATION ] )
+--    buttonInfo = { id1, label1, [ onPress1|enabled1, ] ... }
 --
 -- onPress = function( event )
 -- Call event:Skip() to prevent the dialog from closing.
@@ -542,9 +542,10 @@ function showButtonDialog(caption, message, infos, icon)
 
 	-- Buttons.
 	while infos[i] do
-		buttonIndex = buttonIndex+1
+		buttonIndex   = buttonIndex+1
+		local enabled = true
+		local cb      = nil
 		local id, label
-		local cb = nil
 
 		if createIds then
 			id               = wxNewId()
@@ -558,13 +559,16 @@ function showButtonDialog(caption, message, infos, icon)
 			i                = i+2
 		end
 
-		if type(infos[i]) == "function" then
+		if type(infos[i]) == "boolean" then
+			enabled = infos[i]
+			i       = i+1
+		elseif type(infos[i]) == "function" then
 			cb = infos[i]
 			i  = i+1
 		end
 
 		local button = newButton(dialog, id, label, function(e)
-			if cb then cb(e) end
+			if cb then  cb(e)  end
 
 			if not cb or e.Skipped then
 				dialog:EndModal(id)
@@ -573,6 +577,7 @@ function showButtonDialog(caption, message, infos, icon)
 			e:Skip(false)
 		end)
 
+		if not enabled then  button:Enable(false)  end
 		sizer:Add(button, 0, wxLEFT + wxRIGHT, 3)
 	end
 
