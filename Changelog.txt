@@ -1,3 +1,7 @@
+v1.2.5 (2019-12-30)
+- Added option to mark a missing file as 'deleted' in MyList.
+- Fixed an issue that sometimes made infinite error messages pop up when closing the program.
+
 v1.2.4 (2019-11-09)
 - Fixed an issue with paths containing non-ASCII characters.
 
