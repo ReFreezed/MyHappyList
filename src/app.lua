@@ -15,7 +15,7 @@ math.random()
 
 require"appEnvironment"
 
-local updateTimerSlow
+local updateTimerFast, updateTimerSlow
 
 
 
@@ -125,6 +125,11 @@ on(topFrame, "CLOSE_WINDOW", function(e)
 		e:Veto()
 		return
 	end
+
+	-- We must stop all timers before topFrame:Destroy() or we may get infinite
+	-- error popups when closing the program by pressing the X on the window!
+	updateTimerFast:Stop()
+	updateTimerSlow:Stop()
 
 	updateTimerSlow:Notify() -- Make sure certain settings are saved.
 	saveSettings() -- Must do this here because of callbacks that reference wxWindow objects.
@@ -631,7 +636,7 @@ topFrame.DefaultItem = fileList
 topPanel.AutoLayout  = true
 topPanel.Sizer       = sizerMain
 
-local updateTimerFast = newTimer(function(e)
+updateTimerFast = newTimer(function(e)
 	anidb:update()
 
 	local eHandlers = require"eventHandlers"
@@ -712,6 +717,8 @@ end)
 topFrame:Show(true)
 
 updateTimerFast:Start(1000/20)
+-- updateTimerFast:Start(1000/200) -- DEBUG
+
 updateTimerSlow:Start(10*1000)
 
 settingsAreFrozen = false

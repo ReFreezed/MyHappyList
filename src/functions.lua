@@ -112,6 +112,7 @@ function handleError(err)
 	logEnd()
 
 	if isApp and not DEBUG then
+	-- if isApp then -- DEBUG
 	 	local dialog = wxTextEntryDialog(
 	 		wxNULL,
 	 		F(
