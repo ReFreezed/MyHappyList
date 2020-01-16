@@ -912,9 +912,7 @@ function dialogs.missingFile(path, showMylistOptions)
 			wxDEFAULT_DIALOG_STYLE + wxRESIZE_BORDER + wxFILE_MUST_EXIST
 		)
 
-		pause("wxFileDialog")
 		local id = showModalAndDestroy(dialog)
-		unpause("wxFileDialog")
 
 		if id == wxID_CANCEL then
 			cast(e.EventObject):SetFocus() -- Fixes the dialog not getting back focus.

@@ -192,7 +192,7 @@ local blackout, loadBlackout
 local cacheSave, cacheLoad, cacheDelete
 local compress, decompress
 local createData
-local ed2kGet, ed2kGetPath, ed2kChangePath
+local ed2kGet, ed2kGetPath, ed2kChangePath, ed2kIsCalculating, ed2kIsTakingTooLong
 local fileEntryParseState
 local generateTag
 local getMessage, addMessage, removeMessage
@@ -993,14 +993,16 @@ end
 
 
 do
-	local pathEd2ks    = {}
-	local pathSizes    = {}
-	local ed2kPaths    = {}
+	local pathEd2ks = {}
+	local pathSizes = {}
+	local ed2kPaths = {}
 
-	local isLoaded     = false
+	local isLoaded  = false
 
-	local ed2kQueue    = {}
-	local isProcessing = false
+	local ed2kQueue           = {}
+	local pathBeingProcessed  = ""
+	local processingStartTime = 0.00
+	local loggedTakingTooLong = false
 
 	local function saveEd2ks()
 		if DEBUG_DISABLE_VARIOUS_FILE_SAVING then  return  end
@@ -1045,19 +1047,44 @@ do
 
 	local tempFileN = 0
 
+	local function failedHashing(path, infoText, cb)
+		_logprinterror("Calculating ed2k for '%s' failed: %s", getFilename(path), infoText)
+
+		pathEd2ks[path] = nil
+		pathSizes[path] = nil
+
+		for ed2kHashOther, pathOther in pairs(ed2kPaths) do
+			if pathOther == path then
+				ed2kPaths[ed2kHashOther] = nil
+				break
+			end
+		end
+
+		saveEd2ks()
+
+		eventQueue:addEvent("ed2k_fail", path)
+		cb(ED2K_STATE_ERROR)
+	end
+
+	local function stopProcessingCurrentQueueItem()
+		pathBeingProcessed  = ""
+		loggedTakingTooLong = false
+	end
+
 	local function processNextQueueItem()
 		local queueItem = table.remove(ed2kQueue, 1)
 		if not queueItem then  return  end
 
-		isProcessing = true
-
 		local self, path, fileSize, cb = unpack(queueItem)
+
+		pathBeingProcessed  = path
+		processingStartTime = getTime()
 
 		tempFileN      = tempFileN+1
 		local tempPath = DIR_TEMP.."/ed2kPath"..tempFileN
 		assert(writeFile(tempPath, path)) -- @UX: Show an error message instead of crashing if this fails.
 
-		scriptCaptureAsync("ed2k", function(output)
+		local processStarted = scriptCaptureAsync("ed2k", function(output)
 			if not deleteFile(tempPath) then
 				_logprinterror("Could not delete temporary file: %s", tempPath)
 				-- Continue...
@@ -1066,24 +1093,8 @@ do
 			ed2kHash = output:match"^ed2k: ([%da-f]+)"
 
 			if not ed2kHash then
-				_logprinterror("Calculating ed2k for '%s' failed: %s", getFilename(path), output)
-
-				pathEd2ks[path] = nil
-				pathSizes[path] = nil
-
-				for ed2kHashOther, pathOther in pairs(ed2kPaths) do
-					if pathOther == path then
-						ed2kPaths[ed2kHashOther] = nil
-						break
-					end
-				end
-
-				saveEd2ks()
-
-				eventQueue:addEvent("ed2k_fail", path)
-				cb(ED2K_STATE_ERROR)
-
-				isProcessing = false
+				failedHashing(path, output, cb)
+				stopProcessingCurrentQueueItem()
 				processNextQueueItem()
 				return
 			end
@@ -1104,9 +1115,16 @@ do
 			eventQueue:addEvent("ed2k_success", path, ed2kHash, fileSize)
 			cb(ED2K_STATE_SUCCESS, ed2kHash, fileSize)
 
-			isProcessing = false
+			stopProcessingCurrentQueueItem()
 			processNextQueueItem()
 		end, tempPath, path)
+
+		if not processStarted then
+			failedHashing(path, "Could not start process for script 'ed2k'.", cb)
+			stopProcessingCurrentQueueItem()
+			processNextQueueItem()
+			return
+		end
 	end
 
 	function ed2kGet(self, path, cb)
@@ -1153,7 +1171,7 @@ do
 		_logprint("Calculating ed2k for '%s'...", path:match"[^/\\]+$")
 
 		table.insert(ed2kQueue, {self, path, fileSize, cb})
-		if not isProcessing then  processNextQueueItem()  end
+		if pathBeingProcessed == "" then  processNextQueueItem()  end
 	end
 
 	function ed2kGetPath(ed2kHash)
@@ -1175,6 +1193,25 @@ do
 		pathSizes[pathNew]  = fileSize
 
 		ed2kPaths[ed2kHash] = pathNew
+	end
+
+	function ed2kIsCalculating()
+		return pathBeingProcessed ~= ""
+	end
+
+	function ed2kHandleTakingTooLong()
+		if pathBeingProcessed == "" then  return  end
+		if loggedTakingTooLong      then  return  end
+
+		if getTime() < processingStartTime + ED2K_TIME_BEFORE_TAKING_TOO_LONG then  return  end
+
+		loggedTakingTooLong = true
+		logprint(
+			"AniDB",
+			"Warning: '%s' is taking longer than %d seconds to hash. Is rhash.exe or the ed2k calculation process stuck?",
+			pathBeingProcessed,
+			ED2K_TIME_BEFORE_TAKING_TOO_LONG
+		)
 	end
 end
 
@@ -1364,22 +1401,22 @@ responseHandlers = {
 
 	["LOGOUT"] = function(msg, self, ok, statusCode, statusText, entries)
 		if not ok then
-			eventQueue:addEvent("logoutfail", T"error_response_logout")
+			eventQueue:addEvent("logout_fail", T"error_response_logout")
 
 		-- 203 LOGGED OUT
 		elseif statusCode == 203 then
 			dropSession(self)
-			eventQueue:addEvent("logoutsuccess")
+			eventQueue:addEvent("logout_success")
 
 		-- 403 NOT LOGGED IN
 		elseif statusCode == 403 then
 			_logprinterror("Tried to log out, but we weren't logged in.")
 			dropSession(self)
-			eventQueue:addEvent("logoutsuccess") -- Still count as success.
+			eventQueue:addEvent("logout_success") -- Still count as success.
 
 		-- 505 555 598 600 601 602 604 [501 502 506]
 		else
-			eventQueue:addEvent("logoutfail", F("AniDB error %d: %s", statusCode, statusText))
+			eventQueue:addEvent("logout_fail", F("AniDB error %d: %s", statusCode, statusText))
 		end
 	end,
 
@@ -2153,7 +2190,6 @@ function Anidb:update(force)
 
 		if DEBUG_LOCAL and not (data:find"^#" or data:find"^%d%d%d") then
 			require"fakeServer"(self.udp, data)
-
 		else
 			logprint("IO", "<-- "..makePrintable(data))
 			handleServerResponse(self, data)
@@ -2238,6 +2274,9 @@ function Anidb:update(force)
 	if self.isActive and time > self.responseTimeLast+self.pingDelay and not isAnyMessageInTransit(self) then
 		self:ping()
 	end
+
+	-- Extras.
+	ed2kHandleTakingTooLong()
 end
 
 
@@ -2293,6 +2332,10 @@ end
 function Anidb:hashFile(path)
 	assertarg(1, path, "string")
 	ed2kGet(self, path, NOOP)
+end
+
+function Anidb:isHashingAnyFile()
+	return ed2kIsCalculating()
 end
 
 

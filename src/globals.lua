@@ -69,6 +69,8 @@ MAX_DATA_LENGTH                     = 1400 -- Must be between 400 and 1400. (MTU
 FLOOD_PROTECTION_SHORT_TERM         = 20
 FLOOD_PROTECTION_WINDOW             = 10   -- Saved amount of lastResponseTimes.
 
+ED2K_TIME_BEFORE_TAKING_TOO_LONG    = 1*60
+
 
 
 -- Constants.

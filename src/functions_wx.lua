@@ -597,17 +597,37 @@ end
 
 -- showMessage( caption, message )
 function showMessage(caption, message)
-	wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_INFORMATION, topFrame)
+	showMessageWhilePaused(nil, caption, message)
 end
-
 -- showWarning( caption, message )
 function showWarning(caption, message)
-	wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_WARNING, topFrame)
+	showWarningWhilePaused(nil, caption, message)
 end
-
 -- showError( caption, message )
 function showError(caption, message)
+	showErrorWhilePaused(nil, caption, message)
+end
+
+-- showMessageWhilePaused( pauseKey=auto, caption, message )
+function showMessageWhilePaused(pauseKey, caption, message)
+	pauseKey = pauseKey or "wxMessageBox"
+	pause(pauseKey)
+	wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_INFORMATION, topFrame)
+	unpause(pauseKey)
+end
+-- showWarningWhilePaused( pauseKey=auto, caption, message )
+function showWarningWhilePaused(pauseKey, caption, message)
+	pauseKey = pauseKey or "wxMessageBox"
+	pause(pauseKey)
+	wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_WARNING, topFrame)
+	unpause(pauseKey)
+end
+-- showErrorWhilePaused( pauseKey=auto, caption, message )
+function showErrorWhilePaused(pauseKey, caption, message)
+	pauseKey = pauseKey or "wxMessageBox"
+	pause(pauseKey)
 	wxMessageBox(message, caption, wxOK + wxCENTRE + wxICON_ERROR, topFrame)
+	unpause(pauseKey)
 end
 
 -- bool = confirm(
@@ -974,7 +994,11 @@ end
 
 -- id = showModalAndDestroy( dialog )
 function showModalAndDestroy(dialog)
+	local autoPauseKey = isClass(dialog, "wxFileDialog") and "showModalAndDestroy.wxFileDialog" or nil
+
+	if autoPauseKey then  pause(autoPauseKey)  end
 	local id = dialog:ShowModal()
+	if autoPauseKey then  unpause(autoPauseKey)  end
 
 	if not dialog:Destroy() then
 		logprinterror("Gui", "Could not destroy dialog '%s'.", tostring(dialog))

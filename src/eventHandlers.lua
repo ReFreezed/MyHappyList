@@ -63,18 +63,27 @@ end
 
 
 eHandlers["login_success"] = function()
+	-- void
 end
 
 eHandlers["login_badlogin"] = function()
-	pause("badlogin")
-	showError(T"error_badLogin", T"error_badUsernameOrPassword")
-	unpause("badlogin")
-
+	showErrorWhilePaused("login_badlogin", T"error_badLogin", T"error_badUsernameOrPassword")
 	anidb.canAskForCredentials = false -- Prevent a need_credentials event.
 	dialogs.credentials()
 end
 
 eHandlers["login_fail"] = function(userMessage)
+	showError("Error", userMessage)
+end
+
+
+
+eHandlers["logout_success"] = function()
+	-- void
+end
+
+eHandlers["logout_fail"] = function(userMessage)
+	-- void
 end
 
 
@@ -104,10 +113,11 @@ eHandlers["mylistget_missing"] = function(ed2kHash, fileSize)
 end
 
 eHandlers["mylistget_found_multiple_entries"] = function(mylistSelection)
-	-- @Incomplete
+	logprinterror("EventHandler", "@Incomplete: Handle mylistget_found_multiple_entries.")
 end
 
 eHandlers["mylistget_fail"] = function(userMessage)
+	showError("Error", userMessage)
 end
 
 
@@ -133,11 +143,11 @@ eHandlers["mylistadd_success"] = function(mylistEntryPartial, isEdit)
 end
 
 eHandlers["mylistadd_success_multiple"] = function(count)
-	-- @Incomplete
+	logprinterror("EventHandler", "@Incomplete: Handle mylistadd_success_multiple.")
 end
 
 eHandlers["mylistadd_found_multiple_files"] = function(fids)
-	-- @Incomplete
+	logprinterror("EventHandler", "@Incomplete: Handle mylistadd_found_multiple_files.")
 end
 
 eHandlers["mylistadd_no_file"] = function(fid)
@@ -161,6 +171,7 @@ eHandlers["mylistadd_no_file_with_hash"] = function(ed2kHash, fileSize)
 end
 
 eHandlers["mylistadd_fail"] = function(userMessage)
+	showError("Error", userMessage)
 end
 
 
@@ -180,6 +191,7 @@ eHandlers["mylistdelete_success"] = function(mylistEntryMaybePartial)
 end
 
 eHandlers["mylistdelete_fail"] = function(userMessage)
+	showError("Error", userMessage)
 end
 
 
@@ -193,11 +205,13 @@ end
 
 
 eHandlers["ping_fail"] = function(userMessage)
+	-- void
 end
 
 
 
 eHandlers["resend"] = function(command)
+	-- void
 end
 
 

@@ -119,7 +119,7 @@ topFrame.Icons = appIcons
 on(topFrame, "CLOSE_WINDOW", function(e)
 	if
 		e:CanVeto()
-		and anidb:getActiveMessageCount() > 0
+		and (anidb:getActiveMessageCount() > 0 or anidb:isHashingAnyFile())
 		and not confirm(T"label_exit", T"message_confirmExitDuringTask", T"label_exit", nil, nil, true)
 	then
 		e:Veto()
@@ -641,20 +641,23 @@ updateTimerFast = newTimer(function(e)
 
 	local eHandlers = require"eventHandlers"
 
-	for eName, _1, _2, _3, _4, _5 in eventQueue:events() do
-		if not isAny(eName, "message_count") then
-			logprint(nil, "Event: %s", eName)
-		end
+	if not isPaused() then
+		for eName, _1, _2, _3, _4, _5 in eventQueue:events() do
+			if not isAny(eName, "message_count") then
+				logprint(nil, "Event: %s", eName)
+			end
 
-		local handler = eHandlers[eName]
-		if handler then
-			handler(_1, _2, _3, _4, _5)
+			local handler = eHandlers[eName]
 
-		elseif eName:find"^error" or eName:find"^%w+:error" then
-			eHandlers._error(eName, _1)
+			if handler then
+				handler(_1, _2, _3, _4, _5)
+			elseif eName:find"^error" or eName:find"^%w+:error" then
+				eHandlers._error(eName, _1)
+			else
+				logprinterror("App", "Unhandled event '%s'.", eName)
+			end
 
-		else
-			logprinterror("App", "Unhandled event '%s'.", eName)
+			if isPaused() then  break  end
 		end
 	end
 
